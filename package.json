@@ -1,0 +1,16 @@
+{
+  "name": "fital-pro",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate": "wrangler d1 migrations apply fital-pro-db --remote",
+    "db:migrate:local": "wrangler d1 migrations apply fital-pro-db --local",
+    "check": "node --check _worker.js && node --check public/app.js",
+    "dry-run": "wrangler deploy --dry-run"
+  },
+  "devDependencies": {
+    "wrangler": "^4.68.0"
+  }
+}
