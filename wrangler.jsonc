@@ -3,7 +3,9 @@
   "name": "red-waterfall-2af8",
   "main": "_worker.js",
   "compatibility_date": "2026-08-29",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
