@@ -1,85 +1,57 @@
-# Fital Pro — deployment
+# Fital Pro — production deployment
 
-## 1. GitHub
+## 1. Cloudflare login
 
-The project files must be in the **root** of the repository, not inside a ZIP file and not inside an extra parent directory.
-
-## 2. Cloudflare Worker
-
-Existing Worker: `red-waterfall-2af8`.
-
-Connect it to the GitHub repository from:
-
-**Workers & Pages → red-waterfall-2af8 → Settings → Builds → Connect**
-
-Use branch `main` and root directory `/`.
-
-Cloudflare requires the Worker name in the dashboard to match the `name` in `wrangler.jsonc`. This project keeps `red-waterfall-2af8` as the Worker name. citeturn0search0
-
-## 3. D1
-
-Database name: `fital-pro-db`.
-
-Binding: `DB`.
-
-The production D1 binding must contain the real Cloudflare `database_id` UUID. Do not invent this value. Cloudflare's D1 configuration uses `database_name` together with `database_id`. citeturn1search0
-
-After the binding is correct, apply migrations:
+Run:
 
 ```bash
-npx wrangler d1 migrations apply fital-pro-db --remote
+npx wrangler login
 ```
 
-## 4. Workers AI
+## 2. Deploy
 
-The Worker expects the binding:
+```bash
+npm install
+npm run deploy
+```
 
-`AI`
+Wrangler can automatically provision supported resources when the configuration declares bindings without IDs. If D1 is not auto-provisioned in your account, create `fital-pro-db` in D1 and add its `database_id` to `wrangler.jsonc`.
 
-The code uses Cloudflare Workers AI for `/api/chat`.
+## 3. Apply database migrations
 
-## 5. YooKassa secrets
+```bash
+npm run db:migrate
+```
 
-Set in Cloudflare Worker secrets, never in `public/`:
+## 4. Secrets
+
+Set these as Cloudflare secrets, never in HTML/JS:
 
 ```bash
 npx wrangler secret put YOOKASSA_SHOP_ID
 npx wrangler secret put YOOKASSA_SECRET_KEY
 ```
 
-## 6. Deploy
+## 5. YooKassa webhook
 
-Workers Builds deploy command:
+Set the webhook URL to:
 
-```bash
-npx wrangler deploy
-```
+`https://YOUR_WORKER_DOMAIN/webhooks/yookassa`
 
-Do not combine D1 migrations with the automatic Git deployment command.
+Enable at least `payment.succeeded`; optionally also `payment.canceled` and `payment.waiting_for_capture`.
 
-## 7. Verification
+## 6. Verify
 
 Open:
 
-`https://<worker-domain>/health`
+`https://YOUR_WORKER_DOMAIN/health`
 
-Expected after all bindings and secrets are ready:
+Expected fields:
+- `ok: true`
+- `ai: true`
+- `db: true`
+- `payments: true`
 
-```json
-{
-  "ok": true,
-  "ai": true,
-  "db": true,
-  "payments": true
-}
-```
+## 7. Custom domain
 
-## 8. YooKassa webhook
-
-Configure HTTP notification for:
-
-`payment.succeeded`
-
-Endpoint:
-
-`https://<worker-domain>/webhooks/yookassa`
+After the Worker is verified, attach `fitalpro.ru` as a custom domain in Cloudflare. Do not remove the existing site until the new Worker passes the health, AI, lead and payment tests.
