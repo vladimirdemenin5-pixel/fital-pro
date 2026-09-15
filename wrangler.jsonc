@@ -18,6 +18,7 @@
     {
       "binding": "DB",
       "database_name": "fital-pro-db",
+"database_id": "d2bdb339-bc7b-420e-be7f-0496ce46a09b",
       "migrations_dir": "migrations"
     }
   ],
