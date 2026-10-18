@@ -22,12 +22,14 @@
       "migrations_dir": "migrations"
     }
   ],
-  "secrets": {
-    "required": [
-      "YOOKASSA_SHOP_ID",
-      "YOOKASSA_SECRET_KEY"
-    ]
-  },
+  
+"secrets": {
+  "required": [
+    "ROBOKASSA_MERCHANT_LOGIN",
+    "ROBOKASSA_PASSWORD1",
+    "ROBOKASSA_PASSWORD2"
+  ]
+},
   "observability": {
     "enabled": true
   }
