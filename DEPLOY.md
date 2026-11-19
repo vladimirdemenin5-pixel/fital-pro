@@ -1,57 +1,53 @@
-# Fital Pro — production deployment
+# Fital Pro — безопасная публикация
 
-## 1. Cloudflare login
+## Состояние перед публикацией
 
-Run:
+Сначала должны быть проверены:
 
-```bash
-npx wrangler login
-```
+- существующий Worker `red-waterfall-2af8`;
+- binding Workers AI `AI`;
+- binding D1 `DB` к существующей базе `fital-pro-db`;
+- каталог `public/` с рабочим интерфейсом;
+- каталог `migrations/` с реальными SQL-миграциями, согласованными с текущей схемой D1;
+- Robokassa secrets и тестовые настройки магазина.
 
-## 2. Deploy
+На текущей ветке GitHub отсутствуют `public/` и `migrations/`. Не запускайте публикацию и не применяйте миграции, пока эти файлы не восстановлены и не проверены. Не создавайте новую D1 и не меняйте существующий database ID.
+
+## Проверка
 
 ```bash
 npm install
-npm run deploy
+npm run check
 ```
 
-Wrangler can automatically provision supported resources when the configuration declares bindings without IDs. If D1 is not auto-provisioned in your account, create `fital-pro-db` in D1 and add its `database_id` to `wrangler.jsonc`.
+## Секреты Robokassa
 
-## 3. Apply database migrations
+Добавить в существующий Worker как Secrets:
 
-```bash
-npm run db:migrate
-```
+- `ROBOKASSA_MERCHANT_LOGIN`
+- `ROBOKASSA_PASSWORD1`
+- `ROBOKASSA_PASSWORD2`
 
-## 4. Secrets
+Опциональная переменная `ROBOKASSA_HASH_ALGORITHM` должна совпадать с алгоритмом в кабинете Robokassa; по умолчанию код использует MD5.
 
-Set these as Cloudflare secrets, never in HTML/JS:
+В кабинете Robokassa задать Result URL:
 
-```bash
-npx wrangler secret put YOOKASSA_SHOP_ID
-npx wrangler secret put YOOKASSA_SECRET_KEY
-```
+`https://<действующий-домен-Worker>/webhooks/robokassa`
 
-## 5. YooKassa webhook
+Метод — POST. Для уведомления используется Пароль №2. Платёжная ссылка подписывается Паролем №1.
 
-Set the webhook URL to:
+## Разделение публикации и миграций
 
-`https://YOUR_WORKER_DOMAIN/webhooks/yookassa`
+`npm run deploy` публикует Worker и не запускает миграции D1.
 
-Enable at least `payment.succeeded`; optionally also `payment.canceled` and `payment.waiting_for_capture`.
+`npm run db:migrate` применяет миграции к удалённой D1. Не запускать её без отдельной проверки SQL-файлов и согласования с текущей схемой базы.
 
-## 6. Verify
+GitHub Actions в этой ветке только проверяет синтаксис Worker при Pull Request. Автоматической публикации в Cloudflare нет.
 
-Open:
+## После отдельного разрешения на публикацию
 
-`https://YOUR_WORKER_DOMAIN/health`
-
-Expected fields:
-- `ok: true`
-- `ai: true`
-- `db: true`
-- `payments: true`
-
-## 7. Custom domain
-
-After the Worker is verified, attach `fitalpro.ru` as a custom domain in Cloudflare. Do not remove the existing site until the new Worker passes the health, AI, lead and payment tests.
+1. Выполнить dry-run с проверенным каталогом assets.
+2. Проверить health endpoint.
+3. Проверить тестовый платёж Robokassa.
+4. Проверить Result URL и выдачу доступа на правильный срок.
+5. Только после успешных тестов обсуждать production-платёж.
