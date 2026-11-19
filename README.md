@@ -1,16 +1,40 @@
 # Fital Pro
 
-Production-ready Fital Pro service for Cloudflare Workers.
+Fital Pro is a Cloudflare Worker service with Workers AI and D1.
 
-## Architecture
+## Existing infrastructure
 
-- Existing Worker name: `red-waterfall-2af8`
-- Static frontend: `public/`
-- Worker API: `_worker.js`
+- Worker: `red-waterfall-2af8`
+- Worker entry: `_worker.js`
+- Static frontend directory: `public/` (must be present before deployment)
 - Workers AI binding: `AI`
-- D1 binding: `DB` (`fital-pro-db`)
-- YooKassa server-side checkout and webhook
-- No Telegram integration
+- D1 binding: `DB` → `fital-pro-db`
+
+## Payments: Robokassa
+
+The Worker uses the Robokassa hosted payment page. YooKassa is not used.
+
+Required Worker secrets:
+
+- `ROBOKASSA_MERCHANT_LOGIN`
+- `ROBOKASSA_PASSWORD1`
+- `ROBOKASSA_PASSWORD2`
+
+Optional Worker variable:
+
+- `ROBOKASSA_HASH_ALGORITHM` — must match the hash algorithm selected in the Robokassa merchant cabinet; defaults to `MD5`.
+
+Configure the Robokassa technical settings:
+
+- Result URL: `https://<active-worker-domain>/webhooks/robokassa`
+- Result URL method: POST
+- Result notification password: Password #2
+- Payment request signature: Password #1
+- Success and failure URLs: the active Fital Pro site URLs.
+
+The ResultURL handler verifies the signature, checks the invoice against the pending D1 payment and the tariff amount, processes repeated notifications idempotently, and returns `OK{InvId}` only after successful processing. The plan duration is 7, 14, or 30 days according to the selected tariff.
+
+Do not put payment passwords in browser code, repository files, or chat messages.
 
 ## API
 
@@ -21,33 +45,16 @@ Production-ready Fital Pro service for Cloudflare Workers.
 - `POST|GET /api/progress`
 - `POST /api/lead`
 - `POST /api/checkout`
+- `POST /webhooks/robokassa`
 - `GET /api/payment-status`
 - `GET /api/me`
-- `POST /webhooks/yookassa`
 
-## Required Cloudflare configuration
+## Safe validation and deployment
 
-1. Connect this repository to the existing Worker `red-waterfall-2af8` using **Settings → Builds**.
-2. Keep the production branch as `main`.
-3. Ensure the Worker has Workers AI enabled and the `AI` binding.
-4. Ensure the D1 database `fital-pro-db` is bound as `DB` and migrations are applied.
-5. Add secrets:
-   - `YOOKASSA_SHOP_ID`
-   - `YOOKASSA_SECRET_KEY`
-6. Configure YooKassa HTTP notification for `payment.succeeded`:
-   `https://<active-worker-domain>/webhooks/yookassa`
+- `npm run check` checks Worker JavaScript syntax.
+- `npm run deploy` deploys the Worker only.
+- `npm run db:migrate` applies remote D1 migrations and must be run separately, deliberately, and only after reviewing the migration files.
 
-Do not put YooKassa credentials into `public/` or browser JavaScript.
+GitHub Actions validates pull requests and does not deploy to Cloudflare. Production deployment must remain a separate, explicitly approved operation.
 
-## Deploy
-
-The repository is configured for Cloudflare Workers Builds. The deploy script runs the Worker deployment and D1 migrations.
-
-Before production payment testing, open `/health` and confirm:
-
-- `ok: true`
-- `ai: true`
-- `db: true`
-- `payments: true`
-
-Only after those checks should a real YooKassa payment be tested.
+Before deployment, confirm that `public/` and `migrations/` exist and match the live D1 schema. Do not run remote migrations as part of deployment.
