@@ -180,7 +180,8 @@ async function checkout(request, env) {
   const p=PLANS[plan];
   if (!p) return json({error:'Неизвестный тариф.'},400);
 
-  const invoiceId=String(1000000000 + Math.floor(Math.random()*9000000000));
+  const invoiceRandom=new Uint32Array(1); crypto.getRandomValues(invoiceRandom);
+  const invoiceId=String(1000000000 + invoiceRandom[0]);
   const clientRef=crypto.randomUUID().replaceAll('-','');
   const amount=Number(p.amount).toFixed(2);
   const params={
@@ -254,6 +255,7 @@ async function robokassaWebhook(request, env) {
 }
 
 async function paymentStatus(request, env) {
+  if (!(await rateLimit(request, env, 'payment-status', 30, 60000))) return json({error:'Слишком много запросов. Попробуйте позже.'},429);
   const url=new URL(request.url);
   const id=clean(url.searchParams.get('id'),100);
   const clientRef=clean(url.searchParams.get('ref'),80);
@@ -267,8 +269,8 @@ async function paymentStatus(request, env) {
   if (!id && !clientRef) return json({status:'unknown'},400);
   const row=clientRef ? await env.DB.prepare('SELECT payment_id,plan,status,access_token,updated_at,expires_at FROM subscriptions WHERE client_ref=?').bind(clientRef).first() : await env.DB.prepare('SELECT payment_id,plan,status,access_token,updated_at,expires_at FROM subscriptions WHERE payment_id=?').bind(id).first();
   if (row) {
-    if (row.status==='active') return json({status:row.status,plan:row.plan,access_token:row.access_token,updated_at:row.updated_at,expires_at:row.expires_at});
-    return json({status:row.status,plan:row.plan,updated_at:row.updated_at});
+    if (row.status==='active' && clientRef) return json({status:row.status,plan:row.plan,access_token:row.access_token,updated_at:row.updated_at,expires_at:row.expires_at});
+    return json({status:row.status,plan:row.plan,updated_at:row.updated_at,expires_at:row.expires_at});
   }
   const payment= id ? await env.DB.prepare('SELECT id,status,plan,amount,currency FROM payments WHERE id=?').bind(id).first() : null;
   return payment ? json({status:payment.status,plan:payment.plan,amount:payment.amount,currency:payment.currency}) : json({status:'pending'});
