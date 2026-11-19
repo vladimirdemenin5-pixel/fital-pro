@@ -1,6 +1,8 @@
 name: Validate Fital Pro
 
 on:
+  push:
+    branches: [robokassa-safe-repair-2026-11-19]
   pull_request:
     branches: [main]
   workflow_dispatch:
