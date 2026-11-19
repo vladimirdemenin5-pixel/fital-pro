@@ -161,7 +161,14 @@ async function chat(request, env) {
 async function lead(request, env) {
   if (!(await rateLimit(request, env, 'lead', 5, 3600000))) return json({error:'Слишком много заявок с этого устройства.'},429);
   const body = await request.json();
-  const name=clean(body?.name,120), contact=clean(body?.contact,160), goal=clean(boasync function checkout(request, env) {
+  const name=clean(body?.name,120), contact=clean(body?.contact,160), goal=clean(body?.goal,120), plan=clean(body?.plan,120);
+  if (!name || !contact) return json({error:'Заполните имя и контакт'},400);
+  const id=crypto.randomUUID(), createdAt=new Date().toISOString();
+  if (env.DB) await env.DB.prepare('INSERT INTO leads (id,name,contact,goal,plan,created_at) VALUES (?,?,?,?,?,?)').bind(id,name,contact,goal,plan,createdAt).run();
+  return json({ok:true,id});
+}
+
+async function checkout(request, env) {
   if (!(await rateLimit(request, env, 'checkout', 8, 60000))) return json({error:'Слишком много попыток оплаты. Попробуйте позже.'},429);
   if (!env.DB) return json({error:'База данных временно недоступна.'},503);
   if (!env.ROBOKASSA_MERCHANT_LOGIN || !env.ROBOKASSA_PASSWORD1 || !env.ROBOKASSA_PASSWORD2) {
@@ -186,8 +193,7 @@ async function lead(request, env) {
     Shp_plan:plan
   };
   const shp=Object.keys(params).filter(k=>k.startsWith('Shp_')).sort().map(k=>k+'='+params[k]);
-  const signature=robokassaHash([params.MerchantLogin,params.OutSum,params.InvId,env.ROBOKASSA_PASSWORD1,...shp].join(':'),env);
-  params.SignatureValue=signature;
+  params.SignatureValue=robokassaHash([params.MerchantLogin,params.OutSum,params.InvId,env.ROBOKASSA_PASSWORD1,...shp].join(':'),env);
 
   const now=new Date().toISOString();
   try {
@@ -235,6 +241,7 @@ async function robokassaWebhook(request, env) {
   const token=existing?.access_token || crypto.randomUUID().replaceAll('-','');
   const durationDays=plan==='Питание'?7:plan==='PRO'?14:30;
   const expiresAt=existing?.expires_at || new Date(Date.now()+durationDays*24*60*60*1000).toISOString();
+
   await env.DB.prepare(`INSERT INTO subscriptions (id,payment_id,client_ref,plan,status,access_token,customer_contact,created_at,updated_at,expires_at)
     VALUES (?,?,?,?,?,?,?,?,?,?)
     ON CONFLICT(payment_id) DO UPDATE SET status=excluded.status,plan=excluded.plan,client_ref=excluded.client_ref,updated_at=excluded.updated_at,expires_at=excluded.expires_at`)
@@ -244,12 +251,6 @@ async function robokassaWebhook(request, env) {
     .bind('succeeded',plan,Number(outSum).toFixed(2),'RUB',invoiceId).run();
 
   return new Response('OK'+invoiceId,{headers:{'content-type':'text/plain; charset=utf-8'}});
-}
-
-_contact,created_at,updated_at,expires_at) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(payment_id) DO UPDATE SET status=excluded.status,plan=excluded.plan,client_ref=excluded.client_ref,updated_at=excluded.updated_at,expires_at=excluded.expires_at`).bind(crypto.randomUUID(),paymentId,clientRef,plan,'active',token,contact,now,now,expiresAt).run();
-    }
-  }
-  return json({ok:true});
 }
 
 async function paymentStatus(request, env) {
