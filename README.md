@@ -46,7 +46,7 @@ Do not put payment passwords in browser code, repository files, or chat messages
 - `POST /api/lead`
 - `POST /api/checkout`
 - `POST /webhooks/robokassa`
-- `GET /api/payment-status`
+- `GET /api/payment-status?ref=<client_ref>` — статус и токен доступа после подтверждённой оплаты; `?id=<payment_id>` возвращает только статус.
 - `GET /api/me`
 
 ## Safe validation and deployment
