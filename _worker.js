@@ -231,10 +231,10 @@ async function robokassaWebhook(request, env) {
     return new Response('Unknown order',{status:404});
   }
   const now=new Date().toISOString();
-  const existing=await env.DB.prepare('SELECT access_token FROM subscriptions WHERE payment_id=?').bind(invoiceId).first();
+  const existing=await env.DB.prepare('SELECT access_token,expires_at,status FROM subscriptions WHERE payment_id=?').bind(invoiceId).first();
   const token=existing?.access_token || crypto.randomUUID().replaceAll('-','');
   const durationDays=plan==='Питание'?7:plan==='PRO'?14:30;
-  const expiresAt=new Date(Date.now()+durationDays*24*60*60*1000).toISOString();
+  const expiresAt=existing?.expires_at || new Date(Date.now()+durationDays*24*60*60*1000).toISOString();
   await env.DB.prepare(`INSERT INTO subscriptions (id,payment_id,client_ref,plan,status,access_token,customer_contact,created_at,updated_at,expires_at)
     VALUES (?,?,?,?,?,?,?,?,?,?)
     ON CONFLICT(payment_id) DO UPDATE SET status=excluded.status,plan=excluded.plan,client_ref=excluded.client_ref,updated_at=excluded.updated_at,expires_at=excluded.expires_at`)
