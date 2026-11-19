@@ -12,7 +12,7 @@ Fital Pro is a Cloudflare Worker service with Workers AI and D1.
 
 ## Payments: Robokassa
 
-The Worker uses the Robokassa hosted payment page. YooKassa is not used.
+The Worker uses the Robokassa hosted payment page.
 
 Required Worker secrets:
 
