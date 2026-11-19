@@ -212,7 +212,7 @@ async function robokassaWebhook(request, env) {
   const outSum=clean(values.OutSum,32);
   const invoiceId=clean(values.InvId,32);
   const supplied=clean(values.SignatureValue,256).toLowerCase();
-  if (!outSum || !/^\\d+$/.test(invoiceId) || !supplied) return new Response('Invalid notification',{status:400});
+  if (!outSum || !/^\d+$/.test(invoiceId) || !supplied) return new Response('Invalid notification',{status:400});
 
   const shp=Object.keys(values).filter(k=>k.startsWith('Shp_')).sort().map(k=>k+'='+values[k]);
   const expected=robokassaHash([outSum,invoiceId,env.ROBOKASSA_PASSWORD2,...shp].join(':'),env).toLowerCase();
