@@ -1,53 +1,51 @@
-# Fital Pro — production setup
+# Fital Pro — настройка проекта
 
-Сборка подготовлена под Cloudflare Workers с `_worker.js`, статическими assets и bindings.
+Проект использует существующий Cloudflare Worker `red-waterfall-2af8`, Workers AI и D1. Новые Worker и D1 создавать не нужно.
 
-## Что работает в коде
-- `/api/chat` — Fital AI через Workers AI.
-- `/api/profile` — профиль пользователя.
-- `/api/plan` — персональный недельный план.
-- `/api/progress` — вес и выполнение программы.
-- `/api/lead` — заявки.
-- `/api/checkout` — создание платежа ЮKassa.
-- `/webhooks/yookassa` — подтверждение платежей.
-- `/api/payment-status` — статус платежа.
-- `/api/me` — статус подписки.
-- `/health` — диагностика.
+## Подтверждённые компоненты
 
-## Быстрый запуск
+- `_worker.js` — API и серверная логика.
+- `public/` — статические файлы сайта; каталог должен присутствовать для развёртывания.
+- `AI` — binding Workers AI.
+- `DB` — binding к существующей D1 `fital-pro-db`.
+
+## Оплата Robokassa
+
+YooKassa не используется. Worker создаёт платёжную ссылку Robokassa и принимает серверное уведомление.
+
+Обязательные секреты Worker:
+
+- `ROBOKASSA_MERCHANT_LOGIN`
+- `ROBOKASSA_PASSWORD1`
+- `ROBOKASSA_PASSWORD2`
+
+Не помещайте пароли в репозиторий, HTML, JavaScript браузера или переписку. Добавляйте их только в Cloudflare Worker → Settings → Variables and Secrets → Secrets.
+
+Необязательная переменная:
+
+- `ROBOKASSA_HASH_ALGORITHM` — алгоритм должен совпадать с настройкой магазина; если переменная отсутствует, используется MD5.
+
+Технические настройки магазина Robokassa:
+
+- Result URL: `https://<действующий-домен-Worker>/webhooks/robokassa`
+- Метод Result URL: POST
+- Пароль для проверки Result URL: Пароль №2
+- Пароль для формирования платёжной ссылки: Пароль №1
+- Success URL и Fail URL: страницы действующего сайта.
+
+Worker проверяет подпись уведомления, номер счёта, тариф и сумму по сохранённому заказу. Повторные уведомления не должны повторно продлевать срок доступа. Сроки тарифов: 7, 14 и 30 дней.
+
+## Команды
 
 ```bash
 npm install
-npx wrangler login
-npm run deploy
+npm run check
 ```
 
-Wrangler 4.68+ умеет автоматически настраивать существующие проекты, а Cloudflare также поддерживает автоматическое provision для ряда bindings при конфигурации без resource ID. При необходимости D1 можно создать отдельно и указать `database_id` в `wrangler.jsonc`.
+`npm run deploy` выполняет только публикацию Worker. Миграции D1 вынесены в отдельную команду `npm run db:migrate` и не запускаются автоматически.
 
-## Secrets
+## Важно до публикации
 
-```bash
-npx wrangler secret put YOOKASSA_SHOP_ID
-npx wrangler secret put YOOKASSA_SECRET_KEY
-```
+В текущем GitHub tree отсутствуют каталоги `public/` и `migrations/`. Поэтому этот репозиторий пока нельзя считать готовым к развёртыванию: сначала нужно восстановить и проверить фронтенд и реальные миграции существующей D1. Не создавайте пустые каталоги или фиктивные миграции вместо настоящих файлов.
 
-Никогда не помещайте эти значения в `public/`.
-
-## ЮKassa
-
-Webhook:
-
-`https://YOUR_DOMAIN/webhooks/yookassa`
-
-Минимальное событие: `payment.succeeded`.
-
-## После deploy
-
-Проверить:
-
-`https://YOUR_DOMAIN/health`
-
-Нужно получить `ok: true`, а после настройки bindings/secrets — `ai: true`, `db: true`, `payments: true`.
-
-## Доступ
-После успешной оплаты подписка активируется на 30 дней. Токен выдаётся только после подтверждения успешного платежа по уникальному `client_ref`.
+Проверка `/health` должна показать `ok: true`, `ai: true`, `db: true`, `payments: true` только после фактической настройки соответствующих bindings и секретов.
