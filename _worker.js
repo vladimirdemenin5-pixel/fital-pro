@@ -1,3 +1,12 @@
+import { createHash, timingSafeEqual } from 'node:crypto';
+
+function robokassaHash(value, env) {
+  const configured=String(env.ROBOKASSA_HASH_ALGORITHM || 'MD5').toLowerCase();
+  const allowed=['md5','sha1','sha256','sha384','sha512'];
+  const algorithm=allowed.includes(configured)?configured:'md5';
+  return createHash(algorithm).update(value,'utf8').digest('hex').toUpperCase();
+}
+
 const MODEL = '@cf/meta/llama-3.1-8b-instruct';
 const PLANS = {
   'Питание': { amount: '990.00', label: 'Fital Pro — Питание, 7 дней' },
@@ -152,50 +161,94 @@ async function chat(request, env) {
 async function lead(request, env) {
   if (!(await rateLimit(request, env, 'lead', 5, 3600000))) return json({error:'Слишком много заявок с этого устройства.'},429);
   const body = await request.json();
-  const name=clean(body?.name,120), contact=clean(body?.contact,160), goal=clean(body?.goal,120), plan=clean(body?.plan,120);
-  if (!name || !contact) return json({error:'Заполните имя и контакт'},400);
-  const id=crypto.randomUUID(), createdAt=new Date().toISOString();
-  if (env.DB) await env.DB.prepare('INSERT INTO leads (id,name,contact,goal,plan,created_at) VALUES (?,?,?,?,?,?)').bind(id,name,contact,goal,plan,createdAt).run();
-  return json({ok:true,id});
-}
-
-async function checkout(request, env) {
-  if (!(await rateLimit(request, env, 'checkout', 8, 3600000))) return json({error:'Слишком много попыток оплаты. Попробуйте позже.'},429);
-  if (!env.YOOKASSA_SHOP_ID || !env.YOOKASSA_SECRET_KEY) return json({error:'Оплата пока не активирована: ключи ЮKassa не настроены.'},503);
-  const body=await request.json(); const plan=clean(body?.plan,40); const customer=clean(body?.contact,160); const clientRef=clean(body?.client_ref,80) || crypto.randomUUID(); const p=PLANS[plan];
-  if (!p) return json({error:'Неизвестный тариф'},400);
-  const origin=new URL(request.url).origin;
-  const auth=btoa(`${env.YOOKASSA_SHOP_ID}:${env.YOOKASSA_SECRET_KEY}`);
-  const r=await fetch('https://api.yookassa.ru/v3/payments',{method:'POST',headers:{Authorization:`Basic ${auth}`,'Idempotence-Key':crypto.randomUUID(),'Content-Type':'application/json'},body:JSON.stringify({amount:{value:p.amount,currency:'RUB'},capture:true,confirmation:{type:'redirect',return_url:`${origin}/?payment_ref=${encodeURIComponent(clientRef)}&plan=${encodeURIComponent(plan)}`},description:p.label,metadata:{plan,customer,client_ref:clientRef}})});
-  const data=await r.json(); if(!r.ok) return json({error:'ЮKassa отклонила запрос'},502);
-  if(!data?.confirmation?.confirmation_url) return json({error:'Не получена ссылка на оплату'},502);
-  return json({ok:true,payment_id:data.id,confirmation_url:data.confirmation.confirmation_url});
-}
-
-async function yooWebhook(request, env) {
-  const event=await request.json();
-  const obj=event?.object || {};
-  const paymentId=clean(obj?.id,100);
-  if (!paymentId) return json({ok:true});
-  let verified=obj;
-  if (env.YOOKASSA_SHOP_ID && env.YOOKASSA_SECRET_KEY) {
-    const auth=btoa(`${env.YOOKASSA_SHOP_ID}:${env.YOOKASSA_SECRET_KEY}`);
-    const vr=await fetch(`https://api.yookassa.ru/v3/payments/${encodeURIComponent(paymentId)}`,{headers:{Authorization:`Basic ${auth}`}});
-    if (!vr.ok) return json({error:'Не удалось проверить платёж'},502);
-    verified=await vr.json();
+  const name=clean(body?.name,120), contact=clean(body?.contact,160), goal=clean(boasync function checkout(request, env) {
+  if (!(await rateLimit(request, env, 'checkout', 8, 60000))) return json({error:'Слишком много попыток оплаты. Попробуйте позже.'},429);
+  if (!env.DB) return json({error:'База данных временно недоступна.'},503);
+  if (!env.ROBOKASSA_MERCHANT_LOGIN || !env.ROBOKASSA_PASSWORD1 || !env.ROBOKASSA_PASSWORD2) {
+    return json({error:'Платёжный сервис пока не настроен.'},503);
   }
-  const status=clean(verified?.status || event?.event,60);
-  const plan=clean(verified?.metadata?.plan,40);
-  const contact=clean(verified?.metadata?.customer,160);
-  const clientRef=clean(verified?.metadata?.client_ref,80);
+  let body;
+  try { body=await request.json(); } catch { return json({error:'Некорректные данные заказа.'},400); }
+  const plan=clean(body?.plan,40);
+  const p=PLANS[plan];
+  if (!p) return json({error:'Неизвестный тариф.'},400);
+
+  const invoiceId=String(1000000000 + Math.floor(Math.random()*9000000000));
+  const clientRef=crypto.randomUUID().replaceAll('-','');
+  const amount=Number(p.amount).toFixed(2);
+  const params={
+    MerchantLogin:env.ROBOKASSA_MERCHANT_LOGIN,
+    OutSum:amount,
+    InvId:invoiceId,
+    Culture:'ru',
+    Encoding:'utf-8',
+    Shp_client_ref:clientRef,
+    Shp_plan:plan
+  };
+  const shp=Object.keys(params).filter(k=>k.startsWith('Shp_')).sort().map(k=>k+'='+params[k]);
+  const signature=robokassaHash([params.MerchantLogin,params.OutSum,params.InvId,env.ROBOKASSA_PASSWORD1,...shp].join(':'),env);
+  params.SignatureValue=signature;
+
   const now=new Date().toISOString();
-  if (env.DB) {
-    await env.DB.prepare(`INSERT INTO payments (id,status,plan,amount,currency,created_at) VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,plan=excluded.plan,amount=excluded.amount,currency=excluded.currency`).bind(paymentId,status,plan,verified?.amount?.value || null,verified?.amount?.currency || 'RUB',now).run();
-    if (status==='succeeded') {
-      const existing=await env.DB.prepare('SELECT access_token FROM subscriptions WHERE payment_id=?').bind(paymentId).first();
-      const token=existing?.access_token || crypto.randomUUID().replaceAll('-','');
-      const expiresAt=new Date(Date.now()+30*24*60*60*1000).toISOString();
-      await env.DB.prepare(`INSERT INTO subscriptions (id,payment_id,client_ref,plan,status,access_token,customer_contact,created_at,updated_at,expires_at) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(payment_id) DO UPDATE SET status=excluded.status,plan=excluded.plan,client_ref=excluded.client_ref,updated_at=excluded.updated_at,expires_at=excluded.expires_at`).bind(crypto.randomUUID(),paymentId,clientRef,plan,'active',token,contact,now,now,expiresAt).run();
+  try {
+    await env.DB.prepare('INSERT INTO payments (id,status,plan,amount,currency,created_at) VALUES (?,?,?,?,?,?)')
+      .bind(invoiceId,'pending',plan,amount,'RUB',now).run();
+  } catch {
+    return json({error:'Не удалось сохранить заказ. Повторите попытку.'},503);
+  }
+  const paymentUrl=new URL('https://auth.robokassa.ru/Merchant/Index.aspx');
+  for (const [key,value] of Object.entries(params)) paymentUrl.searchParams.set(key,value);
+  return json({ok:true,payment_id:invoiceId,client_ref:clientRef,confirmation_url:paymentUrl.toString()});
+}
+
+async function robokassaWebhook(request, env) {
+  if (!env.DB || !env.ROBOKASSA_PASSWORD2) return new Response('Service unavailable',{status:503});
+  let form;
+  try { form=await request.formData(); } catch { return new Response('Invalid notification',{status:400}); }
+  const values={};
+  for (const [key,value] of form.entries()) {
+    if (typeof value==='string') values[key]=value;
+  }
+  const outSum=clean(values.OutSum,32);
+  const invoiceId=clean(values.InvId,32);
+  const supplied=clean(values.SignatureValue,256).toLowerCase();
+  if (!outSum || !/^\\d+$/.test(invoiceId) || !supplied) return new Response('Invalid notification',{status:400});
+
+  const shp=Object.keys(values).filter(k=>k.startsWith('Shp_')).sort().map(k=>k+'='+values[k]);
+  const expected=robokassaHash([outSum,invoiceId,env.ROBOKASSA_PASSWORD2,...shp].join(':'),env).toLowerCase();
+  const a=Buffer.from(expected,'utf8'), b=Buffer.from(supplied,'utf8');
+  if (a.length!==b.length || !timingSafeEqual(a,b)) return new Response('Invalid signature',{status:400});
+
+  const plan=clean(values.Shp_plan,40);
+  const clientRef=clean(values.Shp_client_ref,80);
+  const p=PLANS[plan];
+  if (!p || !clientRef || Number(outSum).toFixed(2)!==Number(p.amount).toFixed(2)) {
+    return new Response('Invalid order',{status:400});
+  }
+
+  const payment=await env.DB.prepare('SELECT id,status,plan,amount,currency FROM payments WHERE id=?').bind(invoiceId).first();
+  if (!payment || payment.plan!==plan || Number(payment.amount).toFixed(2)!==Number(p.amount).toFixed(2)) {
+    return new Response('Unknown order',{status:404});
+  }
+  if (payment.status==='succeeded') return new Response('OK'+invoiceId,{headers:{'content-type':'text/plain; charset=utf-8'}});
+
+  const now=new Date().toISOString();
+  await env.DB.prepare('UPDATE payments SET status=?,plan=?,amount=?,currency=? WHERE id=?')
+    .bind('succeeded',plan,Number(outSum).toFixed(2),'RUB',invoiceId).run();
+
+  const existing=await env.DB.prepare('SELECT access_token FROM subscriptions WHERE payment_id=?').bind(invoiceId).first();
+  const token=existing?.access_token || crypto.randomUUID().replaceAll('-','');
+  const durationDays=plan==='Питание'?7:plan==='PRO'?14:30;
+  const expiresAt=new Date(Date.now()+durationDays*24*60*60*1000).toISOString();
+  await env.DB.prepare(`INSERT INTO subscriptions (id,payment_id,client_ref,plan,status,access_token,customer_contact,created_at,updated_at,expires_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(payment_id) DO UPDATE SET status=excluded.status,plan=excluded.plan,client_ref=excluded.client_ref,updated_at=excluded.updated_at,expires_at=excluded.expires_at`)
+    .bind(crypto.randomUUID(),invoiceId,clientRef,plan,'active',token,'',now,now,expiresAt).run();
+
+  return new Response('OK'+invoiceId,{headers:{'content-type':'text/plain; charset=utf-8'}});
+}
+
+_contact,created_at,updated_at,expires_at) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(payment_id) DO UPDATE SET status=excluded.status,plan=excluded.plan,client_ref=excluded.client_ref,updated_at=excluded.updated_at,expires_at=excluded.expires_at`).bind(crypto.randomUUID(),paymentId,clientRef,plan,'active',token,contact,now,now,expiresAt).run();
     }
   }
   return json({ok:true});
@@ -233,14 +286,14 @@ async function me(request, env) {
 export default { async fetch(request, env) {
   const url=new URL(request.url);
   try {
-    if (url.pathname==='/health' && request.method==='GET') return json({ok:true,service:'Fital Pro',ai:!!env.AI,db:!!env.DB,payments:!!(env.YOOKASSA_SHOP_ID&&env.YOOKASSA_SECRET_KEY)});
+    if (url.pathname==='/health' && request.method==='GET') return json({ok:true,service:'Fital Pro',ai:!!env.AI,db:!!env.DB,payments:!!(env.ROBOKASSA_MERCHANT_LOGIN&&env.ROBOKASSA_PASSWORD1&&env.ROBOKASSA_PASSWORD2)});
     if (url.pathname==='/api/chat' && request.method==='POST') return await chat(request,env);
     if (url.pathname==='/api/profile' && (request.method==='GET'||request.method==='POST')) return await profileApi(request,env);
     if (url.pathname==='/api/plan' && request.method==='GET') return await personalizedPlan(request,env);
     if (url.pathname==='/api/progress' && (request.method==='GET'||request.method==='POST')) return await progressApi(request,env);
     if (url.pathname==='/api/lead' && request.method==='POST') return await lead(request,env);
     if (url.pathname==='/api/checkout' && request.method==='POST') return await checkout(request,env);
-    if (url.pathname==='/webhooks/yookassa' && request.method==='POST') return await yooWebhook(request,env);
+    if (url.pathname==='/webhooks/robokassa' && request.method==='POST') return await robokassaWebhook(request,env);
     if (url.pathname==='/api/payment-status' && request.method==='GET') return await paymentStatus(request,env);
     if (url.pathname==='/api/me' && request.method==='GET') return await me(request,env);
     return env.ASSETS.fetch(request);
