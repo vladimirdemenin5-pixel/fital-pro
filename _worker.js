@@ -230,12 +230,7 @@ async function robokassaWebhook(request, env) {
   if (!payment || payment.plan!==plan || Number(payment.amount).toFixed(2)!==Number(p.amount).toFixed(2)) {
     return new Response('Unknown order',{status:404});
   }
-  if (payment.status==='succeeded') return new Response('OK'+invoiceId,{headers:{'content-type':'text/plain; charset=utf-8'}});
-
   const now=new Date().toISOString();
-  await env.DB.prepare('UPDATE payments SET status=?,plan=?,amount=?,currency=? WHERE id=?')
-    .bind('succeeded',plan,Number(outSum).toFixed(2),'RUB',invoiceId).run();
-
   const existing=await env.DB.prepare('SELECT access_token FROM subscriptions WHERE payment_id=?').bind(invoiceId).first();
   const token=existing?.access_token || crypto.randomUUID().replaceAll('-','');
   const durationDays=plan==='Питание'?7:plan==='PRO'?14:30;
@@ -244,6 +239,9 @@ async function robokassaWebhook(request, env) {
     VALUES (?,?,?,?,?,?,?,?,?,?)
     ON CONFLICT(payment_id) DO UPDATE SET status=excluded.status,plan=excluded.plan,client_ref=excluded.client_ref,updated_at=excluded.updated_at,expires_at=excluded.expires_at`)
     .bind(crypto.randomUUID(),invoiceId,clientRef,plan,'active',token,'',now,now,expiresAt).run();
+
+  await env.DB.prepare('UPDATE payments SET status=?,plan=?,amount=?,currency=? WHERE id=?')
+    .bind('succeeded',plan,Number(outSum).toFixed(2),'RUB',invoiceId).run();
 
   return new Response('OK'+invoiceId,{headers:{'content-type':'text/plain; charset=utf-8'}});
 }
