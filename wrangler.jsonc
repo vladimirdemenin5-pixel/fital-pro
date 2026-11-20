@@ -18,19 +18,21 @@
     {
       "binding": "DB",
       "database_name": "fital-pro-db",
-"database_id": "d2bdb339-bc7b-420e-be7f-0496ce46a09b",
+      "database_id": "d2bdb339-bc7b-420e-be7f-0496ce46a09b",
       "migrations_dir": "migrations"
     }
   ],
-  
-"secrets": {
-  "required": [
-    "ROBOKASSA_MERCHANT_LOGIN",
-    "ROBOKASSA_PASSWORD1",
-    "ROBOKASSA_PASSWORD2"
-  ]
-},
+  "secrets": {
+    "required": [
+      "ROBOKASSA_MERCHANT_LOGIN",
+      "ROBOKASSA_PASSWORD1",
+      "ROBOKASSA_PASSWORD2"
+    ]
+  },
   "observability": {
     "enabled": true
+  },
+  "build": {
+    "command": "unzip -o Fital_Pro_PRODUCTION_GITHUB_READY.zip 'public/*' 'migrations/*' -d . && node scripts/prepare-release.mjs"
   }
 }

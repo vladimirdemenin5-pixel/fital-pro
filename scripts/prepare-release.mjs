@@ -178,21 +178,21 @@ const profile = String.raw`// Questionnaire and AI plan preview. The server stor
   loadPaidProfile().catch(() => {});
 })();`;
 
-app=replaceSection(app,'// Real checkout:','// Payment return page:',checkout,'checkout');
-app=replaceSection(app,'// Payment return page:','// Member access:',paymentReturn,'payment return');
-app=replaceSection(app,'// Personal profile and plan.','// Fital Pro dashboard:',profile,'profile module');
-
+if(!app.includes('/api/plan-preview')) {
+  app=replaceSection(app,'// Real checkout:','// Payment return page:',checkout,'checkout');
+  app=replaceSection(app,'// Payment return page:','// Member access:',paymentReturn,'payment return');
+  app=replaceSection(app,'// Personal profile and plan.','// Fital Pro dashboard:',profile,'profile module');
+} else if(!app.includes("params.get('Shp_client_ref')") || !app.includes('fitalpro_plan_draft')) {
+  throw new Error('Frontend was partially patched and needs manual review.');
+}
 if(!app.includes('/api/plan-preview')||!app.includes("params.get('Shp_client_ref')")||!app.includes('fitalpro_plan_draft')) {
   throw new Error('Frontend flow checks failed.');
 }
 const newAge='name="age" type="number" min="18" max="80"';
-if(html.includes('name="age" type="number" min="16" max="90"')) {
-  html=html.replace('name="age" type="number" min="16" max="90"',newAge);
-} else if(!html.includes(newAge)) {
-  throw new Error('Questionnaire age input could not be safely updated.');
-}
-
+if(html.includes('name="age" type="number" min="16" max="90"')) html=html.replace('name="age" type="number" min="16" max="90"',newAge);
+else if(!html.includes(newAge)) throw new Error('Questionnaire age input could not be safely updated.');
 await writeFile(appPath,app,'utf8');
+await writeFile(htmlPath,html,'utf8');
 await writeFile(htmlPath,html,'utf8');
 await mkdir('migrations',{recursive:true});
 await writeFile('migrations/0007_plan_drafts.sql',[
