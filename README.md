@@ -31,7 +31,9 @@ Configure the Robokassa technical settings:
 - Result URL method: POST
 - Result notification password: Password #2
 - Payment request signature: Password #1
-- Success and failure URLs: the active Fital Pro site URLs.
+- Success URL: the active Fital Pro site URL, with GET method. Robokassa returns the supplied Shp_* parameters, including Shp_client_ref, to SuccessURL.
+- Failure URL: the active Fital Pro site URL.
+- Live checkout remains disabled until the Worker variable ROBOKASSA_LIVE_ENABLED is explicitly set to 1 after Preview testing and legal-page verification.
 
 The ResultURL handler verifies the signature, checks the invoice against the pending D1 payment and the tariff amount, processes repeated notifications idempotently, and returns `OK{InvId}` only after successful processing. The plan duration is 7, 14, or 30 days according to the selected tariff.
 
@@ -39,7 +41,7 @@ Do not put payment passwords in browser code, repository files, or chat messages
 
 ## API
 
-- `GET /health`
+- `GET /health` — reports whether AI, D1 and the configured payment mode are ready.
 - `POST /api/chat`
 - `POST|GET /api/profile`
 - `GET /api/plan`
@@ -65,7 +67,7 @@ Before deployment, confirm that `public/` and `migrations/` exist and match the 
 
 ## Questionnaire and AI plan
 
-- `POST /api/plan-preview` validates the adult questionnaire, generates a seven-day AI meal and training plan, and stores a 24-hour draft in D1.
+- `POST /api/plan-preview` validates the adult questionnaire, generates exactly 7, 14 or 30 days according to the selected tariff, and stores a 24-hour draft in D1.
 - `POST /api/checkout` requires that draft; payment cannot be started from a tariff button alone.
 - The Robokassa ResultURL verifies the signature, exact amount, invoice, tariff, and the saved `client_ref`, then saves the profile and generated plan to the subscriber account.
 - Migration `0009_plan_drafts.sql` extends the existing payments table and adds the draft table. Apply it only to the existing D1 after reviewing the schema; never create a new database.

@@ -5,7 +5,7 @@ const escapeHtml=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const money={Питание:'990 ₽',PRO:'1 990 ₽',Premium:'3 990 ₽'};
 const menu=$('#nav'),toggle=$('#menuToggle');
 toggle?.addEventListener('click',()=>menu?.classList.toggle('open'));
-$$('#nav a').forEach(a=>a.addEventListener('click',()=>menu?.classList.remove('open')));
+$$$('#nav a').forEach(a=>a.addEventListener('click',()=>menu?.classList.remove('open')));
 const PLAN_DURATIONS={'Питание':7,PRO:14,Premium:30};
 const PLAN_LABELS={'Питание':'Питание',PRO:'PRO',Premium:'Premium'};
 function syncSelectedPlan(code){
@@ -32,27 +32,79 @@ let currentProfile=null;
 try{currentProfile=JSON.parse(localStorage.getItem('fitalpro_profile')||'null');if(currentProfile&&form)Object.entries(currentProfile).forEach(([k,v])=>{const el=form.elements[k];if(el&&el.type!=='checkbox')el.value=v;});}catch(_){}
 const savedPlan=localStorage.getItem('fitalpro_selected_plan');
 syncSelectedPlan(PLAN_DURATIONS[savedPlan]?savedPlan:($('#planSelect')?.value||'PRO'));
+function renderProgramDays(plan,target){
+ if(!target)return;
+ const fragment=document.createDocumentFragment();
+ (Array.isArray(plan?.week)?plan.week:[]).forEach((day,index)=>{
+  const article=document.createElement('details');article.className='day-plan';article.open=Number(day.day||index+1)<=7;
+  const summary=document.createElement('summary');
+  const heading=document.createElement('h4');heading.textContent='День '+(day.day||index+1);summary.append(heading);
+  const training=document.createElement('p');training.className='training-line';training.textContent=String(day.training||'Восстановление и прогулка');
+  const mealsList=document.createElement('ul');mealsList.className='day-meals';
+  const meals=Array.isArray(day.meals)?day.meals:Object.entries(day.meals||{}).map(([type,value])=>typeof value==='string'?{type,name:value}:{...value,type:value.type||type});
+  meals.forEach(meal=>{
+   const li=document.createElement('li');li.className='meal-row';
+   const name=document.createElement('span');name.className='meal-name';name.textContent=String(meal.name||'Приём пищи');
+   const meta=document.createElement('small');meta.className='meal-meta';meta.textContent=String(meal.kcal??'—')+' ккал · белок '+String(meal.protein??'—')+' г';
+   li.append(name,meta);
+   const ingredients=Array.isArray(meal.ingredients)?meal.ingredients:[];
+   if(ingredients.length){
+    const details=document.createElement('details');details.className='meal-ingredients';
+    const label=document.createElement('summary');label.textContent='Состав и количество';details.append(label);
+    const list=document.createElement('ul');
+    ingredients.forEach(pair=>{
+     if(!Array.isArray(pair)||pair.length<2)return;
+     const row=document.createElement('li');row.textContent=String(pair[0])+' — '+String(pair[1]);list.append(row);
+    });
+    details.append(list);li.append(details);
+   }
+   mealsList.append(li);
+  });
+  article.append(summary,training,mealsList);fragment.append(article);
+ });
+ target.replaceChildren(fragment);
+}
+function renderShoppingList(plan,target){
+ if(!target)return;
+ const items=Array.isArray(plan?.shopping)?plan.shopping:[];
+ target.replaceChildren();
+ if(!items.length){target.hidden=true;return;}
+ target.hidden=false;
+ const heading=document.createElement('h4');heading.textContent='Список покупок на всю программу';
+ const hint=document.createElement('p');hint.className='shopping-hint';hint.textContent='Количество рассчитано по ингредиентам всех дней программы.';
+ const list=document.createElement('ul');
+ items.forEach(item=>{
+  const row=document.createElement('li');
+  const name=document.createElement('span');name.textContent=String(item.item||'Продукт');
+  const amount=document.createElement('small');amount.textContent=String(item.amount||'по меню');
+  row.append(name,amount);list.append(row);
+ });
+ target.append(heading,hint,list);
+ const substitutions=Object.entries(plan?.substitutions||{});
+ if(substitutions.length){
+  const details=document.createElement('details');details.className='substitutions';
+  const summary=document.createElement('summary');summary.textContent='Варианты замены продуктов';details.append(summary);
+  const replacements=document.createElement('ul');
+  substitutions.forEach(([item,alternatives])=>{
+   const row=document.createElement('li');
+   row.textContent=String(item)+': '+(Array.isArray(alternatives)?alternatives.join(', '):String(alternatives));
+   replacements.append(row);
+  });
+  details.append(replacements);target.append(details);
+ }
+}
 function renderPlan(plan){
  if(!plan||!planCard)return;
- empty.hidden=true;planCard.hidden=false;$('#previewStatus').textContent='ПЛАН ГОТОВ';
+ empty.hidden=true;planCard.hidden=false;
  $('#planCalories').textContent=(plan.calories||'—')+' ккал';
  $('#planProtein').textContent=(plan.protein||'—')+' г';
  $('#planDays').textContent=(plan.days||'—')+'× / нед.';
  const programDays=Number(plan.programDays)||(Array.isArray(plan.week)?plan.week.length:7);
  $('#planSummary').textContent='Цель: '+(plan.goal||'поддержание')+'. Среднее меню: '+(plan.averageDaily?.kcal||plan.calories)+' ккал и '+(plan.averageDaily?.protein||plan.protein)+' г белка в день.';
- $('#planDuration').textContent='Полная персональная программа: '+programDays+' дней.';
+ $('#planDuration').textContent='Полная персональная программа: '+programDays+' дней. В каждом дне — четыре приёма пищи и план активности.';
  $('#previewStatus').textContent='ПЛАН НА '+programDays+' ДНЕЙ ГОТОВ';
- const week=$('#weekPlan');week.replaceChildren();
- (plan.week||[]).forEach(day=>{
-  const article=document.createElement('article');article.className='day-plan';
-  const h=document.createElement('h4');h.textContent='День '+day.day;
-  const training=document.createElement('p');training.className='training-line';training.textContent=day.training||'Восстановление';
-  const meals=document.createElement('ul');
-  (Array.isArray(day.meals)?day.meals:Object.values(day.meals||{})).forEach(meal=>{
-   const li=document.createElement('li');li.textContent=(meal.name||'Приём пищи')+' · '+(meal.kcal||0)+' ккал · белок '+(meal.protein||0)+' г';meals.append(li);
-  });
-  article.append(h,training,meals);week.append(article);
- });
+ renderProgramDays(plan,$('#weekPlan'));
+ renderShoppingList(plan,$('#shoppingList'));
 }
 async function requestPlan(data){
  const button=$('#planSubmit');button.disabled=true;button.textContent='ИИ составляет план…';note.textContent='Проверяем анкету и формируем меню и рекомендации.';
@@ -131,7 +183,14 @@ async function loadCabinet(){
   $('#memberTitle').textContent='Ваш доступ активен';$('#memberText').textContent='Тариф: '+d.subscription.plan+'. Доступ до '+new Date(d.subscription.expires_at).toLocaleDateString('ru-RU');lock.textContent='✓';box.hidden=false;
   const pr=await fetch('/api/plan',{headers,cache:'no-store'}),pd=await pr.json();
   const target=$('#memberPlan');target.replaceChildren();
-  if(pr.ok&&pd.plan){const programDays=Number(pd.plan.programDays)||(pd.plan.week||[]).length;const h=document.createElement('p');h.textContent='Ваш персональный план на '+programDays+' дней: '+pd.plan.calories+' ккал · '+pd.plan.protein+' г белка в день.';target.append(h);(pd.plan.week||[]).forEach(day=>{const p=document.createElement('p');p.textContent='День '+day.day+': '+day.training+' — '+(Array.isArray(day.meals)?day.meals.map(x=>x.name).join(', '):Object.values(day.meals||{}).map(x=>x.name||x).join(', '));target.append(p);});}
+  if(pr.ok&&pd.plan){
+   const programDays=Number(pd.plan.programDays)||(pd.plan.week||[]).length;
+   const overview=document.createElement('p');overview.className='member-plan-overview';overview.textContent='Программа на '+programDays+' дней · '+pd.plan.calories+' ккал · '+pd.plan.protein+' г белка в день.';
+   const days=document.createElement('div');days.className='member-program-days';
+   target.replaceChildren(overview,days);
+   renderProgramDays(pd.plan,days);
+   renderShoppingList(pd.plan,$('#memberShoppingList'));
+  }
   await loadProgress(headers);
  }catch(_){localStorage.removeItem('fitalpro_access_token');localStorage.removeItem('fitalpro_subscription_plan');const picker=$('#planSelect');if(picker)picker.disabled=false;box.hidden=true;$('#memberTitle').textContent='Не удалось подтвердить доступ';$('#memberText').textContent='Проверьте подключение и обновите страницу.';lock.textContent='⌑';}
 }
@@ -155,6 +214,6 @@ async function sendChatQuestion(question){
  finally{if(submit)submit.disabled=false;}
 }
 chatForm?.addEventListener('submit',e=>{e.preventDefault();sendChatQuestion(chatInput.value);});
-$('[data-question]').forEach(b=>b.addEventListener('click',()=>sendChatQuestion(b.dataset.question)));
+$$('[data-question]').forEach(b=>b.addEventListener('click',()=>sendChatQuestion(b.dataset.question)));
 
 paymentReturn();loadCabinet();

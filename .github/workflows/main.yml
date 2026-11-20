@@ -30,6 +30,9 @@ jobs:
       - name: Check Worker and frontend syntax
         run: npm run check
 
+      - name: Run site-flow regression tests
+        run: npm test
+
       - name: Validate D1 migrations locally only
         run: npm run db:migrate:local
 

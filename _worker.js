@@ -254,6 +254,7 @@ async function checkout(request, env) {
   if (!env.DB) return json({error:'База данных временно недоступна.'},503);
   const testMode=String(env.ROBOKASSA_IS_TEST ?? '0');
   if (!['0','1'].includes(testMode)) return json({error:'Некорректный режим Robokassa.'},503);
+  if(testMode==='0' && env.ROBOKASSA_LIVE_ENABLED!=='1') return json({error:'Приём реальных платежей пока отключён. Сначала завершите Preview-тесты и проверку реквизитов продавца.'},503);
   const password1=testMode==='1'?env.ROBOKASSA_TEST_PASSWORD1:env.ROBOKASSA_PASSWORD1;
   const password2=testMode==='1'?env.ROBOKASSA_TEST_PASSWORD2:env.ROBOKASSA_PASSWORD2;
   if (!env.ROBOKASSA_MERCHANT_LOGIN || !password1 || !password2) {
@@ -396,7 +397,14 @@ async function me(request, env) {
 export default { async fetch(request, env) {
   const url=new URL(request.url);
   try {
-    if (url.pathname==='/health' && request.method==='GET') return json({ok:true,service:'Fital Pro',ai:!!env.AI,db:!!env.DB,payments:!!(env.ROBOKASSA_MERCHANT_LOGIN&&(String(env.ROBOKASSA_IS_TEST??'0')==='1'?(env.ROBOKASSA_TEST_PASSWORD1&&env.ROBOKASSA_TEST_PASSWORD2):(env.ROBOKASSA_PASSWORD1&&env.ROBOKASSA_PASSWORD2)))});
+    if (url.pathname==='/health' && request.method==='GET') {
+      const testMode=String(env.ROBOKASSA_IS_TEST??'0');
+      const paymentReady=!!env.ROBOKASSA_MERCHANT_LOGIN&&(
+        testMode==='1'?!!(env.ROBOKASSA_TEST_PASSWORD1&&env.ROBOKASSA_TEST_PASSWORD2):
+        testMode==='0'&&env.ROBOKASSA_LIVE_ENABLED==='1'&&!!(env.ROBOKASSA_PASSWORD1&&env.ROBOKASSA_PASSWORD2)
+      );
+      return json({ok:true,service:'Fital Pro',ai:!!env.AI,db:!!env.DB,payments:paymentReady,paymentMode:testMode==='1'?'test':paymentReady?'live':'disabled'});
+    }
     if (url.pathname==='/api/chat' && request.method==='POST') return await chat(request,env);
     if (url.pathname==='/api/plan-preview' && request.method==='POST') return await planPreview(request,env);
     if (url.pathname==='/api/profile' && (request.method==='GET'||request.method==='POST')) return await profileApi(request,env);
