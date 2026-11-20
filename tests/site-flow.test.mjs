@@ -175,26 +175,40 @@ function fakeCheckoutDb(draftPlan) {
   };
 }
 
-test('health endpoint reports isolated Robokassa test readiness without enabling live payments', async () => {
+test('health endpoint checks Preview D1 schema and test-payment readiness without enabling live payments', async () => {
   const request = new Request('https://preview.example/health');
+  const readyDb = { prepare() { return { async first() { return null; } }; } };
   const unavailable = await workerModule.fetch(request, {
-    DB: {}, AI: { run: async () => ({}) }, ROBOKASSA_IS_TEST: '0',
+    DB: readyDb, AI: { run: async () => ({}) }, ROBOKASSA_IS_TEST: '0',
     ROBOKASSA_LIVE_ENABLED: '0', ROBOKASSA_MERCHANT_LOGIN: 'merchant',
     ROBOKASSA_PASSWORD1: 'live-pass-1', ROBOKASSA_PASSWORD2: 'live-pass-2'
   });
   const disabled = await unavailable.json();
   assert.equal(disabled.ok, true);
+  assert.equal(disabled.db, true);
   assert.equal(disabled.paymentMode, 'disabled');
   assert.equal(disabled.payments, false);
 
   const testReadyResponse = await workerModule.fetch(request, {
-    DB: {}, AI: { run: async () => ({}) }, ROBOKASSA_IS_TEST: '1',
+    DB: readyDb, AI: { run: async () => ({}) }, ROBOKASSA_IS_TEST: '1',
     ROBOKASSA_LIVE_ENABLED: '0', ROBOKASSA_MERCHANT_LOGIN: 'merchant',
     ROBOKASSA_TEST_PASSWORD1: 'test-pass-1', ROBOKASSA_TEST_PASSWORD2: 'test-pass-2'
   });
   const testReady = await testReadyResponse.json();
+  assert.equal(testReady.db, true);
   assert.equal(testReady.paymentMode, 'test');
   assert.equal(testReady.payments, true);
+
+  const schemaNotReadyResponse = await workerModule.fetch(request, {
+    DB: { prepare() { return { async first() { throw new Error('no such table'); } }; } },
+    AI: { run: async () => ({}) }, ROBOKASSA_IS_TEST: '1',
+    ROBOKASSA_MERCHANT_LOGIN: 'merchant',
+    ROBOKASSA_TEST_PASSWORD1: 'test-pass-1', ROBOKASSA_TEST_PASSWORD2: 'test-pass-2'
+  });
+  const schemaNotReady = await schemaNotReadyResponse.json();
+  assert.equal(schemaNotReady.db, false);
+  assert.equal(schemaNotReady.payments, false);
+  assert.equal(schemaNotReady.paymentMode, 'disabled');
 });
 
 test('Robokassa checkout creates a signed IsTest=1 URL and stores a pending order', async () => {
