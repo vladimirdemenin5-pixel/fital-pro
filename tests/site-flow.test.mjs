@@ -145,6 +145,7 @@ test('Preview bindings and migrations are isolated from Production', async () =>
   assert.equal(previewMigrationConfig.d1_databases[0].database_name, 'fital-pro-preview-db');
   assert.equal(previewMigrationConfig.d1_databases[0].database_id, config.previews.d1_databases[0].database_id);
   assert.equal(packageJson.scripts.preview, 'wrangler preview');
+  assert.equal(packageJson.scripts.build, 'npm run check && npm test');
   assert.equal(packageJson.scripts['db:migrate:preview'], 'wrangler d1 migrations apply PREVIEW_DB --remote --config wrangler.preview-migrations.jsonc');
 });
 
