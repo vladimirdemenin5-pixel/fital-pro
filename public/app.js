@@ -144,9 +144,11 @@ async function requestPlan(data){
 form?.addEventListener('submit',e=>{
  e.preventDefault();if(!$('#consent').checked){note.textContent='Подтвердите согласие и возраст 18+.';return;}
  const data=Object.fromEntries(new FormData(form).entries());
- for(const key of ['age','height','weight','days'])data[key]=Number(data[key]);
- if(data.age<18||data.age>80||data.days<2||data.days>7){note.textContent='Проверьте возраст и количество тренировок в неделю.';return;}
- data.plan=$('#planSelect')?.value||localStorage.getItem('fitalpro_selected_plan')||'PRO';
+ const selectedPlan=$('#planSelect')?.value||localStorage.getItem('fitalpro_selected_plan')||'PRO';
+ for(const key of ['age','height','weight'])data[key]=Number(data[key]);
+ if(selectedPlan!=='Питание')data.days=Number(data.days);
+ if(data.age<18||data.age>80||(selectedPlan!=='Питание'&&(data.days<2||data.days>7))){note.textContent='Проверьте возраст и количество тренировок в неделю.';return;}
+ data.plan=selectedPlan;
  requestPlan(data);
 });
 $('#planSelect')?.addEventListener('change',()=>{
