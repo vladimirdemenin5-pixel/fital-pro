@@ -198,8 +198,10 @@ async function paymentReturn(){
 async function loadCabinet(){
  const box=$('#memberContent'),lock=$('#memberLock');
  if(!token()){syncPaidFeatures(null);box.hidden=true;$('#memberTitle').textContent='Доступ пока не активирован';$('#memberText').textContent='После успешной оплаты Robokassa откроется ваш личный кабинет.';lock.textContent='⌑';return;}
+ let accessRejected=false;
  try{
   const headers={Authorization:'Bearer '+token()},r=await fetch('/api/me',{headers,cache:'no-store'}),d=await r.json();
+  if(r.status===401||d.subscription?.status==='expired'){accessRejected=true;throw new Error();}
   if(!r.ok||d.subscription?.status!=='active')throw new Error();
   const activePlan=d.subscription.plan;
   if(PLAN_DURATIONS[activePlan]){
@@ -220,7 +222,20 @@ async function loadCabinet(){
    renderShoppingList(pd.plan,$('#memberShoppingList'));
   }
   if(['PRO','Premium'].includes(activePlan)) await loadProgress(headers);
- }catch(_){syncPaidFeatures(null);localStorage.removeItem('fitalpro_access_token');localStorage.removeItem('fitalpro_subscription_plan');const picker=$('#planSelect');if(picker)picker.disabled=false;box.hidden=true;$('#memberTitle').textContent='Не удалось подтвердить доступ';$('#memberText').textContent='Проверьте подключение и обновите страницу.';lock.textContent='⌑';}
+ }catch(_){
+  box.hidden=true;lock.textContent='⌑';
+  if(accessRejected){
+   syncPaidFeatures(null);localStorage.removeItem('fitalpro_access_token');localStorage.removeItem('fitalpro_subscription_plan');
+   const picker=$('#planSelect');if(picker)picker.disabled=false;
+   $('#memberTitle').textContent='Доступ требует повторного подтверждения';
+   $('#memberText').textContent='Сохранённый доступ больше не действителен. Проверьте статус подписки через Robokassa.';
+  }else{
+   const savedPlan=localStorage.getItem('fitalpro_subscription_plan');
+   syncPaidFeatures(PLAN_DURATIONS[savedPlan]?savedPlan:null);
+   $('#memberTitle').textContent='Кабинет временно недоступен';
+   $('#memberText').textContent='Не удалось связаться с сервером. Токен доступа сохранён — обновите страницу или попробуйте позже.';
+  }
+ }
 }
 async function loadProgress(headers={Authorization:'Bearer '+token()}){
  try{const r=await fetch('/api/progress',{headers,cache:'no-store'}),d=await r.json();$('#progressHistory').innerHTML=(d.items||[]).slice(0,8).map(x=>'<div class="history-row"><b>'+escapeHtml(x.date)+'</b><span>'+escapeHtml(x.weight)+' кг</span></div>').join('')||'<p class="muted">Записей пока нет.</p>';}catch(_){}
