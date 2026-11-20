@@ -27,10 +27,12 @@ npm run check
 - `ROBOKASSA_MERCHANT_LOGIN`
 - `ROBOKASSA_PASSWORD1`
 - `ROBOKASSA_PASSWORD2`
+- `ROBOKASSA_TEST_PASSWORD1` — отдельный тестовый Пароль №1 из технических настроек магазина.
+- `ROBOKASSA_TEST_PASSWORD2` — отдельный тестовый Пароль №2 из технических настроек магазина.
 
 Опциональная переменная `ROBOKASSA_HASH_ALGORITHM` должна совпадать с алгоритмом в кабинете Robokassa; по умолчанию код использует MD5.
 
-Для безопасного теста задайте `ROBOKASSA_IS_TEST=1` и установите в `ROBOKASSA_MERCHANT_LOGIN`, `ROBOKASSA_PASSWORD1`, `ROBOKASSA_PASSWORD2` именно тестовые реквизиты магазина. Для реальных платежей используйте рабочие реквизиты и `ROBOKASSA_IS_TEST=0`. Не проверяйте тестовый сценарий с рабочими паролями: без `IsTest=1` Robokassa считает платёж боевым.
+Для безопасного теста задайте `ROBOKASSA_IS_TEST=1`. Используйте идентификатор магазина `ROBOKASSA_MERCHANT_LOGIN` и отдельные тестовые секреты `ROBOKASSA_TEST_PASSWORD1` и `ROBOKASSA_TEST_PASSWORD2`. Код выбирает тестовые пароли для подписи платёжной ссылки и проверки ResultURL. Рабочие `ROBOKASSA_PASSWORD1/2` при этом не используются. Для реальных платежей задайте `ROBOKASSA_IS_TEST=0` и рабочую пару паролей. Robokassa требует тестовую пару паролей вместе с `IsTest=1`; иначе операция может стать боевой.
 
 В кабинете Robokassa задать Result URL:
 
