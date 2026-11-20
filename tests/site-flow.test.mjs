@@ -295,6 +295,7 @@ function fakeWebhookDb({ invoiceId, clientRef, plan, amount, draftId, profile, p
     state,
     prepare(sql) {
       const query = {
+        sql,
         args: [],
         bind(...args) { this.args = args; return this; },
         async first() {
