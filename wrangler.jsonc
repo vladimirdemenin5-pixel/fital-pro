@@ -30,7 +30,13 @@
         "database_id": "54bd4cbb-f267-4c1e-af16-cdc9b24953c1",
         "migrations_dir": "migrations"
       }
-    ]
+    ],
+    "ai": {
+      "binding": "AI"
+    },
+    "vars": {
+      "ROBOKASSA_IS_TEST": "1"
+    }
   },
   "secrets": {
     "required": [
