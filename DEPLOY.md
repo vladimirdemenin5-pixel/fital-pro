@@ -55,3 +55,8 @@ GitHub Actions в этой ветке только проверяет синта
 3. Проверить тестовый платёж Robokassa.
 4. Проверить Result URL и выдачу доступа на правильный срок.
 5. Только после успешных тестов обсуждать production-платёж.
+
+
+## Build from the existing ZIP
+
+Cloudflare Workers Builds must use Build command `npm run build`. This extracts the existing static site and migrations from `Fital_Pro_PRODUCTION_GITHUB_READY.zip`, applies the checked frontend patch, and creates migration `0007_plan_drafts.sql` before Wrangler deploys. The Preview build must use the same build preparation. Do not run remote D1 migrations automatically from the build command.

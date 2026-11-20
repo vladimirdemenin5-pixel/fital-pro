@@ -331,13 +331,15 @@ async function paymentStatus(request, env) {
   if (token) {
     const row=await env.DB.prepare('SELECT plan,status,access_token,customer_contact,created_at,updated_at,expires_at FROM subscriptions WHERE access_token=?').bind(token).first();
     if (!row) return json({error:'Недействительный токен доступа'},401);
-    return json({status:row.status,plan:row.plan,access_token:row.access_token,customer_contact:row.customer_contact,created_at:row.created_at,updated_at:row.updated_at});
+    const active=row.status==='active'&&(!row.expires_at||row.expires_at>new Date().toISOString());
+    return json({status:active?'active':'expired',plan:row.plan,access_token:active?row.access_token:null,customer_contact:row.customer_contact,created_at:row.created_at,updated_at:row.updated_at,expires_at:row.expires_at});
   }
   if (!id && !clientRef) return json({status:'unknown'},400);
   const row=clientRef ? await env.DB.prepare('SELECT payment_id,plan,status,access_token,updated_at,expires_at FROM subscriptions WHERE client_ref=?').bind(clientRef).first() : await env.DB.prepare('SELECT payment_id,plan,status,access_token,updated_at,expires_at FROM subscriptions WHERE payment_id=?').bind(id).first();
   if (row) {
-    if (row.status==='active' && clientRef) return json({status:row.status,plan:row.plan,access_token:row.access_token,updated_at:row.updated_at,expires_at:row.expires_at});
-    return json({status:row.status,plan:row.plan,updated_at:row.updated_at,expires_at:row.expires_at});
+    const active=row.status==='active'&&(!row.expires_at||row.expires_at>new Date().toISOString());
+    if (active && clientRef) return json({status:'active',plan:row.plan,access_token:row.access_token,updated_at:row.updated_at,expires_at:row.expires_at});
+    return json({status:active?'active':'expired',plan:row.plan,updated_at:row.updated_at,expires_at:row.expires_at});
   }
   const payment= id ? await env.DB.prepare('SELECT id,status,plan,amount,currency FROM payments WHERE id=?').bind(id).first() : null;
   return payment ? json({status:payment.status,plan:payment.plan,amount:payment.amount,currency:payment.currency}) : json({status:'pending'});

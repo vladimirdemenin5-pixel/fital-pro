@@ -59,3 +59,11 @@ Do not put payment passwords in browser code, repository files, or chat messages
 GitHub Actions validates pull requests and does not deploy to Cloudflare. Production deployment must remain a separate, explicitly approved operation.
 
 Before deployment, confirm that `public/` and `migrations/` exist and match the live D1 schema. Do not run remote migrations as part of deployment.
+
+
+## Questionnaire and AI plan
+
+- `POST /api/plan-preview` validates the adult questionnaire, generates a seven-day AI meal and training plan, and stores a 24-hour draft in D1.
+- `POST /api/checkout` requires that draft; payment cannot be started from a tariff button alone.
+- The Robokassa ResultURL verifies the signature, exact amount, invoice, tariff, and the saved `client_ref`, then saves the profile and generated plan to the subscriber account.
+- Migration `0007_plan_drafts.sql` extends the existing payments table and adds the draft table. Apply it only to the existing D1 after reviewing the schema; never create a new database.
