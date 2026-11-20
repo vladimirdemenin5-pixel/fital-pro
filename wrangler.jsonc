@@ -22,14 +22,7 @@
       "migrations_dir": "migrations"
     }
   ],
-  "preview": {
-    "d1_databases": [
-      {
-        "binding": "DB",
-        "database_id": "d2bdb339-bc7b-420e-be7f-0496ce46a09b"
-      }
-    ]
-  },
+  "previews": {},
   "secrets": {
     "required": [
       "ROBOKASSA_MERCHANT_LOGIN",
