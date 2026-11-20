@@ -13,6 +13,8 @@ test('tariff durations are fixed on the server', () => {
   assert.match(worker, /'PRO':\s*\{[^}]*durationDays:\s*14/);
   assert.match(worker, /'Premium':\s*\{[^}]*durationDays:\s*30/);
   assert.match(worker, /week\.length!==durationDays/);
+  assert.match(worker, /trainingIncluded:includeTraining/);
+  assert.match(worker, /const includeTraining=planCode!=='Питание'/);
 });
 
 test('selected tariff is used to generate and bind the draft', () => {
@@ -43,6 +45,7 @@ test('AI menu ingredients and shopping list are rendered in preview and cabinet'
   assert.match(app, /renderShoppingList\(pd\.plan,\$\('#memberShoppingList'\)\)/);
   assert.match(app, /Состав и количество/);
   assert.match(app, /Список покупок на всю программу/);
+  assert.match(app, /if\(day\.training\)/);
   assert.match(html, /id="shoppingList"/);
   assert.match(html, /id="memberShoppingList"/);
   assert.match(css, /\.member-program-days/);

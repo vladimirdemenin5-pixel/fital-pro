@@ -39,7 +39,11 @@ function renderProgramDays(plan,target){
   const article=document.createElement('details');article.className='day-plan';article.open=Number(day.day||index+1)<=7;
   const summary=document.createElement('summary');
   const heading=document.createElement('h4');heading.textContent='День '+(day.day||index+1);summary.append(heading);
-  const training=document.createElement('p');training.className='training-line';training.textContent=String(day.training||'Восстановление и прогулка');
+  const blocks=[summary];
+  if(day.training){
+   const training=document.createElement('p');training.className='training-line';training.textContent=String(day.training);
+   blocks.push(training);
+  }
   const mealsList=document.createElement('ul');mealsList.className='day-meals';
   const meals=Array.isArray(day.meals)?day.meals:Object.entries(day.meals||{}).map(([type,value])=>typeof value==='string'?{type,name:value}:{...value,type:value.type||type});
   meals.forEach(meal=>{
@@ -60,7 +64,7 @@ function renderProgramDays(plan,target){
    }
    mealsList.append(li);
   });
-  article.append(summary,training,mealsList);fragment.append(article);
+  blocks.push(mealsList);article.append(...blocks);fragment.append(article);
  });
  target.replaceChildren(fragment);
 }
@@ -101,7 +105,7 @@ function renderPlan(plan){
  $('#planDays').textContent=(plan.days||'—')+'× / нед.';
  const programDays=Number(plan.programDays)||(Array.isArray(plan.week)?plan.week.length:7);
  $('#planSummary').textContent='Цель: '+(plan.goal||'поддержание')+'. Среднее меню: '+(plan.averageDaily?.kcal||plan.calories)+' ккал и '+(plan.averageDaily?.protein||plan.protein)+' г белка в день.';
- $('#planDuration').textContent='Полная персональная программа: '+programDays+' дней. В каждом дне — четыре приёма пищи и план активности.';
+ $('#planDuration').textContent='Полная программа: '+programDays+' дней. Меню — четыре приёма пищи в день.'+(plan.trainingIncluded===false?' Тренировки не входят в этот тариф.':' Тренировки и восстановление включены.');
  $('#previewStatus').textContent='ПЛАН НА '+programDays+' ДНЕЙ ГОТОВ';
  renderProgramDays(plan,$('#weekPlan'));
  renderShoppingList(plan,$('#shoppingList'));
@@ -185,7 +189,7 @@ async function loadCabinet(){
   const target=$('#memberPlan');target.replaceChildren();
   if(pr.ok&&pd.plan){
    const programDays=Number(pd.plan.programDays)||(pd.plan.week||[]).length;
-   const overview=document.createElement('p');overview.className='member-plan-overview';overview.textContent='Программа на '+programDays+' дней · '+pd.plan.calories+' ккал · '+pd.plan.protein+' г белка в день.';
+   const overview=document.createElement('p');overview.className='member-plan-overview';overview.textContent='Программа на '+programDays+' дней · '+pd.plan.calories+' ккал · '+pd.plan.protein+' г белка в день.'+(pd.plan.trainingIncluded===false?' · без тренировок':' · с тренировками');
    const days=document.createElement('div');days.className='member-program-days';
    target.replaceChildren(overview,days);
    renderProgramDays(pd.plan,days);
