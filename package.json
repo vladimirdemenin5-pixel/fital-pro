@@ -8,7 +8,7 @@
     "db:migrate": "wrangler d1 migrations apply fital-pro-db --remote",
     "db:migrate:local": "wrangler d1 migrations apply fital-pro-db --local",
     "check": "node --check _worker.js && node --check public/app.js",
-    "build": "npm run check",
+    "build": "npm run check && npm test",
     "db:migrate:preview": "wrangler d1 migrations apply PREVIEW_DB --remote --config wrangler.preview-migrations.jsonc",
     "db:migrations:list:preview": "wrangler d1 migrations list PREVIEW_DB --remote --config wrangler.preview-migrations.jsonc",
     "test": "node --test",
