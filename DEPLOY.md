@@ -75,3 +75,6 @@ Preview создаётся на существующем Worker через ме�
 ## GitHub Actions
 
 Workflow проверяет Worker и frontend syntax, выполняет регрессионные тесты, локальную проверку миграций D1 и Wrangler dry-run. Он не разворачивает Worker и не применяет remote D1 migrations.
+
+
+Миграция `0011_one_payment_per_draft.sql` предотвращает создание двух счетов из одного AI-черновика. Она входит в общий список Preview-миграций и не должна применяться к Production до отдельного согласования.

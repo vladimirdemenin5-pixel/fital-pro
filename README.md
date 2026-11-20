@@ -110,3 +110,8 @@ Do not run Production migrations or deploy until Preview tests pass and the owne
 ## Legal and service limitations
 
 The seller's real legal details and support contact must be completed in `/requisites.html` before live payments. Fital Pro provides informational recommendations, not medical care. AI-generated plans require user review and do not guarantee health or body-composition outcomes.
+
+
+## Database migration 0011
+
+`0011_one_payment_per_draft.sql` adds a unique partial index: a saved AI plan draft may have only one pending or successful payment. To retry an abandoned checkout, the customer must regenerate a fresh plan draft. Review and apply this migration to Preview first; Production remains untouched until the release is approved.

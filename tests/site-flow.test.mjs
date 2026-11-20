@@ -29,11 +29,18 @@ test('selected tariff is used to generate and bind the draft', () => {
 });
 
 test('chat and progress are restricted to PRO and Premium', () => {
-  assert.match(worker, /!\\['PRO','Premium'\\]\\.includes\\(sub\\.plan\\)/);
+  assert.ok(worker.includes("!['PRO','Premium'].includes(sub.plan)"));
   assert.match(worker, /AI-помощник доступен в тарифах PRO и Premium/);
   assert.match(worker, /Отслеживание прогресса доступно в тарифах PRO и Premium/);
   assert.match(app, /syncPaidFeatures\(activePlan\)/);
   assert.match(app, /id="progressBox"/);
+});
+
+test('shopping list aggregates compatible metric units', () => {
+  assert.match(worker, /const parseQuantity=value=>/);
+  assert.match(worker, /current\.amount\+=parsed\.amount/);
+  assert.match(worker, /if\(unit==='кг'\)\{amount\*=1000;unit='г';\}/);
+  assert.match(worker, /if\(unit==='л'\)\{amount\*=1000;unit='мл';\}/);
 });
 
 test('one AI draft cannot create multiple active orders', () => {

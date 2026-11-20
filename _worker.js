@@ -182,9 +182,9 @@ function shoppingList(week){
   const totals=new Map(),other=new Map();
   const parseQuantity=value=>{
     const raw=String(value??'').trim().replace(',','.');
-    const match=raw.match(/^(\\d+(?:\\.\\d+)?)\\s*(кг|г|гр|мл|л|шт\\.?|ч\\.?\\s*л\\.?|ст\\.?\\s*л\\.?)$/i);
+    const match=raw.match(/^(\d+(?:\.\d+)?)\s*(кг|г|гр|мл|л|шт\.?|ч\.?\s*л\.?|ст\.?\s*л\.?)$/i);
     if(!match)return null;
-    let amount=Number(match[1]),unit=match[2].toLowerCase().replace(/\\s+/g,'').replace(/\\./g,'');
+    let amount=Number(match[1]),unit=match[2].toLowerCase().replace(/\s+/g,'').replace(/\./g,'');
     if(!Number.isFinite(amount))return null;
     if(unit==='кг'){amount*=1000;unit='г';}
     if(unit==='л'){amount*=1000;unit='мл';}

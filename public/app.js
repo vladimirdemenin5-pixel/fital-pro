@@ -207,7 +207,7 @@ async function loadCabinet(){
    renderProgramDays(pd.plan,days);
    renderShoppingList(pd.plan,$('#memberShoppingList'));
   }
-  await loadProgress(headers);
+  if(['PRO','Premium'].includes(activePlan)) await loadProgress(headers);
  }catch(_){syncPaidFeatures(null);localStorage.removeItem('fitalpro_access_token');localStorage.removeItem('fitalpro_subscription_plan');const picker=$('#planSelect');if(picker)picker.disabled=false;box.hidden=true;$('#memberTitle').textContent='Не удалось подтвердить доступ';$('#memberText').textContent='Проверьте подключение и обновите страницу.';lock.textContent='⌑';}
 }
 async function loadProgress(headers={Authorization:'Bearer '+token()}){
