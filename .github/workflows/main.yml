@@ -37,9 +37,9 @@ jobs:
       - name: Install Wrangler
         run: npm install --no-audit --no-fund
 
-      - name: Patch and validate Robokassa return flow
+      - name: Prepare and validate questionnaire, AI plan and Robokassa return flow
         run: |
-          node scripts/patch-robokassa-return.mjs public/app.js
+          node scripts/prepare-release.mjs
           node --check public/app.js
 
       - name: Check Worker syntax

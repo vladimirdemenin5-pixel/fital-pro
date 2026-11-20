@@ -7,7 +7,8 @@
     "deploy": "wrangler deploy",
     "db:migrate": "wrangler d1 migrations apply fital-pro-db --remote",
     "db:migrate:local": "wrangler d1 migrations apply fital-pro-db --local",
-    "check": "node --check _worker.js"
+    "check": "node --check _worker.js",
+    "prepare:release": "node scripts/prepare-release.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.68.0"
