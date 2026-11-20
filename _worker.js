@@ -122,7 +122,7 @@ async function generatePersonalPlan(profile,env,planCode='Питание'){
       'Распредели нагрузку с восстановлением: пользователь планирует '+target.days+' тренировочных дней в неделю; учитывай формат '+profile.training+'. Не ставь тяжёлые тренировки подряд.',
       'Для тренировочных дней укажи упражнения, подходы/повторения или длительность и разминку. Не давай медицинских назначений.',
       'Формат JSON: {"week":[{"day":'+startDay+',"training":"...","meals":[{"type":"breakfast","name":"...","kcal":400,"protein":25,"ingredients":[["овсянка","60 г"]]}]}]}'
-    ].join('\\n');
+    ].join('\n');
     const result=await env.AI.run(MODEL,{prompt,max_tokens:3500});
     const raw=String(result?.response||result?.result?.response||'');
     const first=raw.indexOf('{'),last=raw.lastIndexOf('}');

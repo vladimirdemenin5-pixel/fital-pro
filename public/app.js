@@ -15,7 +15,7 @@ function syncSelectedPlan(code){
  const note=$('#selectedPlanNote');
  if(note)note.textContent='Выбран тариф '+PLAN_LABELS[code]+' — программа на '+PLAN_DURATIONS[code]+' дней.';
 }
-$('[data-plan]').forEach(b=>b.addEventListener('click',()=>{
+$$('[data-plan]').forEach(b=>b.addEventListener('click',()=>{
  const code=b.dataset.plan;syncSelectedPlan(code);
  if(currentProfile&&!token()&&localStorage.getItem('fitalpro_plan_code')!==code)requestPlan({...currentProfile,plan:code,pd_consent:'on'});
  $('#profile')?.scrollIntoView({behavior:'smooth'});
