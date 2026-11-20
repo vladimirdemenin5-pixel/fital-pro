@@ -171,13 +171,15 @@ async function lead(request, env) {
 async function checkout(request, env) {
   if (!(await rateLimit(request, env, 'checkout', 8, 60000))) return json({error:'Слишком много попыток оплаты. Попробуйте позже.'},429);
   if (!env.DB) return json({error:'База данных временно недоступна.'},503);
-  if (!env.ROBOKASSA_MERCHANT_LOGIN || !env.ROBOKASSA_PASSWORD1 || !env.ROBOKASSA_PASSWORD2) {
-    return json({error:'Платёжный сервис пока не настроен.'},503);
+  const testMode=String(env.ROBOKASSA_IS_TEST ?? '0');
+  if (!['0','1'].includes(testMode)) return json({error:'Некорректный режим Robokassa.'},503);
+  const password1=testMode==='1'?env.ROBOKASSA_TEST_PASSWORD1:env.ROBOKASSA_PASSWORD1;
+  const password2=testMode==='1'?env.ROBOKASSA_TEST_PASSWORD2:env.ROBOKASSA_PASSWORD2;
+  if (!env.ROBOKASSA_MERCHANT_LOGIN || !password1 || !password2) {
+    return json({error:testMode==='1'?'Не настроены отдельные тестовые реквизиты Robokassa.':'Платёжный сервис пока не настроен.'},503);
   }
   let body;
   try { body=await request.json(); } catch { return json({error:'Некорректные данные заказа.'},400); }
-  const testMode=String(env.ROBOKASSA_IS_TEST ?? '0');
-  if (!['0','1'].includes(testMode)) return json({error:'Некорректный режим Robokassa.'},503);
   const plan=clean(body?.plan,40);
   const p=PLANS[plan];
   if (!p) return json({error:'Неизвестный тариф.'},400);
@@ -198,7 +200,7 @@ async function checkout(request, env) {
   // Robokassa requires IsTest=1 for test payments; use test credentials in the same secret fields.
   if (testMode === '1') params.IsTest='1';
   const shp=Object.keys(params).filter(k=>k.startsWith('Shp_')).sort().map(k=>k+'='+params[k]);
-  params.SignatureValue=robokassaHash([params.MerchantLogin,params.OutSum,params.InvId,env.ROBOKASSA_PASSWORD1,...shp].join(':'),env);
+  params.SignatureValue=robokassaHash([params.MerchantLogin,params.OutSum,params.InvId,password1,...shp].join(':'),env);
 
   const now=new Date().toISOString();
   try {
@@ -213,7 +215,9 @@ async function checkout(request, env) {
 }
 
 async function robokassaWebhook(request, env) {
-  if (!env.DB || !env.ROBOKASSA_PASSWORD2) return new Response('Service unavailable',{status:503});
+  const testMode=String(env.ROBOKASSA_IS_TEST ?? '0');
+  const password2=testMode==='1'?env.ROBOKASSA_TEST_PASSWORD2:env.ROBOKASSA_PASSWORD2;
+  if (!env.DB || !['0','1'].includes(testMode) || !password2) return new Response('Service unavailable',{status:503});
   let form;
   try { form=await request.formData(); } catch { return new Response('Invalid notification',{status:400}); }
   const values={};
@@ -226,7 +230,7 @@ async function robokassaWebhook(request, env) {
   if (!outSum || !/^\d+$/.test(invoiceId) || !supplied) return new Response('Invalid notification',{status:400});
 
   const shp=Object.keys(values).filter(k=>k.startsWith('Shp_')).sort().map(k=>k+'='+values[k]);
-  const expected=robokassaHash([outSum,invoiceId,env.ROBOKASSA_PASSWORD2,...shp].join(':'),env).toLowerCase();
+  const expected=robokassaHash([outSum,invoiceId,password2,...shp].join(':'),env).toLowerCase();
   const a=Buffer.from(expected,'utf8'), b=Buffer.from(supplied,'utf8');
   if (a.length!==b.length || !timingSafeEqual(a,b)) return new Response('Invalid signature',{status:400});
 
@@ -291,7 +295,7 @@ async function me(request, env) {
 export default { async fetch(request, env) {
   const url=new URL(request.url);
   try {
-    if (url.pathname==='/health' && request.method==='GET') return json({ok:true,service:'Fital Pro',ai:!!env.AI,db:!!env.DB,payments:!!(env.ROBOKASSA_MERCHANT_LOGIN&&env.ROBOKASSA_PASSWORD1&&env.ROBOKASSA_PASSWORD2)});
+    if (url.pathname==='/health' && request.method==='GET') return json({ok:true,service:'Fital Pro',ai:!!env.AI,db:!!env.DB,payments:!!(env.ROBOKASSA_MERCHANT_LOGIN&&(String(env.ROBOKASSA_IS_TEST??'0')==='1'?(env.ROBOKASSA_TEST_PASSWORD1&&env.ROBOKASSA_TEST_PASSWORD2):(env.ROBOKASSA_PASSWORD1&&env.ROBOKASSA_PASSWORD2)))});
     if (url.pathname==='/api/chat' && request.method==='POST') return await chat(request,env);
     if (url.pathname==='/api/profile' && (request.method==='GET'||request.method==='POST')) return await profileApi(request,env);
     if (url.pathname==='/api/plan' && request.method==='GET') return await personalizedPlan(request,env);
