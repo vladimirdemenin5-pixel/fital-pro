@@ -16,6 +16,7 @@ test('tariff durations are fixed on the server', () => {
   assert.match(worker, /week\.length!==durationDays/);
   assert.match(worker, /trainingIncluded:includeTraining/);
   assert.match(app, /trainingFields\)trainingFields\.hidden=code==='Питание'/);
+  assert.match(app, /trainingDays\.required=code!=='Питание'/);
   assert.match(app, /trainingIncluded=plan\.trainingIncluded!==false/);
   assert.match(html, /id="trainingFields"/);
   assert.match(html, /id="planDaysLabel"/);

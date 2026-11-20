@@ -5,13 +5,14 @@ const escapeHtml=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const money={Питание:'990 ₽',PRO:'1 990 ₽',Premium:'3 990 ₽'};
 const menu=$('#nav'),toggle=$('#menuToggle');
 toggle?.addEventListener('click',()=>menu?.classList.toggle('open'));
-$$$('#nav a').forEach(a=>a.addEventListener('click',()=>menu?.classList.remove('open')));
+$$('#nav a').forEach(a=>a.addEventListener('click',()=>menu?.classList.remove('open')));
 const PLAN_DURATIONS={'Питание':7,PRO:14,Premium:30};
 const PLAN_LABELS={'Питание':'Питание',PRO:'PRO',Premium:'Premium'};
 function syncSelectedPlan(code){
  if(!PLAN_DURATIONS[code])return;
  const picker=$('#planSelect');if(picker)picker.value=code;
  const trainingFields=$('#trainingFields');if(trainingFields)trainingFields.hidden=code==='Питание';
+ const trainingDays=form?.elements?.days;if(trainingDays)trainingDays.required=code!=='Питание';
  localStorage.setItem('fitalpro_selected_plan',code);
  const note=$('#selectedPlanNote');
  if(note)note.textContent='Выбран тариф '+PLAN_LABELS[code]+' — программа на '+PLAN_DURATIONS[code]+' дней.';
