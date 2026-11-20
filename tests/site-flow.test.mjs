@@ -240,3 +240,29 @@ test('Robokassa rejects an invalid ResultURL signature before looking up an orde
   assert.equal(response.status, 400);
   assert.equal(await response.text(), 'Invalid signature');
 });
+
+
+test('Robokassa accepts the correctly signed test ResultURL envelope before order lookup', async () => {
+  const fields = {
+    OutSum: '990.00', InvId: '1234567890',
+    Shp_client_ref: '0123456789abcdef0123456789abcdef',
+    Shp_plan: 'Питание'
+  };
+  const shp = Object.keys(fields).filter(key => key.startsWith('Shp_')).sort().map(key => key + '=' + fields[key]);
+  fields.SignatureValue = createHash('md5')
+    .update([fields.OutSum, fields.InvId, 'test-pass-2', ...shp].join(':'))
+    .digest('hex');
+  const queries = [];
+  const request = new Request('https://preview.example/webhooks/robokassa', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(fields)
+  });
+  const response = await workerModule.fetch(request, {
+    DB: { prepare(sql) { queries.push(sql); return { bind() { return this; }, async first() { return null; } }; } },
+    ROBOKASSA_IS_TEST: '1', ROBOKASSA_TEST_PASSWORD2: 'test-pass-2'
+  });
+  assert.equal(response.status, 404);
+  assert.equal(await response.text(), 'Unknown order');
+  assert.ok(queries.some(sql => sql.includes('FROM payments WHERE id=?')));
+});
