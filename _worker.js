@@ -178,7 +178,49 @@ async function planPreview(request,env){
 function enrichWeek(week){
   return week.map(day=>{const meals=Object.entries(day.meals).map(([type,name])=>{const r=RECIPE_DB[name]||{kcal:0,p:0,ingredients:[]};return {type,name,kcal:r.kcal,protein:r.p,ingredients:r.ingredients}});return {...day,meals};});
 }
-function shoppingList(week){const map={}; for(const day of week) for(const meal of day.meals) for(const [item,qty] of meal.ingredients){const k=item; map[k]=(map[k]||[]); map[k].push(qty);} return Object.entries(map).map(([item,parts])=>({item,amount:[...new Set(parts)].join(' + ')}));}
+function shoppingList(week){
+  const totals=new Map(),other=new Map();
+  const parseQuantity=value=>{
+    const raw=String(value??'').trim().replace(',','.');
+    const match=raw.match(/^(\\d+(?:\\.\\d+)?)\\s*(кг|г|гр|мл|л|шт\\.?|ч\\.?\\s*л\\.?|ст\\.?\\s*л\\.?)$/i);
+    if(!match)return null;
+    let amount=Number(match[1]),unit=match[2].toLowerCase().replace(/\\s+/g,'').replace(/\\./g,'');
+    if(!Number.isFinite(amount))return null;
+    if(unit==='кг'){amount*=1000;unit='г';}
+    if(unit==='л'){amount*=1000;unit='мл';}
+    if(unit==='гр')unit='г';
+    if(unit==='шт')unit='шт.';
+    if(unit==='чл')unit='ч. л.';
+    if(unit==='стл')unit='ст. л.';
+    return{amount,unit};
+  };
+  for(const day of week)for(const meal of day.meals||[])for(const pair of meal.ingredients||[]){
+    if(!Array.isArray(pair)||pair.length<2)continue;
+    const item=String(pair[0]??'').trim(),quantity=String(pair[1]??'').trim();
+    if(!item||!quantity)continue;
+    const parsed=parseQuantity(quantity),key=item.toLocaleLowerCase('ru-RU');
+    if(parsed){
+      const id=key+'|'+parsed.unit;
+      const current=totals.get(id)||{item,unit:parsed.unit,amount:0};
+      current.amount+=parsed.amount;totals.set(id,current);
+    }else{
+      const current=other.get(key)||{item,parts:[]};
+      if(!current.parts.includes(quantity))current.parts.push(quantity);
+      other.set(key,current);
+    }
+  }
+  const format=(amount,unit)=>{
+    let value=amount,displayUnit=unit;
+    if(unit==='г'&&amount>=1000){value=amount/1000;displayUnit='кг';}
+    if(unit==='мл'&&amount>=1000){value=amount/1000;displayUnit='л';}
+    const rounded=Math.round((value+Number.EPSILON)*100)/100;
+    return String(rounded).replace('.',',')+' '+displayUnit;
+  };
+  return[
+    ...[...totals.values()].map(entry=>({item:entry.item,amount:format(entry.amount,entry.unit)})),
+    ...[...other.values()].map(entry=>({item:entry.item,amount:entry.parts.join(' + ')}))
+  ];
+}
 function weeklyPlan(profile){
   const n=calcNutrition(profile); const goal=profile.goal==='loss'?'умеренный дефицит':profile.goal==='gain'?'небольшой профицит':'поддержание';
   const trainingDays=Math.max(2,Math.min(7,Number(profile.days)||3)); const week=[];
@@ -190,6 +232,7 @@ function weeklyPlan(profile){
 }
 async function progressApi(request,env){
   const sub=await getSubscription(request,env); if(!sub||!env.DB) return json({error:'Нужна активная подписка.'},403);
+  if(!['PRO','Premium'].includes(sub.plan)) return json({error:'Отслеживание прогресса доступно в тарифах PRO и Premium.'},403);
   if(request.method==='GET'){const rows=await env.DB.prepare('SELECT * FROM progress WHERE access_token=? ORDER BY date DESC LIMIT 30').bind(sub.access_token).all();return json({items:rows.results||[]});}
   const b=await request.json(); const date=clean(b.date,20)||new Date().toISOString().slice(0,10); const weight=Number(b.weight); const completedMeal=Number(b.completed_meal)||0; const completedWorkout=Number(b.completed_workout)||0; const note=clean(b.note,300);
   if(!Number.isFinite(weight)||weight<35||weight>250) return json({error:'Укажите корректный вес.'},400);
@@ -225,14 +268,15 @@ async function personalizedPlan(request,env){
 }
 
 async function chat(request, env) {
+  const sub=await getSubscription(request,env);
+  if(!sub||!['PRO','Premium'].includes(sub.plan)) return json({error:'AI-помощник доступен в тарифах PRO и Premium после подтверждения оплаты.'},403);
   if (!(await rateLimit(request, env, 'chat', 20, 60000))) return json({error:'Слишком много запросов. Попробуйте через минуту.'},429);
   const body = await request.json();
   const message = clean(body?.message,2000);
   if (!message) return json({error:'Пустой вопрос'},400);
   if (!env.AI) return json({error:'AI binding is not configured'},503);
   let profileContext='Профиль пользователя не заполнен.';
-  const sub=await getSubscription(request,env);
-  if(sub && env.DB){
+  if(env.DB){
     const row=await env.DB.prepare('SELECT profile_json FROM profiles WHERE access_token=?').bind(sub.access_token).first();
     if(row) profileContext=clean(row.profile_json,1800);
   }
@@ -276,6 +320,8 @@ async function checkout(request, env) {
   let draftPlan;
   try{draftPlan=JSON.parse(draft.plan_json);}catch{return json({error:'Не удалось прочитать сохранённую программу. Заполните анкету ещё раз.'},409);}
   if(draftPlan.planCode!==plan||Number(draftPlan.programDays)!==p.durationDays) return json({error:'Этот план рассчитан для другого тарифа. Выберите тариф и заново сформируйте программу.'},409);
+  const existingOrder=await env.DB.prepare("SELECT id,status FROM payments WHERE draft_id=? AND status IN ('pending','succeeded') LIMIT 1").bind(draftId).first();
+  if(existingOrder) return json({error:'Для этой программы уже создан заказ. Завершите начатую оплату или сформируйте новый план.'},409);
 
   const invoiceRandom=new Uint32Array(1); crypto.getRandomValues(invoiceRandom);
   const invoiceId=String(1000000000 + invoiceRandom[0]);
@@ -300,6 +346,8 @@ async function checkout(request, env) {
     await env.DB.prepare('INSERT INTO payments (id,status,plan,amount,currency,created_at,client_ref,draft_id) VALUES (?,?,?,?,?,?,?,?)')
       .bind(invoiceId,'pending',plan,amount,'RUB',now,clientRef,draftId).run();
   } catch {
+    const existingOrder=await env.DB.prepare("SELECT id,status FROM payments WHERE draft_id=? AND status IN ('pending','succeeded') LIMIT 1").bind(draftId).first().catch(()=>null);
+    if(existingOrder) return json({error:'Для этой программы уже создан заказ. Завершите начатую оплату или сформируйте новый план.'},409);
     return json({error:'Не удалось сохранить заказ. Повторите попытку.'},503);
   }
   const paymentUrl=new URL('https://auth.robokassa.ru/Merchant/Index.aspx');

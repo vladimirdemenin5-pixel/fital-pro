@@ -28,6 +28,19 @@ test('selected tariff is used to generate and bind the draft', () => {
   assert.match(worker, /Order plan mismatch/);
 });
 
+test('chat and progress are restricted to PRO and Premium', () => {
+  assert.match(worker, /!\\['PRO','Premium'\\]\\.includes\\(sub\\.plan\\)/);
+  assert.match(worker, /AI-помощник доступен в тарифах PRO и Premium/);
+  assert.match(worker, /Отслеживание прогресса доступно в тарифах PRO и Premium/);
+  assert.match(app, /syncPaidFeatures\(activePlan\)/);
+  assert.match(app, /id="progressBox"/);
+});
+
+test('one AI draft cannot create multiple active orders', () => {
+  assert.match(worker, /idx_payments_one_checkout_per_draft/);
+  assert.match(worker, /existingOrder=.*payments WHERE draft_id/);
+});
+
 test('live payments require an explicit enable flag', () => {
   assert.match(worker, /ROBOKASSA_LIVE_ENABLED!=='1'/);
   assert.match(worker, /ROBOKASSA_LIVE_ENABLED==='1'/);

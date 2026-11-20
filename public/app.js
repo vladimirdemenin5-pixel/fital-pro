@@ -33,6 +33,14 @@ let currentProfile=null;
 try{currentProfile=JSON.parse(localStorage.getItem('fitalpro_profile')||'null');if(currentProfile&&form)Object.entries(currentProfile).forEach(([k,v])=>{const el=form.elements[k];if(el&&el.type!=='checkbox')el.value=v;});}catch(_){}
 const savedPlan=localStorage.getItem('fitalpro_selected_plan');
 syncSelectedPlan(PLAN_DURATIONS[savedPlan]?savedPlan:($('#planSelect')?.value||'PRO'));
+function syncPaidFeatures(plan){
+ const enhanced=['PRO','Premium'].includes(plan);
+ const progressBox=$('#progressBox');if(progressBox)progressBox.hidden=!enhanced;
+ const chatInput=$('#chatInput'),chatForm=$('#chatForm'),chatNote=$('#chatNote');
+ if(chatInput)chatInput.disabled=!enhanced;
+ const submit=chatForm?.querySelector('button');if(submit)submit.disabled=!enhanced;
+ if(chatNote)chatNote.textContent=enhanced?'Fital AI доступен в рамках активного тарифа.':'AI-помощник и отслеживание прогресса доступны в PRO и Premium после оплаты.';
+}
 function renderProgramDays(plan,target){
  if(!target)return;
  const fragment=document.createDocumentFragment();
@@ -177,7 +185,7 @@ async function paymentReturn(){
 }
 async function loadCabinet(){
  const box=$('#memberContent'),lock=$('#memberLock');
- if(!token()){box.hidden=true;$('#memberTitle').textContent='Доступ пока не активирован';$('#memberText').textContent='После успешной оплаты Robokassa откроется ваш личный кабинет.';lock.textContent='⌑';return;}
+ if(!token()){syncPaidFeatures(null);box.hidden=true;$('#memberTitle').textContent='Доступ пока не активирован';$('#memberText').textContent='После успешной оплаты Robokassa откроется ваш личный кабинет.';lock.textContent='⌑';return;}
  try{
   const headers={Authorization:'Bearer '+token()},r=await fetch('/api/me',{headers,cache:'no-store'}),d=await r.json();
   if(!r.ok||d.subscription?.status!=='active')throw new Error();
@@ -185,6 +193,7 @@ async function loadCabinet(){
   if(PLAN_DURATIONS[activePlan]){
    localStorage.setItem('fitalpro_subscription_plan',activePlan);
    syncSelectedPlan(activePlan);
+   syncPaidFeatures(activePlan);
    const picker=$('#planSelect');if(picker)picker.disabled=true;
   }
   $('#memberTitle').textContent='Ваш доступ активен';$('#memberText').textContent='Тариф: '+d.subscription.plan+'. Доступ до '+new Date(d.subscription.expires_at).toLocaleDateString('ru-RU');lock.textContent='✓';box.hidden=false;
@@ -199,7 +208,7 @@ async function loadCabinet(){
    renderShoppingList(pd.plan,$('#memberShoppingList'));
   }
   await loadProgress(headers);
- }catch(_){localStorage.removeItem('fitalpro_access_token');localStorage.removeItem('fitalpro_subscription_plan');const picker=$('#planSelect');if(picker)picker.disabled=false;box.hidden=true;$('#memberTitle').textContent='Не удалось подтвердить доступ';$('#memberText').textContent='Проверьте подключение и обновите страницу.';lock.textContent='⌑';}
+ }catch(_){syncPaidFeatures(null);localStorage.removeItem('fitalpro_access_token');localStorage.removeItem('fitalpro_subscription_plan');const picker=$('#planSelect');if(picker)picker.disabled=false;box.hidden=true;$('#memberTitle').textContent='Не удалось подтвердить доступ';$('#memberText').textContent='Проверьте подключение и обновите страницу.';lock.textContent='⌑';}
 }
 async function loadProgress(headers={Authorization:'Bearer '+token()}){
  try{const r=await fetch('/api/progress',{headers,cache:'no-store'}),d=await r.json();$('#progressHistory').innerHTML=(d.items||[]).slice(0,8).map(x=>'<div class="history-row"><b>'+escapeHtml(x.date)+'</b><span>'+escapeHtml(x.weight)+' кг</span></div>').join('')||'<p class="muted">Записей пока нет.</p>';}catch(_){}
@@ -213,6 +222,7 @@ $('#progressForm')?.addEventListener('submit',async e=>{
 const chatForm=$('#chatForm'),chatInput=$('#chatInput'),chatLog=$('#chatLog'),chatNote=$('#chatNote');
 function addChatMessage(text,kind){const el=document.createElement('div');el.className='chat-message '+kind;el.textContent=text;chatLog.append(el);chatLog.scrollTop=chatLog.scrollHeight;}
 async function sendChatQuestion(question){
+ if(!['PRO','Premium'].includes(localStorage.getItem('fitalpro_subscription_plan'))){if(chatNote)chatNote.textContent='AI-помощник доступен после активации PRO или Premium.';return;}
  const q=String(question||'').trim();if(!q)return;
  addChatMessage(q,'user');chatInput.value='';chatNote.textContent='Fital AI готовит ответ…';
  const submit=chatForm?.querySelector('button');if(submit)submit.disabled=true;
