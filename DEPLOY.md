@@ -44,7 +44,9 @@ npm run check
 
 `npm run deploy` публикует Worker и не запускает миграции D1.
 
-`npm run db:migrate` применяет миграции к удалённой D1. Не запускать её без отдельной проверки SQL-файлов и согласования с текущей схемой базы.
+`npm run db:migrate` targets the production D1 and must not be used for Preview testing.
+
+`npm run db:migrations:list:preview` lists unapplied migrations for the isolated Preview database. `npm run db:migrate:preview` applies them through `wrangler.preview-migrations.jsonc`, which contains only the Preview D1 ID. The Preview migration config is deliberately separate from the Worker deployment config.
 
 GitHub Actions в этой ветке только проверяет синтаксис Worker при Pull Request. Автоматической публикации в Cloudflare нет.
 
