@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const read = path => readFile(new URL('../' + path, import.meta.url), 'utf8');
-const [worker, app, html, css, workflow, config, packageJson] = await Promise.all([
+const [worker, app, html, css, workflow, config, packageJson, oneDraftMigration] = await Promise.all([
   read('_worker.js'), read('public/app.js'), read('public/index.html'),
   read('public/styles.css'), read('.github/workflows/main.yml'),
-  read('wrangler.jsonc'), read('package.json'),
+  read('wrangler.jsonc'), read('package.json'), read('migrations/0011_one_payment_per_draft.sql'),
 ]);
 
 test('tariff durations are fixed on the server', () => {
@@ -33,7 +33,7 @@ test('chat and progress are restricted to PRO and Premium', () => {
   assert.match(worker, /AI-помощник доступен в тарифах PRO и Premium/);
   assert.match(worker, /Отслеживание прогресса доступно в тарифах PRO и Premium/);
   assert.match(app, /syncPaidFeatures\(activePlan\)/);
-  assert.match(app, /id="progressBox"/);
+  assert.match(html, /id="progressBox"/);
 });
 
 test('shopping list aggregates compatible metric units', () => {
@@ -44,7 +44,8 @@ test('shopping list aggregates compatible metric units', () => {
 });
 
 test('one AI draft cannot create multiple active orders', () => {
-  assert.match(worker, /idx_payments_one_checkout_per_draft/);
+  assert.ok(oneDraftMigration.includes('CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_one_checkout_per_draft'));
+  assert.ok(oneDraftMigration.includes("WHERE draft_id IS NOT NULL AND status IN ('pending','succeeded')"));
   assert.match(worker, /existingOrder=.*payments WHERE draft_id/);
 });
 
