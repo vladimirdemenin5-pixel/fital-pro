@@ -54,7 +54,9 @@ Do not put payment passwords in browser code, repository files, or chat messages
 
 - `npm run check` checks Worker JavaScript syntax.
 - `npm run deploy` deploys the Worker only.
-- `npm run db:migrate` applies remote D1 migrations and must be run separately, deliberately, and only after reviewing the migration files.
+- `npm run db:migrate` applies remote migrations to the production D1 and must not be run during Preview testing.
+- `npm run db:migrate:preview` applies migrations only to the isolated `fital-pro-preview-db`, using `wrangler.preview-migrations.jsonc`.
+- `npm run db:migrations:list:preview` lists pending migrations for that Preview database.
 
 GitHub Actions validates pull requests and does not deploy to Cloudflare. Production deployment must remain a separate, explicitly approved operation.
 
