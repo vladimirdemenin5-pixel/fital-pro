@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "red-waterfall-2af8",
+  "d1_databases": [
+    {
+      "binding": "PREVIEW_DB",
+      "database_name": "fital-pro-preview-db",
+      "database_id": "54bd4cbb-f267-4c1e-af16-cdc9b24953c1",
+      "migrations_dir": "migrations"
+    }
+  ]
+}
