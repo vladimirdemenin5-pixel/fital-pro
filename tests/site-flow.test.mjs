@@ -124,21 +124,28 @@ test('site hero uses the self-hosted photo file', () => {
   assert.match(html, /src="\/assets\/hero-lifestyle\.webp"/);
 });
 
-test('CI runs the regression suite before deploy dry-run', () => {
+test('CI runs regression tests and a dry-run only, never remote migrations or production deploy', () => {
   assert.match(workflow, /npm test/);
   assert.match(workflow, /--dry-run/);
   assert.doesNotMatch(workflow, /wrangler deploy(?! --dry-run)/);
+  assert.doesNotMatch(workflow, /db:migrate:preview|d1 migrations apply .*--remote/);
+  assert.doesNotMatch(workflow, /npm run db:migrate(?!:local)/);
 });
 
-test('Preview is isolated and production payments default to disabled', async () => {
+test('Preview bindings and migrations are isolated from Production', async () => {
   const config = JSON.parse(await read('wrangler.jsonc'));
+  const previewMigrationConfig = JSON.parse(await read('wrangler.preview-migrations.jsonc'));
   const packageJson = JSON.parse(await read('package.json'));
   assert.equal(config.vars.ROBOKASSA_LIVE_ENABLED, '0');
   assert.equal(config.previews.vars.ROBOKASSA_IS_TEST, '1');
   assert.equal(config.previews.vars.ROBOKASSA_LIVE_ENABLED, '0');
   assert.equal(config.d1_databases[0].database_name, 'fital-pro-db');
   assert.equal(config.previews.d1_databases[0].database_name, 'fital-pro-preview-db');
+  assert.equal(previewMigrationConfig.d1_databases[0].binding, 'PREVIEW_DB');
+  assert.equal(previewMigrationConfig.d1_databases[0].database_name, 'fital-pro-preview-db');
+  assert.equal(previewMigrationConfig.d1_databases[0].database_id, config.previews.d1_databases[0].database_id);
   assert.equal(packageJson.scripts.preview, 'wrangler preview');
+  assert.equal(packageJson.scripts['db:migrate:preview'], 'wrangler d1 migrations apply PREVIEW_DB --remote --config wrangler.preview-migrations.jsonc');
 });
 
 
