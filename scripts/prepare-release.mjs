@@ -214,7 +214,7 @@ await writeFile(appPath,app,'utf8');
 await writeFile(htmlPath,html,'utf8');
 await writeFile(htmlPath,html,'utf8');
 await mkdir('migrations',{recursive:true});
-await writeFile('migrations/0007_plan_drafts.sql',[
+await writeFile('migrations/0009_plan_drafts.sql',[
   'ALTER TABLE payments ADD COLUMN client_ref TEXT;',
   'ALTER TABLE payments ADD COLUMN draft_id TEXT;',
   'CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_client_ref ON payments(client_ref);',
