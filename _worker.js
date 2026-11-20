@@ -176,6 +176,8 @@ async function checkout(request, env) {
   }
   let body;
   try { body=await request.json(); } catch { return json({error:'Некорректные данные заказа.'},400); }
+  const testMode=String(env.ROBOKASSA_IS_TEST ?? '0');
+  if (!['0','1'].includes(testMode)) return json({error:'Некорректный режим Robokassa.'},503);
   const plan=clean(body?.plan,40);
   const p=PLANS[plan];
   if (!p) return json({error:'Неизвестный тариф.'},400);
@@ -193,6 +195,8 @@ async function checkout(request, env) {
     Shp_client_ref:clientRef,
     Shp_plan:plan
   };
+  // Robokassa requires IsTest=1 for test payments; use test credentials in the same secret fields.
+  if (testMode === '1') params.IsTest='1';
   const shp=Object.keys(params).filter(k=>k.startsWith('Shp_')).sort().map(k=>k+'='+params[k]);
   params.SignatureValue=robokassaHash([params.MerchantLogin,params.OutSum,params.InvId,env.ROBOKASSA_PASSWORD1,...shp].join(':'),env);
 
