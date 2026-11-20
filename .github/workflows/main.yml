@@ -16,11 +16,35 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Prepare website and D1 from production package
+        run: |
+          test -f Fital_Pro_PRODUCTION_GITHUB_READY.zip
+          rm -rf public migrations
+          unzip -q Fital_Pro_PRODUCTION_GITHUB_READY.zip 'public/*' 'migrations/*' -d .
+          test -f public/index.html
+          test -f public/app.js
+          test -f public/styles.css
+          test -f migrations/0001_init.sql
+          test -f migrations/0008_consent.sql
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
+
       - name: Check Worker syntax
         run: node --check _worker.js
-      - name: Verify deployment configuration exists
-        run: test -f wrangler.jsonc
+
+      - name: Check frontend syntax
+        run: node --check public/app.js
+
+      - name: Verify deployment configuration
+        run: |
+          test -f wrangler.jsonc
+          test -f package.json
+          grep -q 'red-waterfall-2af8' wrangler.jsonc
+          grep -q 'fital-pro-db' wrangler.jsonc
+          grep -q 'ROBOKASSA_MERCHANT_LOGIN' wrangler.jsonc
+          grep -q 'ROBOKASSA_PASSWORD1' wrangler.jsonc
+          grep -q 'ROBOKASSA_PASSWORD2' wrangler.jsonc
