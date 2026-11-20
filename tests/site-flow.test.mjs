@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import workerModule from '../_worker.js';
 
 const read = path => readFile(new URL('../' + path, import.meta.url), 'utf8');
 const [worker, app, html, css, workflow, config, packageJson, oneDraftMigration] = await Promise.all([
@@ -137,4 +139,104 @@ test('Preview is isolated and production payments default to disabled', async ()
   assert.equal(config.d1_databases[0].database_name, 'fital-pro-db');
   assert.equal(config.previews.d1_databases[0].database_name, 'fital-pro-preview-db');
   assert.equal(packageJson.scripts.preview, 'wrangler preview');
+});
+
+
+function fakeCheckoutDb(draftPlan) {
+  const state = { payments: [] };
+  return {
+    state,
+    prepare(sql) {
+      const query = {
+        args: [],
+        bind(...args) { this.args = args; return this; },
+        async first() {
+          if (sql.includes('COUNT(*) AS n FROM request_log')) return { n: 0 };
+          if (sql.includes('FROM plan_drafts WHERE id=?')) {
+            return { id: 'draft-test', profile_json: '{}', plan_json: JSON.stringify(draftPlan), created_at: new Date().toISOString() };
+          }
+          if (sql.includes('FROM payments WHERE draft_id=?')) return null;
+          return null;
+        },
+        async run() {
+          if (sql.includes('INSERT INTO payments')) state.payments.push(this.args);
+          return { success: true };
+        }
+      };
+      return query;
+    }
+  };
+}
+
+test('health endpoint reports isolated Robokassa test readiness without enabling live payments', async () => {
+  const request = new Request('https://preview.example/health');
+  const unavailable = await workerModule.fetch(request, {
+    DB: {}, AI: { run: async () => ({}) }, ROBOKASSA_IS_TEST: '0',
+    ROBOKASSA_LIVE_ENABLED: '0', ROBOKASSA_MERCHANT_LOGIN: 'merchant',
+    ROBOKASSA_PASSWORD1: 'live-pass-1', ROBOKASSA_PASSWORD2: 'live-pass-2'
+  });
+  const disabled = await unavailable.json();
+  assert.equal(disabled.ok, true);
+  assert.equal(disabled.paymentMode, 'disabled');
+  assert.equal(disabled.payments, false);
+
+  const testReadyResponse = await workerModule.fetch(request, {
+    DB: {}, AI: { run: async () => ({}) }, ROBOKASSA_IS_TEST: '1',
+    ROBOKASSA_LIVE_ENABLED: '0', ROBOKASSA_MERCHANT_LOGIN: 'merchant',
+    ROBOKASSA_TEST_PASSWORD1: 'test-pass-1', ROBOKASSA_TEST_PASSWORD2: 'test-pass-2'
+  });
+  const testReady = await testReadyResponse.json();
+  assert.equal(testReady.paymentMode, 'test');
+  assert.equal(testReady.payments, true);
+});
+
+test('Robokassa checkout creates a signed IsTest=1 URL and stores a pending order', async () => {
+  const db = fakeCheckoutDb({ planCode: 'Питание', programDays: 7 });
+  const response = await workerModule.fetch(new Request('https://preview.example/api/checkout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ plan: 'Питание', draft_id: 'draft-test' })
+  }), {
+    DB: db, ROBOKASSA_IS_TEST: '1', ROBOKASSA_LIVE_ENABLED: '0',
+    ROBOKASSA_MERCHANT_LOGIN: 'merchant-test',
+    ROBOKASSA_TEST_PASSWORD1: 'test-pass-1',
+    ROBOKASSA_TEST_PASSWORD2: 'test-pass-2'
+  });
+  const data = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(db.state.payments.length, 1);
+  assert.equal(db.state.payments[0][1], 'pending');
+  assert.equal(db.state.payments[0][2], 'Питание');
+  assert.equal(db.state.payments[0][3], '990.00');
+
+  const url = new URL(data.confirmation_url);
+  assert.equal(url.hostname, 'auth.robokassa.ru');
+  assert.equal(url.searchParams.get('IsTest'), '1');
+  assert.equal(url.searchParams.get('OutSum'), '990.00');
+  assert.equal(url.searchParams.get('Shp_plan'), 'Питание');
+  assert.ok(url.searchParams.get('Shp_client_ref'));
+  const shp = [...url.searchParams.entries()]
+    .filter(([key]) => key.startsWith('Shp_'))
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => key + '=' + value);
+  const expected = createHash('md5')
+    .update(['merchant-test', '990.00', url.searchParams.get('InvId'), 'test-pass-1', ...shp].join(':'))
+    .digest('hex').toUpperCase();
+  assert.equal(url.searchParams.get('SignatureValue'), expected);
+});
+
+test('Robokassa rejects an invalid ResultURL signature before looking up an order', async () => {
+  const request = new Request('https://preview.example/webhooks/robokassa', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      OutSum: '990.00', InvId: '1234567890', SignatureValue: 'not-a-valid-signature',
+      Shp_client_ref: '0123456789abcdef0123456789abcdef', Shp_plan: 'Питание'
+    })
+  });
+  const response = await workerModule.fetch(request, {
+    DB: {}, ROBOKASSA_IS_TEST: '1', ROBOKASSA_TEST_PASSWORD2: 'test-pass-2'
+  });
+  assert.equal(response.status, 400);
+  assert.equal(await response.text(), 'Invalid signature');
 });
