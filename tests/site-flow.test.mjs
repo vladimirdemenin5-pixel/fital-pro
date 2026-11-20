@@ -78,7 +78,7 @@ test('live payments require an explicit enable flag', () => {
 });
 
 test('progress API validates dates and checkbox flags before writing D1', () => {
-  assert.match(worker, /const parsedDate=new Date\(date\+'T00:00:00\\.000Z'\)/);
+  assert.match(worker, /const parsedDate=new Date\(date\+'T00:00:00\.000Z'\)/);
   assert.match(worker, /parsedDate\.toISOString\(\)\.slice\(0,10\)!==date/);
   assert.match(worker, /!Number\.isInteger\(completedMeal\).*!Number\.isInteger\(completedWorkout\)/);
   assert.match(worker, /!\[0,1\]\.includes\(completedMeal\).*!\[0,1\]\.includes\(completedWorkout\)/);
