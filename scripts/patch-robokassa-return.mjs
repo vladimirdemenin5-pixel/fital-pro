@@ -31,9 +31,16 @@ replaceExactlyOnce(
   'confirmed-payment access-token guard'
 );
 
+replaceExactlyOnce(
+  "if(d.access_token) localStorage.setItem('fitalpro_access_token', d.access_token);",
+  "localStorage.setItem('fitalpro_access_token', d.access_token);\n        const memberPanel=document.getElementById('memberPanel');\n        if(memberPanel){\n          memberPanel.hidden=false;\n          const memberPlan=memberPanel.querySelector('[data-member-plan]');\n          const memberStatus=memberPanel.querySelector('[data-member-status]');\n          if(memberPlan) memberPlan.textContent=d.plan || '—';\n          if(memberStatus) memberStatus.textContent='Активна';\n        }",
+  'post-payment member panel activation'
+);
+
 if (!source.includes("params.get('Shp_client_ref')") ||
     !source.includes("'ref='+encodeURIComponent(paymentRef)") ||
     !source.includes("&& d.access_token") ||
+    !source.includes("memberPanel.hidden=false") ||
     !source.includes("fetch('/api/payment-status?'+query")) {
   throw new Error('Robokassa return flow validation failed; no file changes made.');
 }
