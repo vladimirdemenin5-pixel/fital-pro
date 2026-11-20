@@ -39,15 +39,21 @@ The `build` script runs `npm run check && npm test`; this makes the Preview buil
 
 The `previews` block in `wrangler.jsonc` sets `ROBOKASSA_IS_TEST=1`, binds the isolated Preview D1 database and enables Workers AI.
 
-Preview secrets must be added to the **Previews Base** configuration, not to Production:
+The branch Preview already exists, so configure secrets for that Preview itself first. Cloudflare does not copy later Previews Base secret changes into an already-created Preview. Also add the same secrets to **Previews Base** so future branch Previews inherit them. Never add test passwords to Production.
+
+Required Preview-only secrets:
 
 - `ROBOKASSA_MERCHANT_LOGIN`
 - `ROBOKASSA_TEST_PASSWORD1`
 - `ROBOKASSA_TEST_PASSWORD2`
 
-Cloudflare Wrangler commands (enter the values only in the secure CLI prompt; never commit them):
+Run these commands from the repository root. Wrangler prompts for each value securely; do not put values in command arguments, files, GitHub, or chat:
 
 ```bash
+npx wrangler preview secret put ROBOKASSA_MERCHANT_LOGIN --name robokassa-safe-repair-2026-11-19
+npx wrangler preview secret put ROBOKASSA_TEST_PASSWORD1 --name robokassa-safe-repair-2026-11-19
+npx wrangler preview secret put ROBOKASSA_TEST_PASSWORD2 --name robokassa-safe-repair-2026-11-19
+
 npx wrangler preview base-config secret put ROBOKASSA_MERCHANT_LOGIN
 npx wrangler preview base-config secret put ROBOKASSA_TEST_PASSWORD1
 npx wrangler preview base-config secret put ROBOKASSA_TEST_PASSWORD2
