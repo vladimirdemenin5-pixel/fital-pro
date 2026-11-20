@@ -95,6 +95,8 @@ const SUBS={
 function normalizeProfile(body) {
   const profile={name:clean(body?.name,80),sex:clean(body?.sex,10),age:Number(body?.age),height:Number(body?.height),weight:Number(body?.weight),activity:clean(body?.activity,20),goal:clean(body?.goal,20),training:clean(body?.training,20),days:Number(body?.days),preferences:clean(body?.preferences,500)};
   if(!Number.isInteger(profile.age)||profile.age<18||profile.age>80||!Number.isFinite(profile.height)||profile.height<120||profile.height>230||!Number.isFinite(profile.weight)||profile.weight<35||profile.weight>250||!['male','female'].includes(profile.sex)||!['low','medium','high'].includes(profile.activity)||!['loss','maintain','gain'].includes(profile.goal)||!['home','gym','mixed'].includes(profile.training)||!Number.isInteger(profile.days)||profile.days<2||profile.days>7) return {error:'Проверьте анкету: возраст 18–80 лет, рост, вес, активность, цель и формат тренировок.'};
+  const bmi=profile.weight/((profile.height/100)**2);
+  if(profile.goal==='loss'&&bmi<18.5) return {error:'При таком соотношении роста и веса сервис не формирует план снижения веса. Выберите поддержание формы и при необходимости обсудите цель со специалистом.'};
   return {profile};
 }
 async function generatePersonalPlan(profile,env){
@@ -130,7 +132,7 @@ async function planPreview(request,env){
   let plan;try{plan=await generatePersonalPlan(normalized.profile,env);}catch{return json({error:'Не удалось сформировать персональный план через AI. Попробуйте ещё раз.'},502);}
   const id=crypto.randomUUID().replaceAll('-',''),createdAt=new Date().toISOString(),cutoff=new Date(Date.now()-24*60*60*1000).toISOString();
   try{
-    await env.DB.prepare('DELETE FROM plan_drafts WHERE created_at<?').bind(cutoff).run();
+    await env.DB.prepare("DELETE FROM plan_drafts WHERE created_at<? AND id NOT IN (SELECT draft_id FROM payments WHERE status='pending' AND draft_id IS NOT NULL)").bind(cutoff).run();
     await env.DB.prepare('INSERT INTO plan_drafts (id,profile_json,plan_json,created_at) VALUES (?,?,?,?)').bind(id,JSON.stringify(normalized.profile),JSON.stringify(plan),createdAt).run();
   }catch{return json({error:'Не удалось сохранить черновик плана. Требуется обновление схемы базы данных.'},503);}
   return json({ok:true,draft_id:id,plan});
