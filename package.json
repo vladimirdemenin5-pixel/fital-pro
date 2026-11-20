@@ -9,7 +9,9 @@
     "db:migrate:local": "wrangler d1 migrations apply fital-pro-db --local",
     "check": "node --check _worker.js",
     "prepare:release": "node scripts/prepare-release.mjs",
-    "build": "unzip -o Fital_Pro_PRODUCTION_GITHUB_READY.zip 'public/*' 'migrations/*' -d . && node scripts/prepare-release.mjs"
+    "build": "unzip -o Fital_Pro_PRODUCTION_GITHUB_READY.zip 'public/*' 'migrations/*' -d . && node scripts/prepare-release.mjs",
+    "db:migrate:preview": "wrangler d1 migrations apply PREVIEW_DB --remote --config wrangler.preview-migrations.jsonc",
+    "db:migrations:list:preview": "wrangler d1 migrations list PREVIEW_DB --remote --config wrangler.preview-migrations.jsonc"
   },
   "devDependencies": {
     "wrangler": "^4.68.0"
