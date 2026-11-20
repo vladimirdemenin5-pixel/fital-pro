@@ -24,6 +24,9 @@ test('tariff durations are fixed on the server', () => {
 });
 
 test('nutrition-only tariff does not require hidden training fields', () => {
+  assert.match(app, /const selectedPlan=\$\('#planSelect'\)\?\.value\|\|localStorage\.getItem\('fitalpro_selected_plan'\)\|\|'PRO'/);
+  assert.match(app, /if\(selectedPlan!=='Питание'\)data\.days=Number\(data\.days\)/);
+  assert.match(app, /selectedPlan!=='Питание'&&\(data\.days<2\|\|data\.days>7\)/);
   assert.match(worker, /function normalizeProfile\(body,planCode='PRO'\)/);
   assert.match(worker, /const requiresTraining=planCode!=='Питание'/);
   assert.match(worker, /const invalidTraining=requiresTraining&&/);
