@@ -41,6 +41,14 @@ npx wrangler preview base-config secret put ROBOKASSA_TEST_PASSWORD2
 
 Не копируйте рабочие пароли в Preview и тестовые пароли в Production.
 
+### Адреса Robokassa для Preview
+
+В технических настройках тестового магазина:
+- Result URL: `https://<preview-host>/webhooks/robokassa`, POST.
+- Success URL: `https://<preview-host>/`, GET.
+- Fail URL: `https://<preview-host>/?payment=failed`, GET.
+- Алгоритм подписи должен совпадать с настройкой магазина (текущий Worker использует MD5).
+
 Перед Preview сначала посмотрите ожидающие миграции:
 
 ```bash

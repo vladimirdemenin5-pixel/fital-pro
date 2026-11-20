@@ -61,8 +61,11 @@ test('NodeList handlers use querySelectorAll, not querySelector', () => {
   assert.doesNotMatch(app, /(^|[^$])\$\([^\)\n]+\)\.forEach/m);
 });
 
-test('payment return and member cabinet initialization remain reachable', () => {
+test('payment success and failure returns are handled separately', () => {
+  assert.match(app, /p\.get\('payment'\)==='failed'/);
   assert.match(app, /paymentReturn\(\);loadCabinet\(\);/);
+  assert.match(html, /id="paymentRetry"/);
+  assert.match(html, /Вернуться к анкете и повторить попытку/);
 });
 
 test('AI menu ingredients and shopping list are rendered in preview and cabinet', () => {

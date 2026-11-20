@@ -54,8 +54,8 @@ Preview создаётся на существующем Worker через ме�
 - Result URL: `https://<preview-host>/webhooks/robokassa`;
 - Result URL method: POST;
 - Result notification password: тестовый Password #2;
-- Success URL: Preview site URL, method GET;
-- Fail URL: Preview site URL;
+- Success URL: `https://<preview-host>/`, method GET;
+- Fail URL: `https://<preview-host>/?payment=failed`, method GET;
 - hash algorithm должен совпадать с настройкой магазина.
 
 В Production live checkout закрыт кодом, пока переменная `ROBOKASSA_LIVE_ENABLED` не установлена в `1`. Не включайте её до проверки тестового платежа и публикации реальных реквизитов продавца.

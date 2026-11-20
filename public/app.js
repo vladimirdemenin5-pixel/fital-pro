@@ -170,8 +170,17 @@ $('#checkoutButton')?.addEventListener('click',async()=>{
 });
 async function paymentReturn(){
  const p=new URLSearchParams(location.search),ref=p.get('Shp_client_ref')||p.get('shp_client_ref')||p.get('payment_ref'),id=p.get('InvId')||p.get('payment_id');
+ const panel=$('#paymentResult'),retry=$('#paymentRetry');
+ if(p.get('payment')==='failed'){
+  panel.hidden=false;
+  $('#paymentTitle').textContent='Оплата не завершена';
+  $('#paymentText').textContent='Robokassa не подтвердила успешный платёж. Проверьте статус операции в банке или кабинете Robokassa. Если списания нет, вернитесь к анкете, подтвердите согласие и сформируйте новый план для повторной оплаты.';
+  if(retry)retry.hidden=false;
+  return;
+ }
  if(!ref&&!id)return;
- const panel=$('#paymentResult');panel.hidden=false;$('#paymentTitle').textContent='Проверяем оплату';$('#paymentText').textContent='Ожидаем подтверждение Robokassa. Не закрывайте страницу.';
+ panel.hidden=false;$('#paymentTitle').textContent='Проверяем оплату';$('#paymentText').textContent='Ожидаем подтверждение Robokassa. Не закрывайте страницу.';
+ if(retry)retry.hidden=true;
  for(let i=0;i<18;i++){
   try{
    const q=ref?'ref='+encodeURIComponent(ref):'id='+encodeURIComponent(id);

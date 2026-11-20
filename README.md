@@ -49,7 +49,7 @@ Configure the Robokassa technical settings:
 
 - Result URL: `https://<preview-host>/webhooks/robokassa`, method POST, Password #2.
 - Success URL: the Preview site URL, method GET.
-- Failure URL: the Preview site URL.
+- Failure URL: `https://<preview-host>/?payment=failed`, method GET. The site displays a separate failed/cancelled-payment state and directs the customer to check the operation before creating a fresh plan draft.
 - Hash algorithm must match the merchant cabinet; the Worker defaults to MD5.
 
 Robokassa returns the supplied `Shp_*` values to SuccessURL, including `Shp_client_ref`.
