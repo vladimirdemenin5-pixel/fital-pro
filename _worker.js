@@ -197,7 +197,7 @@ async function checkout(request, env) {
     Shp_client_ref:clientRef,
     Shp_plan:plan
   };
-  // Robokassa requires IsTest=1 for test payments; use test credentials in the same secret fields.
+  // Test mode uses dedicated ROBOKASSA_TEST_PASSWORD1/2 secrets and must never reuse live passwords.
   if (testMode === '1') params.IsTest='1';
   const shp=Object.keys(params).filter(k=>k.startsWith('Shp_')).sort().map(k=>k+'='+params[k]);
   params.SignatureValue=robokassaHash([params.MerchantLogin,params.OutSum,params.InvId,password1,...shp].join(':'),env);
