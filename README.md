@@ -54,6 +54,21 @@ Configure the Robokassa technical settings:
 
 Robokassa returns the supplied `Shp_*` values to SuccessURL, including `Shp_client_ref`.
 
+### Preview payment acceptance checks
+
+Use the branch Preview URL only. Before attempting checkout, `GET /health` must report `ai: true`, `db: true`, `payments: true` and `paymentMode: "test"`. If the payment mode is disabled, do not try to pay; configure the three Preview Base secrets first.
+
+A complete test pass is:
+
+1. Submit an adult test profile and generate the selected 7-, 14- or 30-day plan.
+2. Start checkout. Confirm the returned Robokassa URL contains `IsTest=1` and the exact tariff amount. Never use a test URL if `IsTest=1` is missing.
+3. Complete the test transaction in Robokassa. Its POST ResultURL must reach `/webhooks/robokassa` and return `OK{InvId}` only after signature, order reference, tariff and amount checks pass.
+4. Return to the Preview SuccessURL. The browser must receive an access token only after the ResultURL has activated the subscription and saved the profile and plan.
+5. Verify the purchased plan, expiry date, shopping list and (for PRO/Premium) progress and AI chat in the member area.
+6. Repeat once with a failed/cancelled test transaction and confirm that no subscription is activated.
+
+Only the Preview D1 database may receive test payment rows. A passing test does not enable or authorize Production payments.
+
 ### Production
 
 Production passwords remain Worker Secrets:
