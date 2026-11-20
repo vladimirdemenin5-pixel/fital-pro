@@ -23,6 +23,14 @@ test('tariff durations are fixed on the server', () => {
   assert.match(worker, /const includeTraining=planCode!=='Питание'/);
 });
 
+test('nutrition-only tariff does not require hidden training fields', () => {
+  assert.match(worker, /function normalizeProfile\(body,planCode='PRO'\)/);
+  assert.match(worker, /const requiresTraining=planCode!=='Питание'/);
+  assert.match(worker, /const invalidTraining=requiresTraining&&/);
+  assert.match(worker, /normalizeProfile\(body,planCode\)/);
+  assert.match(worker, /normalizeProfile\(body,PLANS\[sub\.plan\]\?sub\.plan:'Питание'\)/);
+});
+
 test('selected tariff is used to generate and bind the draft', () => {
   assert.match(worker, /generatePersonalPlan\(normalized\.profile,env,planCode\)/);
   assert.match(worker, /draftPlan\.planCode!==plan/);
