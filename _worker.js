@@ -348,6 +348,7 @@ async function robokassaWebhook(request, env) {
   let profile,planData;try{profile=JSON.parse(draft.profile_json);planData=JSON.parse(draft.plan_json);}catch{return new Response('Invalid plan draft',{status:500});}
   if(planData.planCode!==plan||Number(planData.programDays)!==p.durationDays) return new Response('Order plan mismatch',{status:400});
   const now=new Date().toISOString();
+  const customerContact=clean(values.EMail,160).toLowerCase();
   const existing=await env.DB.prepare('SELECT access_token,expires_at,status FROM subscriptions WHERE payment_id=?').bind(invoiceId).first();
   const token=existing?.access_token || crypto.randomUUID().replaceAll('-','');
   const durationDays=p.durationDays;
@@ -356,7 +357,7 @@ async function robokassaWebhook(request, env) {
   await env.DB.prepare(`INSERT INTO subscriptions (id,payment_id,client_ref,plan,status,access_token,customer_contact,created_at,updated_at,expires_at)
     VALUES (?,?,?,?,?,?,?,?,?,?)
     ON CONFLICT(payment_id) DO UPDATE SET status=excluded.status,plan=excluded.plan,client_ref=excluded.client_ref,updated_at=excluded.updated_at,expires_at=excluded.expires_at`)
-    .bind(crypto.randomUUID(),invoiceId,clientRef,plan,'active',token,'',now,now,expiresAt).run();
+    .bind(crypto.randomUUID(),invoiceId,clientRef,plan,'active',token,customerContact,now,now,expiresAt).run();
 
   await env.DB.prepare('INSERT INTO profiles (access_token,profile_json,updated_at) VALUES (?,?,?) ON CONFLICT(access_token) DO UPDATE SET profile_json=excluded.profile_json,updated_at=excluded.updated_at').bind(token,JSON.stringify(profile),now).run();
   await env.DB.prepare('INSERT INTO weekly_plans (id,access_token,plan_json,created_at,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET plan_json=excluded.plan_json,updated_at=excluded.updated_at').bind(token,token,JSON.stringify(planData),now,now).run();

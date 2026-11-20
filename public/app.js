@@ -11,6 +11,7 @@ const PLAN_LABELS={'Питание':'Питание',PRO:'PRO',Premium:'Premium'
 function syncSelectedPlan(code){
  if(!PLAN_DURATIONS[code])return;
  const picker=$('#planSelect');if(picker)picker.value=code;
+ const trainingFields=$('#trainingFields');if(trainingFields)trainingFields.hidden=code==='Питание';
  localStorage.setItem('fitalpro_selected_plan',code);
  const note=$('#selectedPlanNote');
  if(note)note.textContent='Выбран тариф '+PLAN_LABELS[code]+' — программа на '+PLAN_DURATIONS[code]+' дней.';
@@ -102,7 +103,9 @@ function renderPlan(plan){
  empty.hidden=true;planCard.hidden=false;
  $('#planCalories').textContent=(plan.calories||'—')+' ккал';
  $('#planProtein').textContent=(plan.protein||'—')+' г';
- $('#planDays').textContent=(plan.days||'—')+'× / нед.';
+ const trainingIncluded=plan.trainingIncluded!==false;
+ $('#planDaysLabel').textContent=trainingIncluded?'ТРЕНИРОВОК В НЕДЕЛЮ':'ТРЕНИРОВКИ';
+ $('#planDays').textContent=trainingIncluded?(plan.days||'—')+'× / нед.':'Не входят';
  const programDays=Number(plan.programDays)||(Array.isArray(plan.week)?plan.week.length:7);
  $('#planSummary').textContent='Цель: '+(plan.goal||'поддержание')+'. Среднее меню: '+(plan.averageDaily?.kcal||plan.calories)+' ккал и '+(plan.averageDaily?.protein||plan.protein)+' г белка в день.';
  $('#planDuration').textContent='Полная программа: '+programDays+' дней. Меню — четыре приёма пищи в день.'+(plan.trainingIncluded===false?' Тренировки не входят в этот тариф.':' Тренировки и восстановление включены.');
