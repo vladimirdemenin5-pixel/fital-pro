@@ -19,6 +19,7 @@ jobs:
 
       - name: Prepare website and D1 from production package
         run: |
+          set -euo pipefail
           test -f Fital_Pro_PRODUCTION_GITHUB_READY.zip
           rm -rf public migrations
           unzip -q Fital_Pro_PRODUCTION_GITHUB_READY.zip 'public/*' 'migrations/*' -d .
@@ -33,21 +34,22 @@ jobs:
         with:
           node-version: 22
 
-      - name: Patch Robokassa return parameter
-        run: node scripts/patch-robokassa-return.mjs public/app.js
+      - name: Install Wrangler
+        run: npm install --no-audit --no-fund
+
+      - name: Patch and validate Robokassa return flow
+        run: |
+          node scripts/patch-robokassa-return.mjs public/app.js
+          node --check public/app.js
 
       - name: Check Worker syntax
-        run: node --check _worker.js
+        run: npm run check
 
-      - name: Check frontend syntax
-        run: node --check public/app.js
+      - name: Validate D1 migrations locally
+        run: npm run db:migrate:local
 
-      - name: Verify deployment configuration
-        run: |
-          test -f wrangler.jsonc
-          test -f package.json
-          grep -q 'red-waterfall-2af8' wrangler.jsonc
-          grep -q 'fital-pro-db' wrangler.jsonc
-          grep -q 'ROBOKASSA_MERCHANT_LOGIN' wrangler.jsonc
-          grep -q 'ROBOKASSA_PASSWORD1' wrangler.jsonc
-          grep -q 'ROBOKASSA_PASSWORD2' wrangler.jsonc
+      - name: Validate Wrangler configuration and assets without publishing
+        run: npx wrangler deploy --dry-run
+
+      - name: Check whitespace errors
+        run: git diff --check
