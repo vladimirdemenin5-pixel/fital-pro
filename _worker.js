@@ -128,12 +128,13 @@ async function planPreview(request,env){
   if(!(await rateLimit(request,env,'plan-preview',5,3600000))) return json({error:'Слишком много запросов. Попробуйте позже.'},429);
   if(!env.DB) return json({error:'База данных временно недоступна.'},503);
   let body;try{body=await request.json();}catch{return json({error:'Некорректная анкета.'},400);}
+  if(!['on','true','1'].includes(String(body?.pd_consent||'').toLowerCase())) return json({error:'Необходимо согласие на обработку персональных данных.'},400);
   const normalized=normalizeProfile(body);if(normalized.error)return json({error:normalized.error},400);
   let plan;try{plan=await generatePersonalPlan(normalized.profile,env);}catch{return json({error:'Не удалось сформировать персональный план через AI. Попробуйте ещё раз.'},502);}
   const id=crypto.randomUUID().replaceAll('-',''),createdAt=new Date().toISOString(),cutoff=new Date(Date.now()-24*60*60*1000).toISOString();
   try{
     await env.DB.prepare("DELETE FROM plan_drafts WHERE created_at<? AND id NOT IN (SELECT draft_id FROM payments WHERE status='pending' AND draft_id IS NOT NULL)").bind(cutoff).run();
-    await env.DB.prepare('INSERT INTO plan_drafts (id,profile_json,plan_json,created_at) VALUES (?,?,?,?)').bind(id,JSON.stringify(normalized.profile),JSON.stringify(plan),createdAt).run();
+    await env.DB.prepare('INSERT INTO plan_drafts (id,profile_json,plan_json,created_at,pd_consent_at,pd_policy_version) VALUES (?,?,?,?,?,?)').bind(id,JSON.stringify(normalized.profile),JSON.stringify(plan),createdAt,createdAt,'2026-11-20').run();
   }catch{return json({error:'Не удалось сохранить черновик плана. Требуется обновление схемы базы данных.'},503);}
   return json({ok:true,draft_id:id,plan});
 }
