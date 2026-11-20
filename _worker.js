@@ -243,7 +243,7 @@ async function progressApi(request,env){
   const completedMeal=Number(b.completed_meal??0);
   const completedWorkout=Number(b.completed_workout??0);
   const note=clean(b.note,300);
-  if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)||Number.isNaN(parsedDate.getTime())||parsedDate.toISOString().slice(0,10)!==date) return json({error:'Укажите корректную дату.'},400);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||Number.isNaN(parsedDate.getTime())||parsedDate.toISOString().slice(0,10)!==date) return json({error:'Укажите корректную дату.'},400);
   if(!Number.isFinite(weight)||weight<35||weight>250) return json({error:'Укажите корректный вес.'},400);
   if(!Number.isInteger(completedMeal)||![0,1].includes(completedMeal)||!Number.isInteger(completedWorkout)||![0,1].includes(completedWorkout)) return json({error:'Проверьте отметки питания и тренировки.'},400);
   await env.DB.prepare(`INSERT INTO progress(access_token,date,weight,completed_meal,completed_workout,note) VALUES(?,?,?,?,?,?) ON CONFLICT(access_token,date) DO UPDATE SET weight=excluded.weight,completed_meal=excluded.completed_meal,completed_workout=excluded.completed_workout,note=excluded.note`).bind(sub.access_token,date,weight,completedMeal,completedWorkout,note).run();

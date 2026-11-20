@@ -39,9 +39,11 @@ Build больше не извлекает содержимое `Fital_Pro_PRODU
 
 Порядок:
 
-1. `npm run db:migrations:list:preview` — просмотреть ожидающие миграции.
-2. `npm run db:migrate:preview` — применить только к Preview D1 после просмотра списка.
-3. `npm run preview` — создать Preview этого Worker по текущей ветке.
+1. `npm run db:migrations:check:preview` — проверить точное совпадение имени и ID Preview D1 в конфигурациях, отличие от Production и последовательность нумерации SQL-файлов.
+2. `npm run db:migrations:list:preview` — просмотреть ожидающие миграции; команда повторно проверяет целевую базу и обращается к `fital-pro-preview-db` по точному имени.
+3. `npm run db:migrate:preview` — применить ожидающие миграции только к Preview D1 после просмотра списка. Wrangler ведёт журнал `d1_migrations` и создаёт резервную копию.
+4. `npm run db:migrations:list:preview` — убедиться, что ожидающих миграций не осталось.
+5. `npm run preview` — создать Preview этого Worker по текущей ветке.
 4. Проверить `/health`: AI и D1 должны быть доступны, `paymentMode` должен быть `test`.
 5. Проверить тарифы 7/14/30 дней, генерацию меню, список покупок, корректные права для тренировок, тестовый платёж, POST ResultURL и выдачу доступа.
 
@@ -70,7 +72,7 @@ Preview создаётся на существующем Worker через ме�
 4. После явного согласования включить `ROBOKASSA_LIVE_ENABLED=1`.
 5. Отдельно согласовать Production deploy и необходимые Production D1 migrations.
 
-Не запускайте `npm run db:migrate` или `npm run deploy` во время Preview-тестирования.
+Не запускайте `npm run db:migrate` или `npm run deploy` во время Preview-тестирования. Не выполняйте SQL миграций вручную в D1 Console: это обходит журнал `d1_migrations`.
 
 ## GitHub Actions
 

@@ -109,10 +109,14 @@ npm run build
 Preview-only workflow:
 
 ```bash
+npm run db:migrations:check:preview
 npm run db:migrations:list:preview
 npm run db:migrate:preview
+npm run db:migrations:list:preview
 npm run preview
 ```
+
+Before the remote commands, `scripts/verify-preview-db.mjs` checks that the Preview Worker binding and migration-only config use the same exact database name and ID, that this ID differs from Production, and that migration files are consecutively numbered. The apply/list commands target the stable database name `fital-pro-preview-db`, not a mutable binding alias. Wrangler maintains the `d1_migrations` history and applies pending migrations in order. Do not paste migration SQL manually into D1 Console; doing so bypasses Wrangler's migration history.
 
 Review the migration list first. `db:migrate:preview` applies migrations only to `fital-pro-preview-db`. `preview` creates an isolated Worker Preview for the current branch; it does not publish the Production deployment.
 

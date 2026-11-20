@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import workerModule from '../_worker.js';
+import { verifyPreviewMigrationConfig, verifyMigrationSequence } from '../scripts/verify-preview-db.mjs';
 
 const read = path => readFile(new URL('../' + path, import.meta.url), 'utf8');
 const [worker, app, html, css, workflow, config, packageJson, oneDraftMigration] = await Promise.all([
@@ -146,7 +147,16 @@ test('Preview bindings and migrations are isolated from Production', async () =>
   assert.equal(previewMigrationConfig.d1_databases[0].database_id, config.previews.d1_databases[0].database_id);
   assert.equal(packageJson.scripts.preview, 'wrangler preview');
   assert.equal(packageJson.scripts.build, 'npm run check && npm test');
-  assert.equal(packageJson.scripts['db:migrate:preview'], 'wrangler d1 migrations apply PREVIEW_DB --remote --config wrangler.preview-migrations.jsonc');
+  assert.equal(packageJson.scripts['db:migrate:preview'], 'node scripts/verify-preview-db.mjs && wrangler d1 migrations apply fital-pro-preview-db --remote --config wrangler.preview-migrations.jsonc');
+  assert.equal(packageJson.scripts['db:migrations:list:preview'], 'node scripts/verify-preview-db.mjs && wrangler d1 migrations list fital-pro-preview-db --remote --config wrangler.preview-migrations.jsonc');
+  const verifiedTarget = verifyPreviewMigrationConfig(config, previewMigrationConfig);
+  assert.equal(verifiedTarget.database_name, 'fital-pro-preview-db');
+  assert.equal(verifiedTarget.database_id, config.previews.d1_databases[0].database_id);
+  assert.throws(() => verifyPreviewMigrationConfig(config, {
+    d1_databases: [{ binding: 'PREVIEW_DB', database_name: config.d1_databases[0].database_name, database_id: config.d1_databases[0].database_id, migrations_dir: 'migrations' }]
+  }), /fital-pro-preview-db|Production/);
+  assert.equal(verifyMigrationSequence(['0001_init.sql','0002_service.sql','0003_profile.sql','0004_weekly.sql','0005_progress.sql','0006_expiry.sql','0007_checkout_sessions.sql','0008_consent.sql','0009_plan_drafts.sql','0010_plan_draft_consent.sql','0011_one_payment_per_draft.sql']).length, 11);
+  assert.throws(() => verifyMigrationSequence(['0001_init.sql','0003_skipped.sql']), /gap or duplicate/);
 });
 
 
@@ -382,4 +392,51 @@ test('valid Robokassa test ResultURL atomically activates the matching plan and 
   assert.equal(db.state.batchStatements[3].args[1], plan);
   assert.equal(db.state.batchStatements[3].args[2], amount);
   assert.equal(db.state.batchStatements[3].args[3], 'RUB');
+});
+
+function fakeProgressDb() {
+  const state = { writes: [] };
+  return {
+    state,
+    prepare(sql) {
+      const query = {
+        args: [],
+        bind(...args) { this.args = args; return this; },
+        async first() {
+          if (sql.includes('FROM subscriptions WHERE access_token=?')) return { access_token: 'active-test-token', plan: 'PRO', status: 'active', expires_at: '2099-01-01T00:00:00.000Z' };
+          return null;
+        },
+        async run() {
+          if (sql.includes('INSERT INTO progress')) state.writes.push({ sql, args: this.args });
+          return { success: true };
+        },
+        async all() {
+          if (sql.includes('SELECT weight FROM progress')) return { results: [{ weight: 78 }] };
+          return { results: [] };
+        }
+      };
+      return query;
+    }
+  };
+}
+
+test('progress API accepts a valid ISO date and rejects impossible calendar dates', async () => {
+  const validDb = fakeProgressDb();
+  const validResponse = await workerModule.fetch(new Request('https://preview.example/api/progress', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer active-test-token' },
+    body: JSON.stringify({ date: '2026-11-21', weight: 78, completed_meal: 1, completed_workout: 0 })
+  }), { DB: validDb });
+  assert.equal(validResponse.status, 200);
+  assert.equal(validDb.state.writes.length, 1);
+  assert.equal(validDb.state.writes[0].args[1], '2026-11-21');
+
+  const invalidDb = fakeProgressDb();
+  const invalidResponse = await workerModule.fetch(new Request('https://preview.example/api/progress', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer active-test-token' },
+    body: JSON.stringify({ date: '2026-02-30', weight: 78, completed_meal: 1, completed_workout: 0 })
+  }), { DB: invalidDb });
+  assert.equal(invalidResponse.status, 400);
+  assert.equal(invalidDb.state.writes.length, 0);
 });
