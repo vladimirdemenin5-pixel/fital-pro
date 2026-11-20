@@ -402,14 +402,20 @@ async function robokassaWebhook(request, env) {
   const durationDays=p.durationDays;
   const expiresAt=existing?.expires_at || new Date(Date.now()+durationDays*24*60*60*1000).toISOString();
 
-  await env.DB.prepare(`INSERT INTO subscriptions (id,payment_id,client_ref,plan,status,access_token,customer_contact,created_at,updated_at,expires_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?)
-    ON CONFLICT(payment_id) DO UPDATE SET status=excluded.status,plan=excluded.plan,client_ref=excluded.client_ref,updated_at=excluded.updated_at,expires_at=excluded.expires_at`)
-    .bind(crypto.randomUUID(),invoiceId,clientRef,plan,'active',token,customerContact,now,now,expiresAt).run();
-
-  await env.DB.prepare('INSERT INTO profiles (access_token,profile_json,updated_at) VALUES (?,?,?) ON CONFLICT(access_token) DO UPDATE SET profile_json=excluded.profile_json,updated_at=excluded.updated_at').bind(token,JSON.stringify(profile),now).run();
-  await env.DB.prepare('INSERT INTO weekly_plans (id,access_token,plan_json,created_at,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET plan_json=excluded.plan_json,updated_at=excluded.updated_at').bind(token,token,JSON.stringify(planData),now,now).run();
-  await env.DB.prepare('UPDATE payments SET status=?,plan=?,amount=?,currency=? WHERE id=?').bind('succeeded',plan,normalizeMoney(outSum),'RUB',invoiceId).run();
+  // Commit entitlement, profile, plan and payment status atomically.
+  // paymentStatus cannot expose an active token until all member data is persisted.
+  await env.DB.batch([
+    env.DB.prepare(`INSERT INTO subscriptions (id,payment_id,client_ref,plan,status,access_token,customer_contact,created_at,updated_at,expires_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(payment_id) DO UPDATE SET status=excluded.status,plan=excluded.plan,client_ref=excluded.client_ref,updated_at=excluded.updated_at,expires_at=excluded.expires_at`)
+      .bind(crypto.randomUUID(),invoiceId,clientRef,plan,'active',token,customerContact,now,now,expiresAt),
+    env.DB.prepare('INSERT INTO profiles (access_token,profile_json,updated_at) VALUES (?,?,?) ON CONFLICT(access_token) DO UPDATE SET profile_json=excluded.profile_json,updated_at=excluded.updated_at')
+      .bind(token,JSON.stringify(profile),now),
+    env.DB.prepare('INSERT INTO weekly_plans (id,access_token,plan_json,created_at,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET plan_json=excluded.plan_json,updated_at=excluded.updated_at')
+      .bind(token,token,JSON.stringify(planData),now,now),
+    env.DB.prepare('UPDATE payments SET status=?,plan=?,amount=?,currency=? WHERE id=?')
+      .bind('succeeded',plan,normalizeMoney(outSum),'RUB',invoiceId)
+  ]);
 
   return new Response('OK'+invoiceId,{headers:{'content-type':'text/plain; charset=utf-8'}});
 }

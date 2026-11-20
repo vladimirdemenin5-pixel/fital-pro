@@ -44,6 +44,15 @@ test('shopping list aggregates compatible metric units', () => {
   assert.match(worker, /if\(unit==='л'\)\{amount\*=1000;unit='мл';\}/);
 });
 
+test('Robokassa activation writes entitlement, profile and plan atomically', () => {
+  const webhook = worker.slice(worker.indexOf('async function robokassaWebhook'), worker.indexOf('async function paymentStatus'));
+  assert.match(webhook, /await env\.DB\.batch\(\[/);
+  assert.match(webhook, /INSERT INTO subscriptions/);
+  assert.match(webhook, /INSERT INTO profiles/);
+  assert.match(webhook, /INSERT INTO weekly_plans/);
+  assert.match(webhook, /UPDATE payments SET status=\?/);
+});
+
 test('one AI draft cannot create multiple active orders', () => {
   assert.ok(oneDraftMigration.includes('CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_one_checkout_per_draft'));
   assert.ok(oneDraftMigration.includes("WHERE draft_id IS NOT NULL AND status IN ('pending','succeeded')"));
