@@ -287,3 +287,97 @@ test('Robokassa accepts the correctly signed test ResultURL envelope before orde
   assert.equal(await response.text(), 'Unknown order');
   assert.ok(queries.some(sql => sql.includes('FROM payments WHERE id=?')));
 });
+
+
+function fakeWebhookDb({ invoiceId, clientRef, plan, amount, draftId, profile, planData }) {
+  const state = { batchStatements: [] };
+  return {
+    state,
+    prepare(sql) {
+      const query = {
+        args: [],
+        bind(...args) { this.args = args; return this; },
+        async first() {
+          if (sql.includes('FROM payments WHERE id=?')) {
+            return { id: invoiceId, status: 'pending', plan, amount, currency: 'RUB', client_ref: clientRef, draft_id: draftId };
+          }
+          if (sql.includes('FROM plan_drafts WHERE id=?')) {
+            return { profile_json: JSON.stringify(profile), plan_json: JSON.stringify(planData) };
+          }
+          if (sql.includes('FROM subscriptions WHERE payment_id=?')) return null;
+          return null;
+        }
+      };
+      return query;
+    },
+    async batch(statements) {
+      state.batchStatements = statements.map(statement => ({ sql: statement.sql, args: statement.args }));
+      return { success: true };
+    }
+  };
+}
+
+test('Production checkout stays blocked when live payments are disabled', async () => {
+  const db = fakeCheckoutDb({ planCode: 'Питание', programDays: 7 });
+  const response = await workerModule.fetch(new Request('https://preview.example/api/checkout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ plan: 'Питание', draft_id: 'draft-test' })
+  }), {
+    DB: db, ROBOKASSA_IS_TEST: '0', ROBOKASSA_LIVE_ENABLED: '0',
+    ROBOKASSA_MERCHANT_LOGIN: 'merchant',
+    ROBOKASSA_PASSWORD1: 'live-pass-1', ROBOKASSA_PASSWORD2: 'live-pass-2'
+  });
+  const data = await response.json();
+  assert.equal(response.status, 503);
+  assert.match(data.error, /реальных платежей пока отключён/);
+  assert.equal(db.state.payments.length, 0);
+});
+
+test('valid Robokassa test ResultURL atomically activates the matching plan and access', async () => {
+  const invoiceId = '1234567890';
+  const clientRef = '0123456789abcdef0123456789abcdef';
+  const draftId = 'draft-webhook-test';
+  const plan = 'PRO';
+  const amount = '1990.00';
+  const password2 = 'test-pass-2';
+  const fields = {
+    OutSum: amount,
+    InvId: invoiceId,
+    Shp_client_ref: clientRef,
+    Shp_plan: plan,
+    EMail: 'Member@Example.com'
+  };
+  const shp = Object.keys(fields).filter(key => key.startsWith('Shp_')).sort().map(key => key + '=' + fields[key]);
+  fields.SignatureValue = createHash('md5')
+    .update([fields.OutSum, fields.InvId, password2, ...shp].join(':'))
+    .digest('hex');
+  const profile = { name: 'Test member', age: 30 };
+  const planData = { planCode: plan, programDays: 14, week: [] };
+  const db = fakeWebhookDb({ invoiceId, clientRef, plan, amount, draftId, profile, planData });
+  const request = new Request('https://preview.example/webhooks/robokassa', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(fields)
+  });
+  const response = await workerModule.fetch(request, {
+    DB: db, ROBOKASSA_IS_TEST: '1',
+    ROBOKASSA_TEST_PASSWORD2: password2
+  });
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), 'OK' + invoiceId);
+  assert.equal(db.state.batchStatements.length, 4);
+  assert.match(db.state.batchStatements[0].sql, /INSERT INTO subscriptions/);
+  assert.equal(db.state.batchStatements[0].args[1], invoiceId);
+  assert.equal(db.state.batchStatements[0].args[3], plan);
+  assert.equal(db.state.batchStatements[0].args[4], 'active');
+  assert.match(db.state.batchStatements[1].sql, /INSERT INTO profiles/);
+  assert.equal(JSON.parse(db.state.batchStatements[1].args[1]).name, 'Test member');
+  assert.match(db.state.batchStatements[2].sql, /INSERT INTO weekly_plans/);
+  assert.equal(JSON.parse(db.state.batchStatements[2].args[2]).planCode, plan);
+  assert.match(db.state.batchStatements[3].sql, /UPDATE payments SET status=\?/);
+  assert.equal(db.state.batchStatements[3].args[0], 'succeeded');
+  assert.equal(db.state.batchStatements[3].args[1], plan);
+  assert.equal(db.state.batchStatements[3].args[2], amount);
+  assert.equal(db.state.batchStatements[3].args[3], 'RUB');
+});
