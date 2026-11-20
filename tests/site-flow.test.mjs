@@ -90,6 +90,15 @@ test('NodeList handlers use querySelectorAll, not querySelector', () => {
   assert.doesNotMatch(app, /(^|[^$])\$\([^\)\n]+\)\.forEach/m);
 });
 
+test('temporary cabinet API failures do not erase a valid access token', () => {
+  const cabinet = app.slice(app.indexOf('async function loadCabinet'), app.indexOf('async function loadProgress'));
+  assert.match(cabinet, /if\(r\.status===401\|\|d\.subscription\?\.status==='expired'\)\{accessRejected=true/);
+  assert.match(cabinet, /if\(accessRejected\)\{/);
+  assert.match(cabinet, /localStorage\.removeItem\('fitalpro_access_token'\)/);
+  assert.match(cabinet, /Токен доступа сохранён/);
+  assert.doesNotMatch(cabinet.slice(cabinet.indexOf('}else{')), /removeItem\('fitalpro_access_token'\)/);
+});
+
 test('payment success and failure returns are handled separately', () => {
   assert.match(app, /p\.get\('payment'\)==='failed'/);
   assert.match(app, /paymentReturn\(\);loadCabinet\(\);/);
