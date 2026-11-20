@@ -236,8 +236,16 @@ async function progressApi(request,env){
   const sub=await getSubscription(request,env); if(!sub||!env.DB) return json({error:'Нужна активная подписка.'},403);
   if(!['PRO','Premium'].includes(sub.plan)) return json({error:'Отслеживание прогресса доступно в тарифах PRO и Premium.'},403);
   if(request.method==='GET'){const rows=await env.DB.prepare('SELECT * FROM progress WHERE access_token=? ORDER BY date DESC LIMIT 30').bind(sub.access_token).all();return json({items:rows.results||[]});}
-  const b=await request.json(); const date=clean(b.date,20)||new Date().toISOString().slice(0,10); const weight=Number(b.weight); const completedMeal=Number(b.completed_meal)||0; const completedWorkout=Number(b.completed_workout)||0; const note=clean(b.note,300);
+  let b;try{b=await request.json();}catch{return json({error:'Некорректные данные прогресса.'},400);}
+  const date=clean(b.date,10)||new Date().toISOString().slice(0,10);
+  const parsedDate=new Date(date+'T00:00:00.000Z');
+  const weight=Number(b.weight);
+  const completedMeal=Number(b.completed_meal??0);
+  const completedWorkout=Number(b.completed_workout??0);
+  const note=clean(b.note,300);
+  if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)||Number.isNaN(parsedDate.getTime())||parsedDate.toISOString().slice(0,10)!==date) return json({error:'Укажите корректную дату.'},400);
   if(!Number.isFinite(weight)||weight<35||weight>250) return json({error:'Укажите корректный вес.'},400);
+  if(!Number.isInteger(completedMeal)||![0,1].includes(completedMeal)||!Number.isInteger(completedWorkout)||![0,1].includes(completedWorkout)) return json({error:'Проверьте отметки питания и тренировки.'},400);
   await env.DB.prepare(`INSERT INTO progress(access_token,date,weight,completed_meal,completed_workout,note) VALUES(?,?,?,?,?,?) ON CONFLICT(access_token,date) DO UPDATE SET weight=excluded.weight,completed_meal=excluded.completed_meal,completed_workout=excluded.completed_workout,note=excluded.note`).bind(sub.access_token,date,weight,completedMeal,completedWorkout,note).run();
   const rows=await env.DB.prepare('SELECT weight FROM progress WHERE access_token=? ORDER BY date ASC').bind(sub.access_token).all(); const vals=(rows.results||[]).map(x=>Number(x.weight)).filter(Boolean); const trend=vals.length>1?Number((vals.at(-1)-vals[0]).toFixed(1)):0;
   return json({ok:true,trend,latest:weight});
