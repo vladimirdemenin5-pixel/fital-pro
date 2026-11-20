@@ -26,12 +26,15 @@ jobs:
           test -f public/app.js
           test -f public/styles.css
           test -f migrations/0001_init.sql
-          test -f migrations/0008_consent.sql
+          test -f migrations/0006_expiry.sql
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - name: Patch Robokassa return parameter
+        run: node scripts/patch-robokassa-return.mjs public/app.js
 
       - name: Check Worker syntax
         run: node --check _worker.js
