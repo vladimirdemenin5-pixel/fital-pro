@@ -468,11 +468,29 @@ export default { async fetch(request, env) {
   try {
     if (url.pathname==='/health' && request.method==='GET') {
       const testMode=String(env.ROBOKASSA_IS_TEST??'0');
-      const paymentReady=!!env.ROBOKASSA_MERCHANT_LOGIN&&(
+      let dbReady=false;
+      if(env.DB){
+        try{
+          const requiredQueries=[
+            'SELECT ip_hash,route,created_at FROM request_log LIMIT 1',
+            'SELECT id,profile_json,plan_json,created_at,pd_consent_at,pd_policy_version FROM plan_drafts LIMIT 1',
+            'SELECT id,status,plan,amount,currency,created_at,client_ref,draft_id FROM payments LIMIT 1',
+            'SELECT id,payment_id,client_ref,plan,status,access_token,customer_contact,created_at,updated_at,expires_at FROM subscriptions LIMIT 1',
+            'SELECT access_token,profile_json,updated_at FROM profiles LIMIT 1',
+            'SELECT id,access_token,plan_json,created_at,updated_at FROM weekly_plans LIMIT 1',
+            'SELECT access_token,date,weight,completed_meal,completed_workout,note FROM progress LIMIT 1'
+          ];
+          for(const query of requiredQueries) await env.DB.prepare(query).first();
+          dbReady=true;
+        }catch{dbReady=false;}
+      }
+      const paymentConfigured=!!env.ROBOKASSA_MERCHANT_LOGIN&&(
         testMode==='1'?!!(env.ROBOKASSA_TEST_PASSWORD1&&env.ROBOKASSA_TEST_PASSWORD2):
         testMode==='0'&&env.ROBOKASSA_LIVE_ENABLED==='1'&&!!(env.ROBOKASSA_PASSWORD1&&env.ROBOKASSA_PASSWORD2)
       );
-      return json({ok:true,service:'Fital Pro',ai:!!env.AI,db:!!env.DB,payments:paymentReady,paymentMode:testMode==='1'?'test':paymentReady?'live':'disabled'});
+      const paymentReady=dbReady&&paymentConfigured;
+      const paymentMode=paymentReady?(testMode==='1'?'test':'live'):'disabled';
+      return json({ok:true,service:'Fital Pro',ai:!!env.AI,db:dbReady,payments:paymentReady,paymentMode});
     }
     if (url.pathname==='/api/chat' && request.method==='POST') return await chat(request,env);
     if (url.pathname==='/api/plan-preview' && request.method==='POST') return await planPreview(request,env);
