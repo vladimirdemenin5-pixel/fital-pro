@@ -16,8 +16,14 @@ function syncSelectedPlan(code){
  if(note)note.textContent='Выбран тариф '+PLAN_LABELS[code]+' — программа на '+PLAN_DURATIONS[code]+' дней.';
 }
 $$('[data-plan]').forEach(b=>b.addEventListener('click',()=>{
+ if(token()){
+  const active=localStorage.getItem('fitalpro_subscription_plan');
+  if(active)syncSelectedPlan(active);
+  note.textContent='Активная подписка сохраняет свой тариф и срок программы.';
+  $('#profile')?.scrollIntoView({behavior:'smooth'});return;
+ }
  const code=b.dataset.plan;syncSelectedPlan(code);
- if(currentProfile&&!token()&&localStorage.getItem('fitalpro_plan_code')!==code)requestPlan({...currentProfile,plan:code,pd_consent:'on'});
+ if(currentProfile&&localStorage.getItem('fitalpro_plan_code')!==code)requestPlan({...currentProfile,plan:code,pd_consent:'on'});
  $('#profile')?.scrollIntoView({behavior:'smooth'});
 }));
 const form=$('#profileForm'),note=$('#profileNote'),planCard=$('#planCard'),empty=$('#previewEmpty');
@@ -52,7 +58,7 @@ async function requestPlan(data){
  const button=$('#planSubmit');button.disabled=true;button.textContent='ИИ составляет план…';note.textContent='Проверяем анкету и формируем меню и рекомендации.';
  try{
   const paid=!!token();
-  const planCode=data.plan||$('#planSelect')?.value||localStorage.getItem('fitalpro_selected_plan')||'PRO';
+  const planCode=paid?(localStorage.getItem('fitalpro_subscription_plan')||localStorage.getItem('fitalpro_selected_plan')||'PRO'):(data.plan||$('#planSelect')?.value||localStorage.getItem('fitalpro_selected_plan')||'PRO');
   const payload={...data,plan:planCode};
   if(!paid){currentDraft='';localStorage.removeItem('fitalpro_plan_draft');localStorage.removeItem('fitalpro_plan_code');}
   const response=await fetch(paid?'/api/profile':'/api/plan-preview',{method:'POST',headers:{'Content-Type':'application/json',...(paid?{Authorization:'Bearer '+token()}:{})},body:JSON.stringify(payload)});
@@ -76,8 +82,13 @@ form?.addEventListener('submit',e=>{
  requestPlan(data);
 });
 $('#planSelect')?.addEventListener('change',()=>{
+ if(token()){
+  const active=localStorage.getItem('fitalpro_subscription_plan');
+  if(active)syncSelectedPlan(active);
+  return;
+ }
  const code=$('#planSelect').value;syncSelectedPlan(code);
- if(currentProfile&&!token()&&localStorage.getItem('fitalpro_plan_code')!==code)requestPlan({...currentProfile,plan:code,pd_consent:'on'});
+ if(currentProfile&&localStorage.getItem('fitalpro_plan_code')!==code)requestPlan({...currentProfile,plan:code,pd_consent:'on'});
 });
 $('#checkoutButton')?.addEventListener('click',async()=>{
  const plan=$('#planSelect').value,draftId=localStorage.getItem('fitalpro_plan_draft');
@@ -111,12 +122,18 @@ async function loadCabinet(){
  try{
   const headers={Authorization:'Bearer '+token()},r=await fetch('/api/me',{headers,cache:'no-store'}),d=await r.json();
   if(!r.ok||d.subscription?.status!=='active')throw new Error();
+  const activePlan=d.subscription.plan;
+  if(PLAN_DURATIONS[activePlan]){
+   localStorage.setItem('fitalpro_subscription_plan',activePlan);
+   syncSelectedPlan(activePlan);
+   const picker=$('#planSelect');if(picker)picker.disabled=true;
+  }
   $('#memberTitle').textContent='Ваш доступ активен';$('#memberText').textContent='Тариф: '+d.subscription.plan+'. Доступ до '+new Date(d.subscription.expires_at).toLocaleDateString('ru-RU');lock.textContent='✓';box.hidden=false;
   const pr=await fetch('/api/plan',{headers,cache:'no-store'}),pd=await pr.json();
   const target=$('#memberPlan');target.replaceChildren();
   if(pr.ok&&pd.plan){const programDays=Number(pd.plan.programDays)||(pd.plan.week||[]).length;const h=document.createElement('p');h.textContent='Ваш персональный план на '+programDays+' дней: '+pd.plan.calories+' ккал · '+pd.plan.protein+' г белка в день.';target.append(h);(pd.plan.week||[]).forEach(day=>{const p=document.createElement('p');p.textContent='День '+day.day+': '+day.training+' — '+(Array.isArray(day.meals)?day.meals.map(x=>x.name).join(', '):Object.values(day.meals||{}).map(x=>x.name||x).join(', '));target.append(p);});}
   await loadProgress(headers);
- }catch(_){localStorage.removeItem('fitalpro_access_token');box.hidden=true;$('#memberTitle').textContent='Не удалось подтвердить доступ';$('#memberText').textContent='Проверьте подключение и обновите страницу.';lock.textContent='⌑';}
+ }catch(_){localStorage.removeItem('fitalpro_access_token');localStorage.removeItem('fitalpro_subscription_plan');const picker=$('#planSelect');if(picker)picker.disabled=false;box.hidden=true;$('#memberTitle').textContent='Не удалось подтвердить доступ';$('#memberText').textContent='Проверьте подключение и обновите страницу.';lock.textContent='⌑';}
 }
 async function loadProgress(headers={Authorization:'Bearer '+token()}){
  try{const r=await fetch('/api/progress',{headers,cache:'no-store'}),d=await r.json();$('#progressHistory').innerHTML=(d.items||[]).slice(0,8).map(x=>'<div class="history-row"><b>'+escapeHtml(x.date)+'</b><span>'+escapeHtml(x.weight)+' кг</span></div>').join('')||'<p class="muted">Записей пока нет.</p>';}catch(_){}
