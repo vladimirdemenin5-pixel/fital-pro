@@ -44,7 +44,9 @@ npm install
 npm run check
 ```
 
-`npm run deploy` выполняет только публикацию Worker. Миграции D1 вынесены в отдельную команду `npm run db:migrate` и не запускаются автоматически.
+`npm run deploy` выполняет только публикацию Worker. Production-миграции вынесены в `npm run db:migrate` и не запускаются автоматически.
+
+Для изолированной Preview D1 используйте `npm run db:migrations:list:preview` и `npm run db:migrate:preview`. Они используют отдельный `wrangler.preview-migrations.jsonc`, где указан только Preview database ID.
 
 ## Важно до публикации
 
