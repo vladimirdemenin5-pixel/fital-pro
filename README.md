@@ -67,3 +67,6 @@ Before deployment, confirm that `public/` and `migrations/` exist and match the 
 - `POST /api/checkout` requires that draft; payment cannot be started from a tariff button alone.
 - The Robokassa ResultURL verifies the signature, exact amount, invoice, tariff, and the saved `client_ref`, then saves the profile and generated plan to the subscriber account.
 - Migration `0007_plan_drafts.sql` extends the existing payments table and adds the draft table. Apply it only to the existing D1 after reviewing the schema; never create a new database.
+
+
+Build validation is performed on the repair branch; production deployment and remote D1 migration remain separate approved steps.
