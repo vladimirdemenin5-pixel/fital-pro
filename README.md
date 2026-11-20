@@ -23,7 +23,7 @@ Required Worker secrets:
 Optional Worker variables:
 
 - `ROBOKASSA_HASH_ALGORITHM` — must match the hash algorithm selected in the Robokassa merchant cabinet; defaults to `MD5`.
-- `ROBOKASSA_IS_TEST` — set to `1` only while using the test MerchantLogin and test Password #1/#2; the checkout adds `IsTest=1`. Set to `0` for live payments.
+- `ROBOKASSA_IS_TEST` — set to `1` to use `ROBOKASSA_TEST_PASSWORD1/2` and add `IsTest=1`; set to `0` to use live `ROBOKASSA_PASSWORD1/2`.
 
 Configure the Robokassa technical settings:
 
