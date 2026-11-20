@@ -75,6 +75,14 @@ test('live payments require an explicit enable flag', () => {
   assert.match(worker, /ROBOKASSA_LIVE_ENABLED==='1'/);
 });
 
+test('progress API validates dates and checkbox flags before writing D1', () => {
+  assert.match(worker, /const parsedDate=new Date\(date\+'T00:00:00\\.000Z'\)/);
+  assert.match(worker, /parsedDate\.toISOString\(\)\.slice\(0,10\)!==date/);
+  assert.match(worker, /!Number\.isInteger\(completedMeal\).*!Number\.isInteger\(completedWorkout\)/);
+  assert.match(worker, /!\[0,1\]\.includes\(completedMeal\).*!\[0,1\]\.includes\(completedWorkout\)/);
+  assert.match(worker, /Некорректные данные прогресса/);
+});
+
 test('NodeList handlers use querySelectorAll, not querySelector', () => {
   assert.match(app, /\$\$\('#nav a'\)\.forEach/);
   assert.match(app, /\$\$\('\[data-plan\]'\)\.forEach/);
