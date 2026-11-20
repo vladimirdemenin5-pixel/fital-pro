@@ -152,6 +152,10 @@ test('Preview bindings and migrations are isolated from Production', async () =>
   const verifiedTarget = verifyPreviewMigrationConfig(config, previewMigrationConfig);
   assert.equal(verifiedTarget.database_name, 'fital-pro-preview-db');
   assert.equal(verifiedTarget.database_id, config.previews.d1_databases[0].database_id);
+  assert.equal(verifiedTarget.database_id, '54bd4cbb-f267-4c1e-af16-cdc9b24953c1');
+  assert.throws(() => verifyPreviewMigrationConfig(config, {
+    d1_databases: [{ binding: 'PREVIEW_DB', database_name: 'fital-pro-preview-db', database_id: '00000000-0000-0000-0000-000000000000', migrations_dir: 'migrations' }]
+  }), /verified existing Preview database/);
   assert.throws(() => verifyPreviewMigrationConfig(config, {
     d1_databases: [{ binding: 'PREVIEW_DB', database_name: config.d1_databases[0].database_name, database_id: config.d1_databases[0].database_id, migrations_dir: 'migrations' }]
   }), /fital-pro-preview-db|Production/);

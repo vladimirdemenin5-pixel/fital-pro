@@ -2,17 +2,21 @@ import { readFile, readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
+const EXPECTED_PREVIEW_D1_ID = '54bd4cbb-f267-4c1e-af16-cdc9b24953c1';
+const EXPECTED_PRODUCTION_D1_ID = 'd2bdb339-bc7b-420e-be7f-0496ce46a09b';
+
 export function verifyPreviewMigrationConfig(workerConfig, migrationConfig) {
   const previewDbs = workerConfig?.previews?.d1_databases;
   const productionDbs = workerConfig?.d1_databases;
   const migrationDbs = migrationConfig?.d1_databases;
   if (!Array.isArray(previewDbs) || previewDbs.length !== 1) throw new Error('Expected exactly one Preview D1 binding.');
-  if (!Array.isArray(productionDbs) || !productionDbs.some(db => db.database_name === 'fital-pro-db')) throw new Error('Existing Production D1 declaration was not found.');
+  if (!Array.isArray(productionDbs) || !productionDbs.some(db => db.database_name === 'fital-pro-db' && db.database_id === EXPECTED_PRODUCTION_D1_ID)) throw new Error('Existing Production D1 name or ID does not match the verified configuration.');
   if (!Array.isArray(migrationDbs) || migrationDbs.length !== 1) throw new Error('Expected exactly one D1 target in the Preview migration config.');
   const preview = previewDbs[0];
   const target = migrationDbs[0];
   if (preview.database_name !== 'fital-pro-preview-db' || target.database_name !== 'fital-pro-preview-db') throw new Error('Migration target must be fital-pro-preview-db.');
-  if (!preview.database_id || target.database_id !== preview.database_id) throw new Error('Preview Worker and migration config database IDs do not match.');
+  if (preview.database_id !== EXPECTED_PREVIEW_D1_ID || target.database_id !== EXPECTED_PREVIEW_D1_ID) throw new Error('Preview D1 ID does not match the verified existing Preview database.');
+  if (target.database_id !== preview.database_id) throw new Error('Preview Worker and migration config database IDs do not match.');
   if (target.binding !== 'PREVIEW_DB' || target.migrations_dir !== 'migrations') throw new Error('Preview migration binding or migrations directory is incorrect.');
   if (productionDbs.some(db => db.database_name === target.database_name || db.database_id === target.database_id)) throw new Error('Preview migration target points to Production D1.');
   return { database_name: target.database_name, database_id: target.database_id };
