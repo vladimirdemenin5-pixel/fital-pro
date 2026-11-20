@@ -92,9 +92,11 @@ const SUBS={
  'куриная грудка':['индейка','тофу','белая рыба'],'индейка':['куриная грудка','тофу','чечевица'],'лосось':['форель','скумбрия','тофу'],'рыба':['курица','индейка','нут'],'творог':['греческий йогурт','соевый йогурт'],'рис сухой':['гречка сухая','булгур сухой'],'гречка сухая':['рис сухой','булгур сухой'],'овсянка':['гречневые хлопья','мюсли без сахара'],'йогурт':['кефир','соевый йогурт']
 };
 
-function normalizeProfile(body) {
-  const profile={name:clean(body?.name,80),sex:clean(body?.sex,10),age:Number(body?.age),height:Number(body?.height),weight:Number(body?.weight),activity:clean(body?.activity,20),goal:clean(body?.goal,20),training:clean(body?.training,20),days:Number(body?.days),preferences:clean(body?.preferences,500)};
-  if(!Number.isInteger(profile.age)||profile.age<18||profile.age>80||!Number.isFinite(profile.height)||profile.height<120||profile.height>230||!Number.isFinite(profile.weight)||profile.weight<35||profile.weight>250||!['male','female'].includes(profile.sex)||!['low','medium','high'].includes(profile.activity)||!['loss','maintain','gain'].includes(profile.goal)||!['home','gym','mixed'].includes(profile.training)||!Number.isInteger(profile.days)||profile.days<2||profile.days>7) return {error:'Проверьте анкету: возраст 18–80 лет, рост, вес, активность, цель и формат тренировок.'};
+function normalizeProfile(body,planCode='PRO') {
+  const requiresTraining=planCode!=='Питание';
+  const profile={name:clean(body?.name,80),sex:clean(body?.sex,10),age:Number(body?.age),height:Number(body?.height),weight:Number(body?.weight),activity:clean(body?.activity,20),goal:clean(body?.goal,20),training:requiresTraining?clean(body?.training,20):'home',days:requiresTraining?Number(body?.days):3,preferences:clean(body?.preferences,500)};
+  const invalidTraining=requiresTraining&&(!['home','gym','mixed'].includes(profile.training)||!Number.isInteger(profile.days)||profile.days<2||profile.days>7);
+  if(!Number.isInteger(profile.age)||profile.age<18||profile.age>80||!Number.isFinite(profile.height)||profile.height<120||profile.height>230||!Number.isFinite(profile.weight)||profile.weight<35||profile.weight>250||!['male','female'].includes(profile.sex)||!['low','medium','high'].includes(profile.activity)||!['loss','maintain','gain'].includes(profile.goal)||invalidTraining) return {error:'Проверьте анкету: возраст 18–80 лет, рост, вес, активность, цель и формат тренировок.'};
   const bmi=profile.weight/((profile.height/100)**2);
   if(profile.goal==='loss'&&bmi<18.5) return {error:'При таком соотношении роста и веса сервис не формирует план снижения веса. Выберите поддержание формы и при необходимости обсудите цель со специалистом.'};
   return {profile};
@@ -165,7 +167,7 @@ async function planPreview(request,env){
   if(!['on','true','1'].includes(String(body?.pd_consent||'').toLowerCase())) return json({error:'Необходимо согласие на обработку персональных данных.'},400);
   const planCode=clean(body?.plan,40);
   if(!PLANS[planCode]) return json({error:'Сначала выберите тариф: Питание, PRO или Premium.'},400);
-  const normalized=normalizeProfile(body);if(normalized.error)return json({error:normalized.error},400);
+  const normalized=normalizeProfile(body,planCode);if(normalized.error)return json({error:normalized.error},400);
   let plan;try{plan=await generatePersonalPlan(normalized.profile,env,planCode);}catch{return json({error:'Не удалось сформировать персональную программу через AI. Попробуйте ещё раз.'},502);}
   const id=crypto.randomUUID().replaceAll('-',''),createdAt=new Date().toISOString(),cutoff=new Date(Date.now()-24*60*60*1000).toISOString();
   try{
@@ -248,7 +250,7 @@ async function profileApi(request,env){
     return json({profile:row?JSON.parse(row.profile_json):null});
   }
   let body;try{body=await request.json();}catch{return json({error:'Некорректная анкета.'},400);}
-  const normalized=normalizeProfile(body);if(normalized.error)return json({error:normalized.error},400);
+  const normalized=normalizeProfile(body,PLANS[sub.plan]?sub.plan:'Питание');if(normalized.error)return json({error:normalized.error},400);
   try{
     const profile=normalized.profile,plan=await generatePersonalPlan(profile,env,PLANS[sub.plan]?sub.plan:'Питание'),now=new Date().toISOString(),pj=JSON.stringify(profile);
     await env.DB.prepare('INSERT INTO profiles (access_token,profile_json,updated_at) VALUES (?,?,?) ON CONFLICT(access_token) DO UPDATE SET profile_json=excluded.profile_json,updated_at=excluded.updated_at').bind(sub.access_token,pj,now).run();
