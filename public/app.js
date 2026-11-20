@@ -33,12 +33,15 @@ function renderPlan(plan){
 async function requestPlan(data){
  const button=$('#planSubmit');button.disabled=true;button.textContent='ИИ составляет план…';note.textContent='Проверяем анкету и формируем меню и рекомендации.';
  try{
-  const response=await fetch('/api/plan-preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  const paid=!!token();
+  const response=await fetch(paid?'/api/profile':'/api/plan-preview',{method:'POST',headers:{'Content-Type':'application/json',...(paid?{Authorization:'Bearer '+token()}:{})},body:JSON.stringify(data)});
   const result=await response.json();
-  if(!response.ok||!result.draft_id||!result.plan)throw new Error(result.error||'Не удалось подготовить персональный план.');
-  currentDraft=result.draft_id;currentProfile=data;
-  localStorage.setItem('fitalpro_plan_draft',currentDraft);localStorage.setItem('fitalpro_profile',JSON.stringify(data));localStorage.setItem('fitalpro_preview_profile',JSON.stringify(data));
-  renderPlan(result.plan);note.textContent='Ваш предварительный план готов. Выберите тариф и перейдите к оплате.';
+  if(!response.ok||!result.plan||(!paid&&!result.draft_id))throw new Error(result.error||'Не удалось подготовить персональный план.');
+  currentDraft=paid?'':result.draft_id;currentProfile=data;
+  if(paid){localStorage.removeItem('fitalpro_plan_draft');note.textContent='Профиль и персональный план обновлены.';}
+  else{localStorage.setItem('fitalpro_plan_draft',currentDraft);note.textContent='Ваш предварительный план готов. Выберите тариф и перейдите к оплате.';}
+  localStorage.setItem('fitalpro_profile',JSON.stringify(data));localStorage.setItem('fitalpro_preview_profile',JSON.stringify(data));
+  renderPlan(result.plan);
  }catch(error){note.textContent=error.message||'Не удалось сформировать план. Попробуйте ещё раз.';}
  finally{button.disabled=false;button.innerHTML='Рассчитать мой план <span>↗</span>';}
 }
@@ -95,4 +98,18 @@ $('#progressForm')?.addEventListener('submit',async e=>{
  const n=$('#progressNote');n.textContent='Сохраняем…';
  try{const r=await fetch('/api/progress',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token()},body:JSON.stringify(data)}),d=await r.json();if(!r.ok)throw new Error(d.error||'Не удалось сохранить.');n.textContent='Прогресс сохранён.';await loadProgress();}catch(err){n.textContent=err.message;}
 });
+
+const chatForm=$('#chatForm'),chatInput=$('#chatInput'),chatLog=$('#chatLog'),chatNote=$('#chatNote');
+function addChatMessage(text,kind){const el=document.createElement('div');el.className='chat-message '+kind;el.textContent=text;chatLog.append(el);chatLog.scrollTop=chatLog.scrollHeight;}
+async function sendChatQuestion(question){
+ const q=String(question||'').trim();if(!q)return;
+ addChatMessage(q,'user');chatInput.value='';chatNote.textContent='Fital AI готовит ответ…';
+ const submit=chatForm?.querySelector('button');if(submit)submit.disabled=true;
+ try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json',...(token()?{Authorization:'Bearer '+token()}:{})},body:JSON.stringify({message:q})});const d=await r.json();if(!r.ok)throw new Error(d.error||'AI-помощник временно недоступен.');addChatMessage(d.reply||'Не удалось получить ответ.','bot');chatNote.textContent='Ответ сформирован AI и может содержать неточности.';}
+ catch(e){addChatMessage(e.message||'Не удалось получить ответ. Попробуйте позже.','bot');chatNote.textContent='Попробуйте отправить вопрос ещё раз.';}
+ finally{if(submit)submit.disabled=false;}
+}
+chatForm?.addEventListener('submit',e=>{e.preventDefault();sendChatQuestion(chatInput.value);});
+$('[data-question]').forEach(b=>b.addEventListener('click',()=>sendChatQuestion(b.dataset.question)));
+
 paymentReturn();loadCabinet();
