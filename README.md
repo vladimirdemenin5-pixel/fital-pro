@@ -23,6 +23,16 @@ No new Worker or database is required.
 6. The SuccessURL returns the customer to the site with Robokassa's Shp_* parameters. The browser retrieves the access token only for a confirmed active subscription.
 7. The member area shows the purchased program, shopping list and progress tracking.
 
+## Cloudflare Preview build settings
+
+In the existing Worker `red-waterfall-2af8`, open **Settings → Builds → Previews Base** (do not change the Production tab). Keep **Builds for Preview branches** enabled and set:
+
+- Build command: `npm run build`
+- Preview command: `npx wrangler preview`
+- Root directory: `/`
+
+The `build` script runs `npm run check && npm test`; this makes the Preview build execute syntax checks and the regression suite before `wrangler preview` publishes the branch Preview. Cloudflare Workers Builds uses the Build command configured in the dashboard; the `build.command` field in `wrangler.jsonc` is not a substitute for that dashboard setting.
+
 ## Robokassa configuration
 
 ### Preview (test payments only)
