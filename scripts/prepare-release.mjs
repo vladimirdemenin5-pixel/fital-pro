@@ -191,6 +191,25 @@ if(!app.includes('/api/plan-preview')||!app.includes("params.get('Shp_client_ref
 const newAge='name="age" type="number" min="18" max="80"';
 if(html.includes('name="age" type="number" min="16" max="90"')) html=html.replace('name="age" type="number" min="16" max="90"',newAge);
 else if(!html.includes(newAge)) throw new Error('Questionnaire age input could not be safely updated.');
+
+function replaceHtmlSection(source,startMarker,replacement,label){
+  const start=source.indexOf(startMarker);
+  const end=source.indexOf('</section>',start);
+  if(start<0||end<0) throw new Error('Cannot safely update '+label);
+  return source.slice(0,start)+replacement+source.slice(end+'</section>'.length);
+}
+const ctaNew='<section id="start" class="cta section">\n  <div><div class="eyebrow">НАЧНИТЕ С ЦЕЛИ</div><h2>Сначала анкета — затем ваш план</h2><p>Заполните профиль, получите AI-предпросмотр питания и тренировок, затем выберите тариф и оплатите доступ.</p><a class="btn primary" href="#profile">Заполнить анкету</a></div>\n</section>';
+if(html.includes('<section id="start" class="cta section">')) html=replaceHtmlSection(html,'<section id="start" class="cta section">',ctaNew,'lead form section');
+else if(!html.includes('Сначала анкета — затем ваш план')) throw new Error('CTA section is not in the expected state.');
+const stepsNew='<section class="section steps">\n  <div class="section-head"><div class="eyebrow">КАК ЭТО РАБОТАЕТ</div><h2>От выбора тарифа до личного кабинета</h2></div>\n  <div class="step-grid"><div><span>01</span><b>Выбираете тариф</b><p>Определяете срок и состав программы.</p></div><div><span>02</span><b>Заполняете анкету</b><p>Указываете параметры, цель и предпочтения.</p></div><div><span>03</span><b>Получаете AI-план</b><p>Смотрите меню на 7 дней и тренировочную программу.</p></div><div><span>04</span><b>Оплачиваете</b><p>Переходите на защищённую страницу Robokassa.</p></div><div><span>05</span><b>Получаете доступ</b><p>После серверного подтверждения открывается личный кабинет.</p></div></div>\n</section>';
+if(html.includes('<section class="section steps">')) html=replaceHtmlSection(html,'<section class="section steps">',stepsNew,'steps section');
+else if(!html.includes('От выбора тарифа до личного кабинета')) throw new Error('Steps section is not in expected state.');
+html=html.replace('Укажите базовые параметры — сервис сможет учитывать их в рекомендациях и персональном плане.','Заполните анкету, чтобы получить персональный AI-предпросмотр. Оплата потребуется только после того, как вы ознакомитесь с планом.');
+html=html.replace('Данные формы не отправляются третьим лицам без подключения владельцем сайта соответствующего сервиса.','Анкета используется для формирования и хранения плана; платёжные данные вводятся на защищённой странице Robokassa.');
+html=html.replace('После подключения Workers AI Fital AI работает через серверный binding. Без настроенного binding сайт показывает понятное сообщение вместо утечки ключей.','Персональный план формируется через Workers AI после отправки анкеты. Если AI временно недоступен, сервис сообщит об ошибке и не предложит оплатить неготовый план.');
+html=html.replace('Да. Сайт уже подготовлен под кнопки покупки; следующим этапом подключается выбранный платёжный провайдер.','Оплата проводится через Robokassa. Доступ открывается только после серверного подтверждения успешного платежа.');
+html=html.replace('<li>Еженедельная корректировка программы</li><li>Приоритетная поддержка</li>','<li>Доступ к программе на 30 дней</li><li>Повторная генерация плана по обновлённой анкете</li>');
+if(!html.includes('Анкета используется для формирования и хранения плана')||!html.includes('Оплата проводится через Robokassa')) throw new Error('Public copy checks failed.');
 await writeFile(appPath,app,'utf8');
 await writeFile(htmlPath,html,'utf8');
 await writeFile(htmlPath,html,'utf8');
