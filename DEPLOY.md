@@ -30,6 +30,8 @@ npm run check
 
 Опциональная переменная `ROBOKASSA_HASH_ALGORITHM` должна совпадать с алгоритмом в кабинете Robokassa; по умолчанию код использует MD5.
 
+Для безопасного теста задайте `ROBOKASSA_IS_TEST=1` и установите в `ROBOKASSA_MERCHANT_LOGIN`, `ROBOKASSA_PASSWORD1`, `ROBOKASSA_PASSWORD2` именно тестовые реквизиты магазина. Для реальных платежей используйте рабочие реквизиты и `ROBOKASSA_IS_TEST=0`. Не проверяйте тестовый сценарий с рабочими паролями: без `IsTest=1` Robokassa считает платёж боевым.
+
 В кабинете Robokassa задать Result URL:
 
 `https://<действующий-домен-Worker>/webhooks/robokassa`
