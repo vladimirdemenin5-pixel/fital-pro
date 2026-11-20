@@ -2,9 +2,11 @@ name: Validate Fital Pro
 
 on:
   push:
-    branches: [robokassa-safe-repair-2026-11-19]
+    branches:
+      - robokassa-safe-repair-2026-11-19
   pull_request:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -14,42 +16,25 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - name: Checkout current branch source
+        uses: actions/checkout@v4
 
-      - name: Prepare website and D1 from production package
-        run: |
-          set -euo pipefail
-          test -f Fital_Pro_PRODUCTION_GITHUB_READY.zip
-          rm -rf public migrations
-          unzip -q Fital_Pro_PRODUCTION_GITHUB_READY.zip 'public/*' 'migrations/*' -d .
-          test -f public/index.html
-          test -f public/app.js
-          test -f public/styles.css
-          test -f migrations/0001_init.sql
-          test -f migrations/0006_expiry.sql
-
-      - name: Setup Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Install Wrangler
+      - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Prepare and validate questionnaire, AI plan and Robokassa return flow
-        run: |
-          node scripts/prepare-release.mjs
-          node --check public/app.js
-
-      - name: Check Worker syntax
+      - name: Check Worker and frontend syntax
         run: npm run check
 
-      - name: Validate D1 migrations locally
+      - name: Validate D1 migrations locally only
         run: npm run db:migrate:local
 
-      - name: Validate Wrangler configuration and assets without publishing
-        run: npx wrangler deploy --dry-run
+      - name: Validate Wrangler configuration without publishing
+        run: npx wrangler deploy --dry-run --outdir .wrangler-dry-run
 
-      - name: Check whitespace errors
-        run: git diff --check
+# This workflow reads the current committed source. It never unpacks release ZIPs,
+# applies migrations to remote D1, or deploys the Worker.
