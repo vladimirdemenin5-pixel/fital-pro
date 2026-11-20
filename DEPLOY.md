@@ -1,64 +1,77 @@
 # Fital Pro — безопасная публикация
 
-## Состояние перед публикацией
+## Текущее состояние
 
-Сначала должны быть проверены:
+- Продолжаем существующий Worker `red-waterfall-2af8`.
+- Production D1: `fital-pro-db`.
+- Preview D1: `fital-pro-preview-db`.
+- Сайт находится в `public/`, SQL-миграции — в `migrations/`.
+- PR #1 остаётся Draft; ветка не объединена с `main`.
+- Production Worker и Production D1 этой веткой не изменялись.
 
-- существующий Worker `red-waterfall-2af8`;
-- binding Workers AI `AI`;
-- binding D1 `DB` к существующей базе `fital-pro-db`;
-- каталог `public/` с рабочим интерфейсом;
-- каталог `migrations/` с реальными SQL-миграциями, согласованными с текущей схемой D1;
-- Robokassa secrets и тестовые настройки магазина.
-
-На текущей ветке GitHub отсутствуют `public/` и `migrations/`. Не запускайте публикацию и не применяйте миграции, пока эти файлы не восстановлены и не проверены. Не создавайте новую D1 и не меняйте существующий database ID.
-
-## Проверка
+## Проверка исходного кода
 
 ```bash
 npm install
 npm run check
+npm test
+npm run build
 ```
 
-## Секреты Robokassa
+Build больше не извлекает содержимое `Fital_Pro_PRODUCTION_GITHUB_READY.zip`. Архив оставлен в репозитории как старый артефакт, но не используется для сборки. Скрипт `scripts/extract-release.mjs` отключён, поскольку он мог затереть текущие файлы сайта и миграций.
 
-Добавить в существующий Worker как Secrets:
+## Preview: сначала тестовая среда
 
-- `ROBOKASSA_MERCHANT_LOGIN`
-- `ROBOKASSA_PASSWORD1`
-- `ROBOKASSA_PASSWORD2`
-- `ROBOKASSA_TEST_PASSWORD1` — отдельный тестовый Пароль №1 из технических настроек магазина.
-- `ROBOKASSA_TEST_PASSWORD2` — отдельный тестовый Пароль №2 из технических настроек магазина.
+Текущая ветка содержит Preview-настройки в `wrangler.jsonc`:
 
-Опциональная переменная `ROBOKASSA_HASH_ALGORITHM` должна совпадать с алгоритмом в кабинете Robokassa; по умолчанию код использует MD5.
+- отдельная D1 `fital-pro-preview-db`;
+- Workers AI binding;
+- `ROBOKASSA_IS_TEST=1`;
+- test payment mode.
 
-Для безопасного теста задайте `ROBOKASSA_IS_TEST=1`. Используйте идентификатор магазина `ROBOKASSA_MERCHANT_LOGIN` и отдельные тестовые секреты `ROBOKASSA_TEST_PASSWORD1` и `ROBOKASSA_TEST_PASSWORD2`. Код выбирает тестовые пароли для подписи платёжной ссылки и проверки ResultURL. Рабочие `ROBOKASSA_PASSWORD1/2` при этом не используются. Для реальных платежей задайте `ROBOKASSA_IS_TEST=0` и рабочую пару паролей. Robokassa требует тестовую пару паролей вместе с `IsTest=1`; иначе операция может стать боевой.
+В Cloudflare Preview Base добавляются отдельные Secrets:
 
-В кабинете Robokassa задать Result URL:
+- `ROBOKASSA_MERCHANT_LOGIN`;
+- `ROBOKASSA_TEST_PASSWORD1`;
+- `ROBOKASSA_TEST_PASSWORD2`.
 
-`https://<действующий-домен-Worker>/webhooks/robokassa`
+Не устанавливайте тестовые пароли как Production Secrets и не копируйте live-пароли в Preview.
 
-Метод — POST. Для уведомления используется Пароль №2. Платёжная ссылка подписывается Паролем №1.
+Порядок:
 
-## Разделение публикации и миграций
+1. `npm run db:migrations:list:preview` — просмотреть ожидающие миграции.
+2. `npm run db:migrate:preview` — применить только к Preview D1 после просмотра списка.
+3. `npm run preview` — создать Preview этого Worker по текущей ветке.
+4. Проверить `/health`: AI и D1 должны быть доступны, `paymentMode` должен быть `test`.
+5. Проверить тарифы 7/14/30 дней, генерацию меню, список покупок, корректные права для тренировок, тестовый платёж, POST ResultURL и выдачу доступа.
 
-`npm run deploy` публикует Worker и не запускает миграции D1.
+Preview создаётся на существующем Worker через механизм Worker Previews; новый Worker service не создаётся.
 
-`npm run db:migrate` targets the production D1 and must not be used for Preview testing.
+## Robokassa
 
-`npm run db:migrations:list:preview` lists unapplied migrations for the isolated Preview database. `npm run db:migrate:preview` applies them through `wrangler.preview-migrations.jsonc`, which contains only the Preview D1 ID. The Preview migration config is deliberately separate from the Worker deployment config.
+В технических настройках магазина:
 
-GitHub Actions в этой ветке только проверяет синтаксис Worker при Pull Request. Автоматической публикации в Cloudflare нет.
+- Result URL: `https://<preview-host>/webhooks/robokassa`;
+- Result URL method: POST;
+- Result notification password: тестовый Password #2;
+- Success URL: Preview site URL, method GET;
+- Fail URL: Preview site URL;
+- hash algorithm должен совпадать с настройкой магазина.
 
-## После отдельного разрешения на публикацию
+В Production live checkout закрыт кодом, пока переменная `ROBOKASSA_LIVE_ENABLED` не установлена в `1`. Не включайте её до проверки тестового платежа и публикации реальных реквизитов продавца.
 
-1. Выполнить dry-run с проверенным каталогом assets.
-2. Проверить health endpoint.
-3. Проверить тестовый платёж Robokassa.
-4. Проверить Result URL и выдачу доступа на правильный срок.
-5. Только после успешных тестов обсуждать production-платёж.
+## Production release — отдельный этап
 
+Только после успешных Preview-проверок и отдельного разрешения:
 
-## Build from the existing ZIP
+1. Проверить юридические страницы и реальные реквизиты продавца.
+2. Убедиться, что Production secrets `ROBOKASSA_MERCHANT_LOGIN`, `ROBOKASSA_PASSWORD1`, `ROBOKASSA_PASSWORD2` настроены в Production Worker.
+3. Сверить Production D1 schema и статус миграций.
+4. После явного согласования включить `ROBOKASSA_LIVE_ENABLED=1`.
+5. Отдельно согласовать Production deploy и необходимые Production D1 migrations.
 
-Cloudflare Workers Builds must use Build command `npm run build`. This extracts the existing static site and migrations from `Fital_Pro_PRODUCTION_GITHUB_READY.zip`, applies the checked frontend patch, and creates migration `0009_plan_drafts.sql` before Wrangler deploys. The Preview build must use the same build preparation. Do not run remote D1 migrations automatically from the build command.
+Не запускайте `npm run db:migrate` или `npm run deploy` во время Preview-тестирования.
+
+## GitHub Actions
+
+Workflow проверяет Worker и frontend syntax, выполняет регрессионные тесты, локальную проверку миграций D1 и Wrangler dry-run. Он не разворачивает Worker и не применяет remote D1 migrations.

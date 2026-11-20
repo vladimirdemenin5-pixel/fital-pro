@@ -1,55 +1,95 @@
-# Fital Pro — настройка проекта
+# Fital Pro — текущая настройка
 
-Проект использует существующий Cloudflare Worker `red-waterfall-2af8`, Workers AI и D1. Новые Worker и D1 создавать не нужно.
+Проект продолжает использовать существующий Cloudflare Worker `red-waterfall-2af8`, Workers AI и обе уже созданные D1. Новый Worker или база не нужны.
 
-## Подтверждённые компоненты
+## Компоненты
 
-- `_worker.js` — API и серверная логика.
-- `public/` — статические файлы сайта; каталог должен присутствовать для развёртывания.
-- `AI` — binding Workers AI.
-- `DB` — binding к существующей D1 `fital-pro-db`.
+- `_worker.js` — API, тарифы, AI-генерация, Robokassa и выдача доступа.
+- `public/` — сайт и локальные изображения.
+- `migrations/` — SQL-история для существующей схемы D1.
+- `AI` — Workers AI binding.
+- `DB` — Production D1 `fital-pro-db`.
+- Preview D1 — `fital-pro-preview-db`, отдельный ID в `wrangler.jsonc`.
 
-## Оплата Robokassa
+## Сценарий клиента
 
-Worker создаёт платёжную ссылку Robokassa и принимает серверное уведомление.
+1. Выбирает тариф.
+2. Заполняет анкету. У тарифа «Питание» поля тренировок скрыты.
+3. Получает план на 7, 14 или 30 дней. Состав блюд и список покупок отображаются на сайте.
+4. Оплачивает только после успешного сохранения черновика.
+5. Robokassa отправляет серверное ResultURL уведомление.
+6. После проверки подписи и суммы Worker включает подписку и сохраняет план.
+7. Клиент возвращается на SuccessURL и получает доступ к кабинету.
 
-Обязательные секреты Worker:
+## Preview — только тестовая среда
+
+В `wrangler.jsonc` уже заданы Preview D1, AI binding и `ROBOKASSA_IS_TEST=1`.
+
+Добавьте в Cloudflare **Previews Base → Secrets** отдельные тестовые секреты:
+
+- `ROBOKASSA_MERCHANT_LOGIN`
+- `ROBOKASSA_TEST_PASSWORD1`
+- `ROBOKASSA_TEST_PASSWORD2`
+
+Или используйте команды Wrangler из корня репозитория:
+
+```bash
+npx wrangler preview base-config secret put ROBOKASSA_MERCHANT_LOGIN
+npx wrangler preview base-config secret put ROBOKASSA_TEST_PASSWORD1
+npx wrangler preview base-config secret put ROBOKASSA_TEST_PASSWORD2
+```
+
+Не копируйте рабочие пароли в Preview и тестовые пароли в Production.
+
+Перед Preview сначала посмотрите ожидающие миграции:
+
+```bash
+npm run db:migrations:list:preview
+```
+
+После проверки списка миграции можно применить только к отдельной Preview D1:
+
+```bash
+npm run db:migrate:preview
+```
+
+Затем запустить изолированный Preview существующего Worker:
+
+```bash
+npm run preview
+```
+
+## Production и реальные платежи
+
+Production secrets остаются в настройках Production Worker:
 
 - `ROBOKASSA_MERCHANT_LOGIN`
 - `ROBOKASSA_PASSWORD1`
 - `ROBOKASSA_PASSWORD2`
 
-Не помещайте пароли в репозиторий, HTML, JavaScript браузера или переписку. Добавляйте их только в Cloudflare Worker → Settings → Variables and Secrets → Secrets.
+В коде добавлена дополнительная защита: live checkout закрыт, пока Production variable `ROBOKASSA_LIVE_ENABLED` не установлена в `1`. Наличие ранее сохранённых паролей само по себе не включает реальные платежи.
 
-Необязательная переменная:
+Включать live checkout можно только после:
+- полного успешного Preview-платежа;
+- проверки POST ResultURL и токена доступа;
+- заполнения настоящих реквизитов продавца на `/requisites.html`;
+- проверки оферты, политики и возвратов.
 
-- `ROBOKASSA_HASH_ALGORITHM` — алгоритм должен совпадать с настройкой магазина; если переменная отсутствует, используется MD5.
-
-Технические настройки магазина Robokassa:
-
-- Result URL: `https://<действующий-домен-Worker>/webhooks/robokassa`
-- Метод Result URL: POST
-- Пароль для проверки Result URL: Пароль №2
-- Пароль для формирования платёжной ссылки: Пароль №1
-- Success URL и Fail URL: страницы действующего сайта.
-
-Worker проверяет подпись уведомления, номер счёта, тариф и сумму по сохранённому заказу. Повторные уведомления не должны повторно продлевать срок доступа. Сроки тарифов: 7, 14 и 30 дней.
-
-Ответ `/api/checkout` содержит `client_ref`. Интерфейс должен сохранить его и после возврата с оплаты запрашивать `/api/payment-status?ref=<client_ref>`. Запрос статуса только по номеру платежа не раскрывает токен доступа.
-
-## Команды
+## Команды проверки
 
 ```bash
-npm install
 npm run check
+npm test
+npm run build
 ```
 
-`npm run deploy` выполняет только публикацию Worker. Production-миграции вынесены в `npm run db:migrate` и не запускаются автоматически.
+Сборка проверяет исходный код текущей ветки. Она не распаковывает архив и не заменяет сайт или миграции. `scripts/extract-release.mjs` намеренно отключён, чтобы старый ZIP не перезаписывал текущую версию.
 
-Для изолированной Preview D1 используйте `npm run db:migrations:list:preview` и `npm run db:migrate:preview`. Они используют отдельный `wrangler.preview-migrations.jsonc`, где указан только Preview database ID.
+## Разделение Production / Preview
 
-## Важно до публикации
+- `npm run db:migrate:preview` — только Preview D1.
+- `npm run db:migrate` — Production D1. Не запускать на этапе тестирования.
+- `npm run preview` — изолированный Worker Preview.
+- `npm run deploy` — публикация Worker; не запускать до отдельного разрешения.
 
-В текущем GitHub tree отсутствуют каталоги `public/` и `migrations/`. Поэтому этот репозиторий пока нельзя считать готовым к развёртыванию: сначала нужно восстановить и проверить фронтенд и реальные миграции существующей D1. Не создавайте пустые каталоги или фиктивные миграции вместо настоящих файлов.
-
-Проверка `/health` должна показать `ok: true`, `ai: true`, `db: true`, `payments: true` только после фактической настройки соответствующих bindings и секретов.
+Текущий PR остаётся Draft. Production Worker, Production D1 и Production Secrets этой веткой не менялись.

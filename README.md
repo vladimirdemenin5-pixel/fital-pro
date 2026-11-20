@@ -1,76 +1,112 @@
 # Fital Pro
 
-Fital Pro is a Cloudflare Worker service with Workers AI and D1.
+Fital Pro is the existing Cloudflare Worker service with Workers AI and D1.
 
 ## Existing infrastructure
 
 - Worker: `red-waterfall-2af8`
 - Worker entry: `_worker.js`
-- Static frontend directory: `public/` (must be present before deployment)
-- Workers AI binding: `AI`
-- D1 binding: `DB` → `fital-pro-db`
+- Static website: `public/`
+- Workers AI: `AI`
+- Production D1: `fital-pro-db`
+- Preview D1: `fital-pro-preview-db`
 
-## Payments: Robokassa
+No new Worker or database is required.
 
-The Worker uses the Robokassa hosted payment page.
+## User journey
 
-Required Worker secrets:
+1. Visitor chooses a tariff: Nutrition (7 days), PRO (14 days), or Premium (30 days).
+2. The questionnaire collects the information needed for the selected program. Workout preferences are shown only for PRO and Premium.
+3. Workers AI prepares exactly the tariff duration. The preview includes meals, macros, ingredient quantities, shopping list, substitutions and, for PRO/Premium, workouts.
+4. The server saves a short-lived plan draft in D1. Checkout is allowed only when the draft tariff matches the selected tariff.
+5. Robokassa receives the order. The ResultURL verifies the signature, invoice, amount, tariff and client reference before activating access.
+6. The SuccessURL returns the customer to the site with Robokassa's Shp_* parameters. The browser retrieves the access token only for a confirmed active subscription.
+7. The member area shows the purchased program, shopping list and progress tracking.
+
+## Robokassa configuration
+
+### Preview (test payments only)
+
+The `previews` block in `wrangler.jsonc` sets `ROBOKASSA_IS_TEST=1`, binds the isolated Preview D1 database and enables Workers AI.
+
+Preview secrets must be added to the **Previews Base** configuration, not to Production:
+
+- `ROBOKASSA_MERCHANT_LOGIN`
+- `ROBOKASSA_TEST_PASSWORD1`
+- `ROBOKASSA_TEST_PASSWORD2`
+
+Cloudflare Wrangler commands (enter the values only in the secure CLI prompt; never commit them):
+
+```bash
+npx wrangler preview base-config secret put ROBOKASSA_MERCHANT_LOGIN
+npx wrangler preview base-config secret put ROBOKASSA_TEST_PASSWORD1
+npx wrangler preview base-config secret put ROBOKASSA_TEST_PASSWORD2
+```
+
+Do not add the test passwords to Production.
+
+Configure the Robokassa technical settings:
+
+- Result URL: `https://<preview-host>/webhooks/robokassa`, method POST, Password #2.
+- Success URL: the Preview site URL, method GET.
+- Failure URL: the Preview site URL.
+- Hash algorithm must match the merchant cabinet; the Worker defaults to MD5.
+
+Robokassa returns the supplied `Shp_*` values to SuccessURL, including `Shp_client_ref`.
+
+### Production
+
+Production passwords remain Worker Secrets:
 
 - `ROBOKASSA_MERCHANT_LOGIN`
 - `ROBOKASSA_PASSWORD1`
 - `ROBOKASSA_PASSWORD2`
 
-Optional Worker variables:
+Real payments are disabled unless the Production variable `ROBOKASSA_LIVE_ENABLED` is explicitly set to `1`. Leave it unset or `0` until Preview payment, webhook, legal pages and seller requisites are verified. Existing stored production secrets do not bypass this guard.
 
-- `ROBOKASSA_HASH_ALGORITHM` — must match the hash algorithm selected in the Robokassa merchant cabinet; defaults to `MD5`.
-- `ROBOKASSA_IS_TEST` — set to `1` to use `ROBOKASSA_TEST_PASSWORD1/2` and add `IsTest=1`; set to `0` to use live `ROBOKASSA_PASSWORD1/2`.
+Never put payment passwords in HTML, browser JavaScript, repository files or chat messages.
 
-Configure the Robokassa technical settings:
+## Commands
 
-- Result URL: `https://<active-worker-domain>/webhooks/robokassa`
-- Result URL method: POST
-- Result notification password: Password #2
-- Payment request signature: Password #1
-- Success URL: the active Fital Pro site URL, with GET method. Robokassa returns the supplied Shp_* parameters, including Shp_client_ref, to SuccessURL.
-- Failure URL: the active Fital Pro site URL.
-- Live checkout remains disabled until the Worker variable ROBOKASSA_LIVE_ENABLED is explicitly set to 1 after Preview testing and legal-page verification.
+```bash
+npm install
+npm run check
+npm test
+npm run build
+```
 
-The ResultURL handler verifies the signature, checks the invoice against the pending D1 payment and the tariff amount, processes repeated notifications idempotently, and returns `OK{InvId}` only after successful processing. The plan duration is 7, 14, or 30 days according to the selected tariff.
+Preview-only workflow:
 
-Do not put payment passwords in browser code, repository files, or chat messages.
+```bash
+npm run db:migrations:list:preview
+npm run db:migrate:preview
+npm run preview
+```
+
+Review the migration list first. `db:migrate:preview` applies migrations only to `fital-pro-preview-db`. `preview` creates an isolated Worker Preview for the current branch; it does not publish the Production deployment.
+
+Production-only commands:
+
+- `npm run db:migrate` applies migrations remotely to the Production D1 database.
+- `npm run deploy` publishes the Worker.
+
+Do not run Production migrations or deploy until Preview tests pass and the owner explicitly approves the Production release.
 
 ## API
 
-- `GET /health` — reports whether AI, D1 and the configured payment mode are ready.
-- `POST /api/chat`
-- `POST|GET /api/profile`
-- `GET /api/plan`
-- `POST|GET /api/progress`
-- `POST /api/lead`
+- `GET /health`
+- `POST /api/plan-preview`
 - `POST /api/checkout`
 - `POST /webhooks/robokassa`
-- `GET /api/payment-status?ref=<client_ref>` — статус и токен доступа после подтверждённой оплаты; `?id=<payment_id>` возвращает только статус.
+- `GET /api/payment-status?ref=<client_ref>`
 - `GET /api/me`
+- `GET|POST /api/profile`
+- `GET /api/plan`
+- `GET|POST /api/progress`
+- `POST /api/chat`
 
-## Safe validation and deployment
+`GET /health` reports AI, D1 and payment mode readiness. In Production the payment mode remains disabled until `ROBOKASSA_LIVE_ENABLED=1`.
 
-- `npm run check` checks Worker JavaScript syntax.
-- `npm run deploy` deploys the Worker only.
-- `npm run db:migrate` applies remote migrations to the production D1 and must not be run during Preview testing.
-- `npm run db:migrate:preview` applies migrations only to the isolated `fital-pro-preview-db`, using `wrangler.preview-migrations.jsonc`.
-- `npm run db:migrations:list:preview` lists pending migrations for that Preview database.
+## Legal and service limitations
 
-GitHub Actions validates pull requests and does not deploy to Cloudflare. Production deployment must remain a separate, explicitly approved operation.
-
-Before deployment, confirm that `public/` and `migrations/` exist and match the live D1 schema. Do not run remote migrations as part of deployment.
-
-
-## Questionnaire and AI plan
-
-- `POST /api/plan-preview` validates the adult questionnaire, generates exactly 7, 14 or 30 days according to the selected tariff, and stores a 24-hour draft in D1.
-- `POST /api/checkout` requires that draft; payment cannot be started from a tariff button alone.
-- The Robokassa ResultURL verifies the signature, exact amount, invoice, tariff, and the saved `client_ref`, then saves the profile and generated plan to the subscriber account.
-- Migration `0009_plan_drafts.sql` extends the existing payments table and adds the draft table. Apply it only to the existing D1 after reviewing the schema; never create a new database.
-
-
-Build validation is performed on the repair branch; production deployment and remote D1 migration remain separate approved steps.
+The seller's real legal details and support contact must be completed in `/requisites.html` before live payments. Fital Pro provides informational recommendations, not medical care. AI-generated plans require user review and do not guarantee health or body-composition outcomes.

@@ -35,20 +35,17 @@
       "binding": "AI"
     },
     "vars": {
-      "ROBOKASSA_IS_TEST": "1"
+      "ROBOKASSA_IS_TEST": "1",
+      "ROBOKASSA_LIVE_ENABLED": "0"
     }
-  },
-  "secrets": {
-    "required": [
-      "ROBOKASSA_MERCHANT_LOGIN",
-      "ROBOKASSA_PASSWORD1",
-      "ROBOKASSA_PASSWORD2"
-    ]
   },
   "observability": {
     "enabled": true
   },
   "build": {
     "command": "npm run build"
+  },
+  "vars": {
+    "ROBOKASSA_LIVE_ENABLED": "0"
   }
 }

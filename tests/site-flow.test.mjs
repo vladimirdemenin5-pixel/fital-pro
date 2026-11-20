@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const read = path => readFile(new URL('../' + path, import.meta.url), 'utf8');
-const [worker, app, html, css, workflow] = await Promise.all([
+const readConfigLiteral = value => value;
+const [worker, app, html, css, workflow, config, packageJson] = await Promise.all([
   read('_worker.js'), read('public/app.js'), read('public/index.html'),
   read('public/styles.css'), read('.github/workflows/main.yml'),
+  read('wrangler.jsonc'), read('package.json'),
 ]);
 
 test('tariff durations are fixed on the server', () => {
@@ -63,4 +65,14 @@ test('CI runs the regression suite before deploy dry-run', () => {
   assert.match(workflow, /npm test/);
   assert.match(workflow, /--dry-run/);
   assert.doesNotMatch(workflow, /wrangler deploy(?! --dry-run)/);
+});
+
+test('Preview is isolated and production payments default to disabled', () => {
+  const config = JSON.parse(readConfigLiteral(config));
+  assert.equal(config.vars.ROBOKASSA_LIVE_ENABLED, '0');
+  assert.equal(config.previews.vars.ROBOKASSA_IS_TEST, '1');
+  assert.equal(config.previews.vars.ROBOKASSA_LIVE_ENABLED, '0');
+  assert.equal(config.d1_databases[0].database_name, 'fital-pro-db');
+  assert.equal(config.previews.d1_databases[0].database_name, 'fital-pro-preview-db');
+  assert.equal(JSON.parse(packageJson).scripts.preview, 'wrangler preview');
 });
