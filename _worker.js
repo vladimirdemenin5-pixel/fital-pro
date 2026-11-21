@@ -605,7 +605,10 @@ async function premiumReviewApi(request, env) {
   let result;
   try {
     result = await env.AI.run(MODEL, {
-      prompt,
+      messages: [
+        { role: 'system', content: 'Ты Fital Pro Premium. Верни только корректный JSON без Markdown.' },
+        { role: 'user', content: prompt }
+      ],
       max_completion_tokens: 1400,
       temperature: 0.2,
       response_format: { type: 'json_object' },
@@ -626,6 +629,7 @@ async function premiumReviewApi(request, env) {
     observations: Array.isArray(parsed.observations) ? parsed.observations.map(item => clean(item, 260)).filter(Boolean).slice(0, 4) : [],
     recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations.map(item => clean(item, 300)).filter(Boolean).slice(0, 4) : [],
     nextWeekFocus: clean(parsed.nextWeekFocus, 300),
+    stats,
     disclaimer: 'Информационный разбор по записям дневника; не является медицинской рекомендацией.'
   } : null;
   if (!review || !review.summary || review.recommendations.length < 2) return json({ error: 'ИИ вернул неполный разбор. Записи дневника сохранены — попробуйте ещё раз.' }, 502);
