@@ -101,6 +101,8 @@ const chatSource = worker.slice(chatStart, leadStart);
 assert.ok(chatSource.includes("'SELECT plan_json FROM weekly_plans WHERE access_token=?'"), 'AI consultant must load the member saved plan');
 assert.ok(chatSource.includes("'Сохранённый план клиента (JSON): ' + plan"), 'AI consultant prompt must include the saved weekly plan');
 assert.ok(chatSource.includes('сначала опирайся на сохранённый план'), 'AI consultant must prioritize the actual plan for substitutions and workouts');
+assert.ok(chatSource.includes('const reply = extractAiText(result)'), 'AI consultant must support the model response formats already handled by the shared extractor');
+assert.ok(chatSource.includes('Fital AI chat failed:'), 'AI provider failures must return a controlled API error');
 
 
 assert.ok(worker.includes("async function premiumReviewApi(request, env)"), 'Premium weekly review API must exist');
