@@ -32,5 +32,9 @@
   "previews": {},
   "observability": {
     "enabled": true
+  },
+  "workers_dev": true,
+  "vars": {
+    "ROBOKASSA_IS_TEST": "0"
   }
 }
