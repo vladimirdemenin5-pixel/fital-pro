@@ -452,6 +452,7 @@ async function personalizedPlan(request, env) {
 async function progressApi(request, env) {
   const sub = await getSubscription(request, env);
   if (!sub || !env.DB) return json({ error: 'Нужна активная подписка.' }, 403);
+  if (!['PRO', 'Premium'].includes(sub.plan)) return json({ error: 'Дневник прогресса доступен на тарифах PRO и Premium.' }, 403);
   if (request.method === 'GET') {
     const rows = await env.DB.prepare(
       'SELECT * FROM progress WHERE access_token=? ORDER BY date DESC LIMIT 30'
@@ -474,6 +475,7 @@ async function progressApi(request, env) {
 async function chat(request, env) {
   const sub = await getSubscription(request, env);
   if (!sub) return json({ error: 'ИИ-консультант доступен при активной подписке.' }, 403);
+  if (!['PRO', 'Premium'].includes(sub.plan)) return json({ error: 'ИИ-консультант доступен на тарифах PRO и Premium.' }, 403);
   if (!(await rateLimit(request, env, 'chat', 20, 60000))) {
     return json({ error: 'Слишком много вопросов. Попробуйте через минуту.' }, 429);
   }
