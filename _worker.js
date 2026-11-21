@@ -4,7 +4,7 @@ const MODEL = '@cf/google/gemma-4-26b-a4b-it';
 const PLANS = {
   'Питание': { amount: '990.00', label: 'Fital Pro — Питание, 7 дней', days: 7 },
   'PRO': { amount: '1990.00', label: 'Fital Pro PRO — питание + тренировки, 14 дней', days: 14 },
-  'Premium': { amount: '3990.00', label: 'Fital Pro Premium — сопровождение, 30 дней', days: 30 }
+  'Premium': { amount: '3990.00', label: 'Fital Pro Premium — расширенный доступ, 30 дней', days: 30 }
 };
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), {
@@ -196,6 +196,16 @@ async function ensurePendingOrdersSchema(env) {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )`).run();
+      const columnsResult = await env.DB.prepare('PRAGMA table_info(pending_orders)').all();
+      const columns = new Set((columnsResult.results || []).map(column => column.name));
+      for (const [name, type] of [
+        ['pd_consent_at', 'TEXT'],
+        ['pd_policy_version', 'TEXT'],
+        ['offer_accepted_at', 'TEXT'],
+        ['offer_version', 'TEXT']
+      ]) {
+        if (!columns.has(name)) await env.DB.prepare(`ALTER TABLE pending_orders ADD COLUMN ${name} ${type}`).run();
+      }
       await env.DB.prepare(
         'CREATE INDEX IF NOT EXISTS idx_pending_orders_client_ref ON pending_orders(client_ref)'
       ).run();
@@ -230,6 +240,9 @@ async function checkout(request, env) {
   }
   const contact = clean(body?.contact, 160);
   if (!contact) return json({ error: 'Укажите email или телефон для связи.' }, 400);
+  const accepted = value => value === true || ['on', 'true', '1'].includes(String(value ?? '').toLowerCase());
+  if (!accepted(body?.pd_consent)) return json({ error: 'Необходимо согласие на обработку персональных данных.' }, 400);
+  if (!accepted(body?.offer_accepted)) return json({ error: 'Необходимо принять условия публичной оферты.' }, 400);
 
   let plan;
   try {
@@ -241,8 +254,8 @@ async function checkout(request, env) {
   const clientRef = crypto.randomUUID().replaceAll('-', '');
   const now = new Date().toISOString();
   const order = await env.DB.prepare(
-    'INSERT INTO pending_orders (client_ref,plan,amount,customer_contact,profile_json,plan_json,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?) RETURNING inv_id'
-  ).bind(clientRef, planKey, product.amount, contact, JSON.stringify(profile), JSON.stringify(plan), 'pending', now, now).first();
+    'INSERT INTO pending_orders (client_ref,plan,amount,customer_contact,profile_json,plan_json,status,created_at,updated_at,pd_consent_at,pd_policy_version,offer_accepted_at,offer_version) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING inv_id'
+  ).bind(clientRef, planKey, product.amount, contact, JSON.stringify(profile), JSON.stringify(plan), 'pending', now, now, now, '2026-11-21', now, '2026-11-21').first();
   const invId = Number(order?.inv_id);
   if (!Number.isSafeInteger(invId) || invId < 1) {
     throw new Error('Не удалось сохранить заказ. Попробуйте ещё раз.');
@@ -263,7 +276,7 @@ async function checkout(request, env) {
   params.set('Shp_ref', clientRef);
   if (env.ROBOKASSA_IS_TEST === '1') params.set('IsTest', '1');
 
-  return json({
+  const response = json({
     ok: true,
     client_ref: clientRef,
     plan: planKey,
@@ -278,6 +291,8 @@ async function checkout(request, env) {
       durationDays: plan.durationDays
     }
   });
+  response.headers.set('Set-Cookie', `fitalpro_checkout_ref=${clientRef}; Path=/; Max-Age=86400; HttpOnly; Secure; SameSite=Lax`);
+  return response;
 }
 
 function getField(values, name) {
@@ -372,16 +387,20 @@ async function paymentStatus(request, env) {
     return json({ error: 'Не указан номер заказа.' }, 400);
   }
   if (!order) return json({ status: 'pending' });
+  const checkoutCookie = (request.headers.get('Cookie') || '').match(/(?:^|;\\s*)fitalpro_checkout_ref=([^;]+)/)?.[1] || '';
+  if (checkoutCookie !== order.client_ref) return json({ status: 'pending' });
   const subscription = await env.DB.prepare(
     'SELECT plan,status,access_token,updated_at,expires_at FROM subscriptions WHERE client_ref=?'
   ).bind(order.client_ref).first();
   if (subscription?.status === 'active') {
-    return json({
+    const response = json({
       status: 'active',
       plan: subscription.plan,
       access_token: subscription.access_token,
       expires_at: subscription.expires_at
     });
+    response.headers.set('Set-Cookie', 'fitalpro_checkout_ref=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax');
+    return response;
   }
   return json({ status: order.status === 'paid' ? 'processing' : 'pending', plan: order.plan });
 }
