@@ -16,7 +16,7 @@ function syncSelectedPlan(code){
  const trainingFields=$('#trainingFields');if(trainingFields)trainingFields.hidden=!selected||selected==='Питание';
  const trainingDays=form?.elements?.days;if(trainingDays)trainingDays.required=!!selected&&selected!=='Питание';
  const submit=$('#planSubmit');if(submit)submit.disabled=!selected;
- $('[data-plan]').forEach(button=>{
+ $$('[data-plan]').forEach(button=>{
   const active=button.dataset.plan===selected;
   button.setAttribute('aria-pressed',String(active));
   button.closest('.plan-card')?.classList.toggle('is-selected',active);
