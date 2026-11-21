@@ -237,7 +237,8 @@ async function checkout(request, env) {
     return json({ error: 'Слишком много попыток. Попробуйте позже.' }, 429);
   }
   if (!env.DB) return json({ error: 'База данных пока не подключена. Оплата не создавалась.' }, 503);
-  const password1 = robokassaPassword(env, 1);\n  if (!env.ROBOKASSA_MERCHANT_LOGIN || !password1 || !robokassaPassword(env, 2)) {
+  const password1 = robokassaPassword(env, 1);
+  if (!env.ROBOKASSA_MERCHANT_LOGIN || !password1 || !robokassaPassword(env, 2)) {
     return json({ error: 'Приём оплаты ещё не активирован: не настроены секреты Robokassa.' }, 503);
   }
 
@@ -325,7 +326,8 @@ async function parsePaymentFields(request) {
 }
 
 async function robokassaWebhook(request, env) {
-  const password2 = robokassaPassword(env, 2);\n  if (!env.DB || !password2) return plain('Service unavailable', 503);
+  const password2 = robokassaPassword(env, 2);
+  if (!env.DB || !password2) return plain('Service unavailable', 503);
   await ensurePendingOrdersSchema(env);
   const values = await parsePaymentFields(request);
   const outSum = getField(values, 'OutSum');
