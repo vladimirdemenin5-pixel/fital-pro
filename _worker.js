@@ -619,7 +619,7 @@ async function premiumReviewApi(request, env) {
     'Верни только JSON: {"headline":"краткий заголовок","summary":"вывод на 2-4 предложения","observations":["наблюдение"],"recommendations":["безопасный конкретный шаг"],"nextWeekFocus":"главный фокус следующей недели"}.',
     'Добавь 2-4 наблюдения и 2-4 выполнимые рекомендации. Если данных мало, прямо укажи ограничения и не придумывай динамику.',
     'АНКЕТА: ' + clean(profileRow.profile_json, 1800),
-    'ТЕКУЩИЙ ПЛАН: ' + clean(planRow.plan_json, 12000),
+    'ТЕКУЩИЙ ПЛАН: ' + clean(planRow.plan_json, 24000),
     'ДНЕВНИК И СВОДКА: ' + JSON.stringify({ progress, stats })
   ].join('\n');
 
@@ -683,7 +683,7 @@ async function chat(request, env) {
     ).bind(sub.access_token).first()
   ]);
   const profile = profileRow ? clean(profileRow.profile_json, 1800) : 'Профиль не заполнен.';
-  const plan = planRow ? clean(planRow.plan_json, 12000) : 'Сохранённый недельный план не найден.';
+  const plan = planRow ? clean(planRow.plan_json, 24000) : 'Сохранённый недельный план не найден.';
   const prompt = [
     'Ты Fital AI — консультант сервиса Fital Pro по питанию и фитнесу.',
     'Отвечай на русском языке, доброжелательно, конкретно и практично.',
