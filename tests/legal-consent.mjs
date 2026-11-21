@@ -82,4 +82,12 @@ assert.ok(worker.includes('correctTrainingCount'));
 assert.ok(worker.includes("Не удалось пересобрать план. Сохранённая программа не изменена."));
 assert.ok(worker.includes('Сумма trainingDay=true должна быть ровно'));
 assert.ok(app.includes("day.trainingDay ? 'Тренировка' : 'Отдых и активность'"));
+const chatStart = worker.indexOf('async function chat(request, env) {');
+const leadStart = worker.indexOf('async function lead(request, env) {', chatStart);
+assert.ok(chatStart >= 0 && leadStart > chatStart, 'AI chat handler must exist');
+const chatSource = worker.slice(chatStart, leadStart);
+assert.ok(chatSource.includes("'SELECT plan_json FROM weekly_plans WHERE access_token=?'"), 'AI consultant must load the member saved plan');
+assert.ok(chatSource.includes("'Сохранённый план клиента (JSON): ' + plan"), 'AI consultant prompt must include the saved weekly plan');
+assert.ok(chatSource.includes('сначала опирайся на сохранённый план'), 'AI consultant must prioritize the actual plan for substitutions and workouts');
+
 console.log('PASS: legal/payment protections and AI plan generation + persistence for all three tariffs');
