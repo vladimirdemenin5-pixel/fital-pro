@@ -102,6 +102,53 @@ function nutritionTargets(profile) {
   };
 }
 
+function extractAiText(result) {
+  if (typeof result === 'string') return result.trim();
+  const candidates = [
+    result?.response,
+    result?.result?.response,
+    result?.output_text,
+    result?.result?.output_text,
+    result?.choices?.[0]?.message?.content,
+    result?.result?.choices?.[0]?.message?.content,
+    result?.message?.content,
+    result?.result?.message?.content
+  ];
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+    if (Array.isArray(value)) {
+      const text = value.map(part => typeof part === 'string' ? part : part?.text || '').filter(Boolean).join('\\n').trim();
+      if (text) return text;
+    }
+  }
+  return '';
+}
+
+async function runPlanModel(env, prompt) {
+  const messages = [
+    { role: 'system', content: 'Ты Fital Pro. Отвечай только валидным JSON без Markdown и пояснений.' },
+    { role: 'user', content: prompt }
+  ];
+  const models = [MODEL, '@cf/zai-org/glm-4.7-flash'];
+  let lastError;
+  for (const model of models) {
+    try {
+      const result = await env.AI.run(model, {
+        messages,
+        max_tokens: 4500,
+        temperature: 0.25
+      });
+      const text = extractAiText(result);
+      if (text) return text;
+      lastError = new Error('Модель вернула пустой ответ: ' + model);
+    } catch (error) {
+      lastError = error;
+      console.error('Fital Pro AI model failed:', model, error?.message || 'unknown error');
+    }
+  }
+  throw new Error('Сервис ИИ временно не вернул текстовый ответ. Повторите отправку анкеты через минуту.');
+}
+
 async function generateAiPlan(profile, planKey, env) {
   if (!env.AI) throw new Error('Сервис ИИ пока не подключён. Оплата не создавалась.');
   const targets = nutritionTargets(profile);
@@ -123,10 +170,10 @@ async function generateAiPlan(profile, planKey, env) {
     'ТАРИФ: ' + planKey
   ].join('\n');
 
-  const result = await env.AI.run(MODEL, { prompt, max_tokens: 3500, temperature: 0.35 });
-  const raw = result?.response || result?.result?.response || '';
-  const match = String(raw).match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('ИИ не сформировал план. Попробуйте отправить анкету ещё раз.');
+  const raw = await runPlanModel(env, prompt);
+  const normalized = raw.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+  const match = normalized.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error('ИИ вернул ответ без структуры плана. Повторите отправку анкеты.');
   let parsed;
   try {
     parsed = JSON.parse(match[0]);
