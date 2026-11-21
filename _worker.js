@@ -152,7 +152,9 @@ async function runPlanModel(env, prompt, profile, planKey) {
           );
           const trainingDays = week.filter(day => day?.trainingDay === true).length;
           const correctTrainingCount = planKey === 'Питание' || trainingDays === profile.days;
-          if (complete && correctTrainingCount) return text;
+          const shoppingComplete = Array.isArray(parsed.shopping) &&
+            parsed.shopping.some(item => typeof item === 'string' && item.trim());
+          if (complete && correctTrainingCount && shoppingComplete) return text;
         } catch {}
       }
       lastError = new Error('Модель вернула неполный или некорректный JSON: ' + model);
