@@ -160,9 +160,22 @@ async function saveMemberPlan(env, accessToken, profile, plan) {
   await env.DB.prepare(
     'INSERT INTO profiles (access_token,profile_json,updated_at) VALUES (?,?,?) ON CONFLICT(access_token) DO UPDATE SET profile_json=excluded.profile_json,updated_at=excluded.updated_at'
   ).bind(accessToken, JSON.stringify(profile), now).run();
-  await env.DB.prepare(
-    'INSERT INTO weekly_plans (id,access_token,plan_json,created_at,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(access_token) DO UPDATE SET id=excluded.id,plan_json=excluded.plan_json,updated_at=excluded.updated_at'
-  ).bind(accessToken, accessToken, JSON.stringify(plan), now, now).run();
+
+  // Keep compatibility with the existing D1 table created by earlier Fital Pro versions:
+  // older schemas may not have UNIQUE(access_token), while id=access_token is stable.
+  const existingPlan = await env.DB.prepare(
+    'SELECT id FROM weekly_plans WHERE access_token=? LIMIT 1'
+  ).bind(accessToken).first();
+
+  if (existingPlan) {
+    await env.DB.prepare(
+      'UPDATE weekly_plans SET plan_json=?,updated_at=? WHERE access_token=?'
+    ).bind(JSON.stringify(plan), now, accessToken).run();
+  } else {
+    await env.DB.prepare(
+      'INSERT INTO weekly_plans (id,access_token,plan_json,created_at,updated_at) VALUES (?,?,?,?,?)'
+    ).bind(accessToken, accessToken, JSON.stringify(plan), now, now).run();
+  }
 }
 
 async function checkout(request, env) {
