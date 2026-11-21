@@ -56,7 +56,21 @@ assert.ok(app.includes("$('#progressTool').classList.toggle('is-hidden', !advanc
 assert.ok(app.includes("$('#chatTool').classList.toggle('is-hidden', !advancedFeatures)"));
 assert.ok(html.includes('id="progressTool"'));
 assert.ok(html.includes('id="chatTool"'));
-assert.ok(worker.includes('trainingDay: day?.trainingDay === true'));
+assert.ok(worker.includes('trainingDay: includesTraining && day?.trainingDay === true'));
+assert.ok(worker.includes("max_completion_tokens: 6500"));
+assert.ok(worker.includes("response_format: { type: 'json_object' }"));
+assert.ok(worker.includes("chat_template_kwargs: { enable_thinking: false }"));
+assert.ok(!worker.includes("max_tokens: 4500"));
+assert.ok(worker.includes("'Питание': { amount: '990.00'"));
+assert.ok(worker.includes("'PRO': { amount: '1990.00'"));
+assert.ok(worker.includes("'Premium': { amount: '3990.00'"));
+assert.ok(worker.includes("const includesTraining = planKey !== 'Питание'"));
+assert.ok(worker.includes('plan: planKey,'));
+assert.ok(worker.includes('planLabel: PLANS[planKey].label,'));
+assert.ok(worker.includes("INSERT INTO pending_orders (client_ref,plan,amount,customer_contact,profile_json,plan_json"));
+assert.ok(worker.includes("await saveMemberPlan(env, accessToken, profile, plan)"));
+assert.ok(worker.includes("SELECT plan_json FROM weekly_plans WHERE access_token=?"));
+
 assert.ok(worker.includes('trainingDays !== profile.days'));
 assert.ok(worker.includes('function extractAiText(result)'));
 assert.ok(worker.includes("result?.choices?.[0]?.message?.content"));
@@ -68,4 +82,4 @@ assert.ok(worker.includes('correctTrainingCount'));
 assert.ok(worker.includes("Не удалось пересобрать план. Сохранённая программа не изменена."));
 assert.ok(worker.includes('Сумма trainingDay=true должна быть ровно'));
 assert.ok(app.includes("day.trainingDay ? 'Тренировка' : 'Отдых и активность'"));
-console.log('PASS: legal pages, required consent, server-side consent records, and protected payment-token handoff');
+console.log('PASS: legal/payment protections and AI plan generation + persistence for all three tariffs');
