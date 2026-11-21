@@ -1,57 +1,26 @@
-# Fital Pro — production deployment
+# Fital Pro — публикация
 
-## 1. Cloudflare login
+Публикация выполняется в существующий Cloudflare Worker \`red-waterfall-2af8\`.
 
-Run:
+## Локальные команды
 
-```bash
-npx wrangler login
-```
-
-## 2. Deploy
-
-```bash
+\`\`\`sh
 npm install
-npm run deploy
-```
-
-Wrangler can automatically provision supported resources when the configuration declares bindings without IDs. If D1 is not auto-provisioned in your account, create `fital-pro-db` in D1 and add its `database_id` to `wrangler.jsonc`.
-
-## 3. Apply database migrations
-
-```bash
 npm run db:migrate
-```
+npm run deploy
+\`\`\`
 
-## 4. Secrets
+Сценарий \`deploy\` сначала применяет миграции D1 к существующей базе \`fital-pro-db\`, затем публикует Worker и frontend assets.
 
-Set these as Cloudflare secrets, never in HTML/JS:
+## Перед приёмом оплаты
 
-```bash
-npx wrangler secret put YOOKASSA_SHOP_ID
-npx wrangler secret put YOOKASSA_SECRET_KEY
-```
+В Cloudflare Worker должны быть заданы:
+- AI binding: \`AI\`.
+- D1 binding: \`DB\` → \`fital-pro-db\`.
+- Secrets: \`ROBOKASSA_MERCHANT_LOGIN\`, \`ROBOKASSA_PASSWORD1\`, \`ROBOKASSA_PASSWORD2\`.
 
-## 5. YooKassa webhook
+В кабинете Robokassa укажите ResultURL \`https://ВАШ-ДОМЕН/webhooks/robokassa\` с методом POST и настройте SuccessURL/FailURL на страницы сайта.
 
-Set the webhook URL to:
+## Важно
 
-`https://YOUR_WORKER_DOMAIN/webhooks/yookassa`
-
-Enable at least `payment.succeeded`; optionally also `payment.canceled` and `payment.waiting_for_capture`.
-
-## 6. Verify
-
-Open:
-
-`https://YOUR_WORKER_DOMAIN/health`
-
-Expected fields:
-- `ok: true`
-- `ai: true`
-- `db: true`
-- `payments: true`
-
-## 7. Custom domain
-
-After the Worker is verified, attach `fitalpro.ru` as a custom domain in Cloudflare. Do not remove the existing site until the new Worker passes the health, AI, lead and payment tests.
+Не публикуйте тестовые пароли в боевом магазине. Не проверяйте оплату реальной картой до проверки уведомления в тестовом режиме. Доступ активируется только после сверки подписи и суммы сервером.

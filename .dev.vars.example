@@ -1,2 +1,5 @@
-YOOKASSA_SHOP_ID=""
-YOOKASSA_SECRET_KEY=""
+ROBOKASSA_MERCHANT_LOGIN=""
+ROBOKASSA_PASSWORD1=""
+ROBOKASSA_PASSWORD2=""
+# Optional: set to 1 only when using Robokassa test credentials
+ROBOKASSA_IS_TEST="0"

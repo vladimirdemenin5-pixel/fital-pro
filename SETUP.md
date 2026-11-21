@@ -1,53 +1,46 @@
-# Fital Pro — production setup
+# Fital Pro — подключение существующего сервиса
 
-Сборка подготовлена под Cloudflare Workers с `_worker.js`, статическими assets и bindings.
+Проект использует Worker \`red-waterfall-2af8\`, базу D1 \`fital-pro-db\` и папку frontend \`public/\`.
 
-## Что работает в коде
-- `/api/chat` — Fital AI через Workers AI.
-- `/api/profile` — профиль пользователя.
-- `/api/plan` — персональный недельный план.
-- `/api/progress` — вес и выполнение программы.
-- `/api/lead` — заявки.
-- `/api/checkout` — создание платежа ЮKassa.
-- `/webhooks/yookassa` — подтверждение платежей.
-- `/api/payment-status` — статус платежа.
-- `/api/me` — статус подписки.
-- `/health` — диагностика.
+## Уже реализовано в коде
 
-## Быстрый запуск
+- Выбор тарифа: Питание, PRO, Premium.
+- Анкета с параметрами тела, целью, активностью, тренировками и пищевыми ограничениями.
+- Генерация персонального меню на 7 дней через Workers AI.
+- Показ примера плана до оплаты.
+- Создание подписки после подтверждённого платежа Robokassa.
+- Личный кабинет с полным меню, списком покупок, дневником прогресса и ИИ-консультантом.
 
-```bash
-npm install
-npx wrangler login
-npm run deploy
-```
+## Cloudflare bindings
 
-Wrangler 4.68+ умеет автоматически настраивать существующие проекты, а Cloudflare также поддерживает автоматическое provision для ряда bindings при конфигурации без resource ID. При необходимости D1 можно создать отдельно и указать `database_id` в `wrangler.jsonc`.
+В существующем Worker должны быть доступны:
+- AI binding с именем \`AI\`.
+- D1 binding с именем \`DB\`, указывающий на \`fital-pro-db\`.
+- Assets binding \`ASSETS\`, каталог \`public\`.
 
-## Secrets
+D1 database ID уже записан в \`wrangler.jsonc\`. Новую базу или Worker создавать не нужно.
 
-```bash
-npx wrangler secret put YOOKASSA_SHOP_ID
-npx wrangler secret put YOOKASSA_SECRET_KEY
-```
+## Секреты
 
-Никогда не помещайте эти значения в `public/`.
+В Worker → Settings → Variables and Secrets добавьте три секретных значения:
+- \`ROBOKASSA_MERCHANT_LOGIN\`
+- \`ROBOKASSA_PASSWORD1\`
+- \`ROBOKASSA_PASSWORD2\`
 
-## ЮKassa
+Пароль №1 используется при создании платёжной ссылки. Пароль №2 — для проверки уведомления об оплате. Не отправляйте эти значения в чат и не записывайте в GitHub.
 
-Webhook:
+## Настройки Robokassa
 
-`https://YOUR_DOMAIN/webhooks/yookassa`
+В настройках магазина:
+- ResultURL: \`https://ВАШ-ДОМЕН/webhooks/robokassa\`, отправка POST.
+- SuccessURL: \`https://ВАШ-ДОМЕН/\`.
+- FailURL: \`https://ВАШ-ДОМЕН/?payment=fail\`.
+- Алгоритм подписи в кабинете и в настройках магазина: MD5.
 
-Минимальное событие: `payment.succeeded`.
+При тестовом режиме используйте тестовые Пароль №1 и №2 в секретах Worker. Для боевого режима замените их на боевые пароли.
 
-## После deploy
+## D1
 
-Проверить:
+Файл миграции: \`migrations/0001_init.sql\`.
 
-`https://YOUR_DOMAIN/health`
-
-Нужно получить `ok: true`, а после настройки bindings/secrets — `ai: true`, `db: true`, `payments: true`.
-
-## Доступ
-После успешной оплаты подписка активируется на 30 дней. Токен выдаётся только после подтверждения успешного платежа по уникальному `client_ref`.
+Примените её к уже существующей базе \`fital-pro-db\` до запуска платежей. Миграция использует \`CREATE TABLE IF NOT EXISTS\`, чтобы не удалять существующие таблицы и данные.
