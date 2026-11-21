@@ -217,6 +217,9 @@ async function loadAccount() {
       ? 'Доступ до ' + new Date(subscription.expires_at).toLocaleDateString('ru-RU')
       : 'Подписка активна';
     $('#accountStatus').textContent = '● Подписка активна';
+    const advancedFeatures = ['PRO', 'Premium'].includes(subscription.plan);
+    $('#progressTool').classList.toggle('is-hidden', !advancedFeatures);
+    $('#chatTool').classList.toggle('is-hidden', !advancedFeatures);
     renderFullPlan(planData.plan);
     $('#account').classList.remove('is-hidden');
     await Promise.all([loadProgressHistory(), loadProfileEditor()]);
