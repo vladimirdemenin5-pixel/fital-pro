@@ -211,6 +211,99 @@ function fakeCheckoutDb(draftPlan) {
   };
 }
 
+
+function fakePlanPreviewDb() {
+  const state = { drafts: [], rateLimitWrites: 0 };
+  return {
+    state,
+    prepare(sql) {
+      const query = {
+        args: [],
+        bind(...args) { this.args = args; return this; },
+        async first() {
+          if (sql.includes('COUNT(*) AS n FROM request_log')) return { n: 0 };
+          return null;
+        },
+        async run() {
+          if (sql.includes('INSERT INTO request_log')) state.rateLimitWrites += 1;
+          if (sql.includes('INSERT INTO plan_drafts')) state.drafts.push(this.args);
+          return { success: true };
+        }
+      };
+      return query;
+    }
+  };
+}
+
+function fakeAiForPlanPreview() {
+  const calls = [];
+  return {
+    calls,
+    async run(model, options) {
+      calls.push({ model, options });
+      const range = options.prompt.match(/дни (\\d+)–(\\d+)/);
+      assert.ok(range, 'AI prompt must specify an exact day range');
+      const start = Number(range[1]), end = Number(range[2]);
+      const types = ['breakfast', 'lunch', 'snack', 'dinner'];
+      const week = [];
+      for (let day = start; day <= end; day += 1) {
+        week.push({
+          day,
+          training: options.prompt.includes('конкретную тренировку') ? 'Силовая тренировка: приседания 3×10, отжимания 3×8' : '',
+          meals: types.map((type, index) => ({
+            type,
+            name: 'Блюдо ' + day + ' ' + type,
+            kcal: [400, 550, 200, 500][index],
+            protein: [25, 40, 15, 35][index],
+            ingredients: [['овсянка', '60 г'], ['курица', '150 г']]
+          }))
+        });
+      }
+      return { response: JSON.stringify({ week }) };
+    }
+  };
+}
+
+test('questionnaire API generates the exact tariff duration and persists the AI draft in Preview D1', async () => {
+  for (const [plan, expectedDays, trainingIncluded] of [['Питание', 7, false], ['PRO', 14, true], ['Premium', 30, true]]) {
+    const DB = fakePlanPreviewDb();
+    const AI = fakeAiForPlanPreview();
+    const body = {
+      pd_consent: 'on', name: 'Тест', sex: 'male', age: 30, height: 180, weight: 80,
+      activity: 'medium', goal: 'maintain', plan,
+      ...(trainingIncluded ? { training: 'home', days: 3 } : {})
+    };
+    const response = await workerModule.fetch(new Request('https://preview.example/api/plan-preview', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    }), { DB, AI });
+    const result = await response.json();
+    assert.equal(response.status, 200, plan + ' should return a generated plan');
+    assert.equal(result.ok, true);
+    assert.equal(result.plan.planCode, plan);
+    assert.equal(result.plan.programDays, expectedDays);
+    assert.equal(result.plan.week.length, expectedDays);
+    assert.equal(result.plan.trainingIncluded, trainingIncluded);
+    assert.equal(AI.calls.length, Math.ceil(expectedDays / 7));
+    assert.equal(DB.state.drafts.length, 1);
+    const saved = JSON.parse(DB.state.drafts[0][2]);
+    assert.equal(saved.planCode, plan);
+    assert.equal(saved.week.length, expectedDays);
+  }
+});
+
+test('questionnaire API returns a clear 503 when Preview D1 migrations are missing and does not call AI', async () => {
+  let aiCalls = 0;
+  const DB = { prepare() { return { bind() { return this; }, async first() { throw new Error('no such table: request_log'); } }; } };
+  const response = await workerModule.fetch(new Request('https://preview.example/api/plan-preview', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pd_consent: 'on', plan: 'Питание' })
+  }), { DB, AI: { async run() { aiCalls += 1; return {}; } } });
+  const result = await response.json();
+  assert.equal(response.status, 503);
+  assert.match(result.error, /Preview не готова/);
+  assert.equal(aiCalls, 0);
+});
+
 test('health endpoint checks Preview D1 schema and test-payment readiness without enabling live payments', async () => {
   const request = new Request('https://preview.example/health');
   const readyDb = { prepare() { return { async first() { return null; } }; } };
