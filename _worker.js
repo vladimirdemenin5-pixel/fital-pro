@@ -161,8 +161,10 @@ async function generatePersonalPlan(profile,env,planCode='Питание'){
   return{calories:target.calories,protein:target.protein,days:target.days,programDays:durationDays,planCode,trainingIncluded:includeTraining,goal:profile.goal==='loss'?'умеренный дефицит':profile.goal==='gain'?'небольшой профицит':'поддержание',week,shopping:shoppingList(week),substitutions:SUBS,averageDaily};
 }
 async function planPreview(request,env){
-  if(!(await rateLimit(request,env,'plan-preview',5,3600000))) return json({error:'Слишком много запросов. Попробуйте позже.'},429);
   if(!env.DB) return json({error:'База данных временно недоступна.'},503);
+  let allowed;
+  try{allowed=await rateLimit(request,env,'plan-preview',5,3600000);}catch{return json({error:'База данных Preview не готова. Проверьте применение миграций.'},503);}
+  if(!allowed) return json({error:'Слишком много запросов. Попробуйте позже.'},429);
   let body;try{body=await request.json();}catch{return json({error:'Некорректная анкета.'},400);}
   if(!['on','true','1'].includes(String(body?.pd_consent||'').toLowerCase())) return json({error:'Необходимо согласие на обработку персональных данных.'},400);
   const planCode=clean(body?.plan,40);
