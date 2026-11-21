@@ -18,19 +18,23 @@
     {
       "binding": "DB",
       "database_name": "fital-pro-db",
-"database_id": "d2bdb339-bc7b-420e-be7f-0496ce46a09b",
+      "database_id": "d2bdb339-bc7b-420e-be7f-0496ce46a09b",
       "migrations_dir": "migrations"
     }
   ],
-  
-"secrets": {
-  "required": [
-    "ROBOKASSA_MERCHANT_LOGIN",
-    "ROBOKASSA_PASSWORD1",
-    "ROBOKASSA_PASSWORD2"
-  ]
-},
+  "secrets": {
+    "required": [
+      "ROBOKASSA_MERCHANT_LOGIN",
+      "ROBOKASSA_PASSWORD1",
+      "ROBOKASSA_PASSWORD2"
+    ]
+  },
+  "previews": {},
   "observability": {
     "enabled": true
+  },
+  "workers_dev": true,
+  "vars": {
+    "ROBOKASSA_IS_TEST": "0"
   }
 }

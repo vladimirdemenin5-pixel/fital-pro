@@ -100,8 +100,8 @@
           <button class="button button-primary select-plan" type="button" data-plan="PRO">Выбрать PRO <span>↗</span></button>
         </article>
         <article class="tariff-card" data-card-plan="Premium">
-          <div class="tariff-top"><span class="tariff-type">СОПРОВОЖДЕНИЕ</span><span class="tariff-duration">30 ДНЕЙ</span></div>
-          <h3>Premium</h3><p class="tariff-description">Максимум внимания к привычкам и динамике.</p>
+          <div class="tariff-top"><span class="tariff-type">РАСШИРЕННЫЙ ДОСТУП</span><span class="tariff-duration">30 ДНЕЙ</span></div>
+          <h3>Premium</h3><p class="tariff-description">Больше времени для работы с привычками, планом и динамикой.</p>
           <div class="price">3 990 <small>₽</small></div>
           <div class="price-note">разовая оплата · 30 дней доступа</div>
           <ul><li>Персональное меню и тренировки</li><li>План с учётом предпочтений</li><li>ИИ-консультант по питанию и фитнесу</li><li>Дневник веса и активности</li><li>Доступ на 30 дней</li></ul>
@@ -135,9 +135,11 @@
             <label class="field">Цель<select name="goal" required><option value="loss">Снижение веса</option><option value="maintenance" selected>Поддержание формы</option><option value="gain">Набор массы</option></select></label>
             <label class="field">Где тренируетесь<select name="training" required><option value="home">Дома</option><option value="gym">В зале</option><option value="mixed" selected>Дома и в зале</option></select></label>
             <label class="field">Тренировок в неделю<select name="days" required><option value="2">2 дня</option><option value="3" selected>3 дня</option><option value="4">4 дня</option><option value="5">5 дней</option><option value="6">6 дней</option><option value="7">7 дней</option></select></label>
-            <label class="field field-wide">Питание, аллергии и пожелания<textarea name="preferences" rows="3" maxlength="700" placeholder="Например: не ем рыбу, аллергия на орехи, предпочитаю простые блюда. Если ограничений нет — оставьте пустым."></textarea></label>
+            <label class="field field-wide">Пищевые предпочтения и ограничения<textarea name="preferences" rows="3" maxlength="700" placeholder="Например: не употребляю рыбу, предпочитаю простые блюда. Не указывайте диагнозы и сведения о здоровье."></textarea></label>
           </div>
-          <p class="form-consent">Отправляя анкету, вы подтверждаете, что указали корректные данные. Программа носит информационный характер и не заменяет медицинскую консультацию.</p>
+          <p class="form-consent">Указывайте только сведения, необходимые для составления программы. Не вводите диагнозы, результаты обследований и медицинские документы. Сервис не заменяет медицинскую консультацию.</p>
+          <label class="form-consent form-consent-check"><input name="pd_consent" type="checkbox" required> <span>Согласен(а) на обработку персональных данных по <a href="/privacy.html" target="_blank" rel="noopener">Политике обработки персональных данных</a>.</span></label>
+          <label class="form-consent form-consent-check"><input name="offer_accepted" type="checkbox" required> <span>Принимаю условия <a href="/oferta.html" target="_blank" rel="noopener">публичной оферты</a> и <a href="/delivery-refund.html" target="_blank" rel="noopener">условия оказания услуг и возврата</a>.</span></label>
           <button class="button button-primary button-full" id="generateButton" type="submit">Создать мой план с ИИ <span>↗</span></button>
           <p class="form-error" id="formError" role="alert"></p>
         </form>
@@ -183,7 +185,7 @@
             <label class="field">Цель<select name="goal" required><option value="loss">Снижение веса</option><option value="maintenance">Поддержание формы</option><option value="gain">Набор массы</option></select></label>
             <label class="field">Где тренируетесь<select name="training" required><option value="home">Дома</option><option value="gym">В зале</option><option value="mixed">Дома и в зале</option></select></label>
             <label class="field">Тренировок в неделю<select name="days" required><option value="2">2 дня</option><option value="3">3 дня</option><option value="4">4 дня</option><option value="5">5 дней</option><option value="6">6 дней</option><option value="7">7 дней</option></select></label>
-            <label class="field field-wide">Питание, аллергии и пожелания<textarea name="preferences" rows="3" maxlength="700" placeholder="Укажите продукты, которые исключить, аллергии и предпочтения"></textarea></label>
+            <label class="field field-wide">Пищевые предпочтения и ограничения<textarea name="preferences" rows="3" maxlength="700" placeholder="Укажите продукты, которые не употребляете, и пищевые предпочтения"></textarea></label>
           </div>
           <button class="button button-primary button-full" id="saveProfileButton" type="submit">Сохранить анкету и пересобрать план</button>
           <p class="tool-message" id="profileMessage" role="status"></p>
@@ -191,12 +193,12 @@
       </details>
       <div id="fullPlan" class="full-plan"></div>
       <div class="account-tools">
-        <div class="tool-card"><span class="tool-icon">◉</span><h3>Дневник прогресса</h3><p>Фиксируйте вес и выполнение программы.</p>
+        <div class="tool-card" id="progressTool"><span class="tool-icon">◉</span><h3>Дневник прогресса</h3><p>Фиксируйте вес и выполнение программы.</p>
           <form id="progressForm"><label class="field">Вес сегодня, кг<input type="number" name="weight" min="35" max="250" step="0.1" required></label><label class="check-field"><input type="checkbox" name="completed_meal"> Соблюдал(а) питание</label><label class="check-field"><input type="checkbox" name="completed_workout"> Выполнил(а) тренировку</label><button class="button button-outline button-full" type="submit">Сохранить прогресс</button></form>
           <p class="tool-message" id="progressMessage"></p>
           <div class="progress-history" id="progressHistory" aria-live="polite"></div>
         </div>
-        <div class="tool-card chat-card"><span class="tool-icon">✳</span><h3>Fital AI — ваш консультант</h3><p>Задайте вопрос по вашему плану питания или тренировок.</p>
+        <div class="tool-card chat-card" id="chatTool"><span class="tool-icon">✳</span><h3>Fital AI — ваш консультант</h3><p>Задайте вопрос по вашему плану питания или тренировок.</p>
           <form id="chatForm"><label class="field">Ваш вопрос<textarea name="message" rows="3" maxlength="2000" placeholder="Например: чем заменить курицу в обеде?" required></textarea></label><button class="button button-primary button-full" type="submit">Спросить ИИ ↗</button></form>
           <div id="chatReply" class="chat-reply" aria-live="polite"></div>
         </div>
@@ -214,7 +216,7 @@
     </section>
   </main>
 
-  <footer class="site-footer"><a class="brand" href="/"><span class="brand-mark">F</span><span>FITAL<span class="brand-light">PRO</span></span></a><p>Персональное питание и фитнес с поддержкой ИИ.</p><span>© 2026 Fital Pro</span></footer>
+  <footer class="site-footer"><a class="brand" href="/"><span class="brand-mark">F</span><span>FITAL<span class="brand-light">PRO</span></span></a><p>Персональное питание и фитнес с поддержкой ИИ.</p><nav class="footer-legal" aria-label="Юридическая информация"><a href="/oferta.html">Оферта</a><a href="/privacy.html">Политика ПДн</a><a href="/delivery-refund.html">Оплата и возврат</a><a href="/requisites.html">Реквизиты</a></nav><span>© 2026 Fital Pro</span></footer>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>

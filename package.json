@@ -4,13 +4,14 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
+    "build": "npm run check",
     "deploy": "wrangler deploy",
     "db:migrate": "wrangler d1 migrations apply fital-pro-db --remote",
     "db:migrate:local": "wrangler d1 migrations apply fital-pro-db --local",
-    "check": "node --check _worker.js && node --check public/app.js",
+    "check": "node --check _worker.js && node --check public/app.js && node tests/legal-consent.mjs",
     "dry-run": "npm run check && wrangler deploy --dry-run"
   },
   "devDependencies": {
-    "wrangler": "^4.68.0"
+    "wrangler": "^4.135.0"
   }
 }

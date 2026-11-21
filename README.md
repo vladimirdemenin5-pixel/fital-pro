@@ -18,7 +18,7 @@
 3. Workers AI создаёт персональный план на 7 дней; перед оплатой показывается пример первого дня.
 4. Клиент переходит на страницу оплаты Robokassa.
 5. Worker проверяет подпись и сумму уведомления Robokassa, после чего создаёт подписку и открывает полный план.
-6. В личном кабинете доступны меню, список покупок, дневник прогресса и ИИ-консультант.
+6. В личном кабинете доступны меню и список покупок; дневник прогресса и ИИ-консультант — только на тарифах PRO и Premium.
 
 ## Тарифы
 
@@ -51,6 +51,7 @@
 - `ROBOKASSA_MERCHANT_LOGIN`
 - `ROBOKASSA_PASSWORD1`
 - `ROBOKASSA_PASSWORD2`
+- Для отдельного Preview: `ROBOKASSA_TEST_PASSWORD1`, `ROBOKASSA_TEST_PASSWORD2` и переменная `ROBOKASSA_IS_TEST=1`.
 
 Не помещайте реальные пароли в GitHub, frontend, `.dev.vars.example` или публичные файлы. Добавляйте их только в Cloudflare Worker → Settings → Variables and Secrets.
 
@@ -62,7 +63,7 @@
 - FailURL: `https://ВАШ-ДОМЕН/?payment=fail`.
 - Метод подписи: MD5, если в кабинете магазина выбран MD5.
 
-Worker использует Password #1 для создания платежной ссылки и Password #2 для проверки серверного ResultURL. Секреты должны соответствовать одному магазину и одному режиму Robokassa.
+Worker использует Password #1 для создания платежной ссылки и Password #2 для проверки серверного ResultURL. Секреты должны соответствовать одному магазину и одному режиму Robokassa. Тестовый режим использует только тестовую пару паролей; отсутствие тестовой пары останавливает создание платежа с ошибкой конфигурации.
 
 ## База данных и публикация
 
@@ -73,3 +74,12 @@ Worker использует Password #1 для создания платежно
 После публикации используются уже сохранённые секреты Worker Robokassa и существующие настройки магазина.
 
 Команды для локальной разработки: `npm install`, `npm run db:migrate`, `npm run dev`.
+
+
+## Изоляция Preview
+- Preview не наследует production bindings и secrets автоматически.
+- Для Preview требуется отдельная D1-база (например, `fital-pro-preview-db`) с binding `DB`; production D1 не подключать к Preview.
+- Workers AI binding `AI` должен быть доступен в Preview.
+- В Preview установить `ROBOKASSA_IS_TEST=1` и тестовые `ROBOKASSA_TEST_PASSWORD1/2`. Не копировать в Preview production Password #1/#2.
+- Production использует только `ROBOKASSA_PASSWORD1/2` и не должен иметь `ROBOKASSA_IS_TEST=1`.
+- После настройки Preview привязать его к отдельной D1 и применить миграции именно к этой базе. Не запускать `db:migrate` против production ради Preview.
