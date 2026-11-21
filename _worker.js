@@ -396,10 +396,12 @@ async function paymentStatus(request, env) {
   if (!order) return json({ status: 'pending' });
   const checkoutCookie = (request.headers.get('Cookie') || '').match(/(?:^|;\s*)fitalpro_checkout_ref=([^;]+)/)?.[1] || '';
   if (checkoutCookie !== order.client_ref) return json({ status: 'pending' });
+  // Release the token only after the webhook has saved both the profile and full plan.
+  // This prevents a partially completed activation from opening an empty cabinet.
   const subscription = await env.DB.prepare(
-    'SELECT plan,status,access_token,updated_at,expires_at FROM subscriptions WHERE client_ref=?'
-  ).bind(order.client_ref).first();
-  if (subscription?.status === 'active') {
+    "SELECT s.plan,s.status,s.access_token,s.updated_at,s.expires_at FROM subscriptions s INNER JOIN profiles p ON p.access_token=s.access_token INNER JOIN weekly_plans w ON w.access_token=s.access_token WHERE s.client_ref=? AND s.status='active' AND (s.expires_at IS NULL OR s.expires_at>?)"
+  ).bind(order.client_ref, new Date().toISOString()).first();
+  if (order.status === 'paid' && subscription?.status === 'active') {
     const response = json({
       status: 'active',
       plan: subscription.plan,
