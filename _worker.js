@@ -357,6 +357,16 @@ async function checkout(request, env) {
   params.set('Culture', 'ru');
   params.set('Encoding', 'utf-8');
   params.set('Shp_ref', clientRef);
+  const returnBase = new URL('/', request.url);
+  const successUrl = new URL(returnBase);
+  successUrl.searchParams.set('payment', 'success');
+  successUrl.searchParams.set('ref', clientRef);
+  const failUrl = new URL(returnBase);
+  failUrl.searchParams.set('payment', 'fail');
+  params.set('SuccessURL', successUrl.toString());
+  params.set('SuccessURLMethod', 'GET');
+  params.set('FailURL', failUrl.toString());
+  params.set('FailURLMethod', 'GET');
   if (env.ROBOKASSA_IS_TEST === '1') params.set('IsTest', '1');
 
   const response = json({
