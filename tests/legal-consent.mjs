@@ -6,6 +6,7 @@ const html = read('public/index.html');
 const app = read('public/app.js');
 const worker = read('_worker.js');
 const schema = read('migrations/0001_init.sql');
+const offer = read('public/oferta.html');
 
 for (const name of ['pd_consent', 'offer_accepted']) {
   assert.match(html, new RegExp('name="' + name + '"[^>]*required'));
@@ -90,4 +91,18 @@ assert.ok(chatSource.includes("'SELECT plan_json FROM weekly_plans WHERE access_
 assert.ok(chatSource.includes("'Сохранённый план клиента (JSON): ' + plan"), 'AI consultant prompt must include the saved weekly plan');
 assert.ok(chatSource.includes('сначала опирайся на сохранённый план'), 'AI consultant must prioritize the actual plan for substitutions and workouts');
 
-console.log('PASS: legal/payment protections and AI plan generation + persistence for all three tariffs');
+
+assert.ok(worker.includes("async function premiumReviewApi(request, env)"), 'Premium weekly review API must exist');
+assert.ok(worker.includes("sub.plan !== 'Premium'"), 'Premium review must be restricted to Premium');
+assert.ok(worker.includes("CREATE TABLE IF NOT EXISTS premium_reviews"), 'Premium review history must persist in D1');
+assert.ok(worker.includes("UNIQUE(access_token, period_start)"), 'Only one review may be saved per member per week');
+assert.ok(worker.includes("progress.length < 2"), 'Weekly review requires at least two diary entries');
+assert.ok(worker.includes("url.pathname === '/api/premium/review'"), 'Premium review route must be registered');
+assert.ok(worker.includes("SELECT plan_json FROM weekly_plans WHERE access_token=?"), 'Premium review must use the saved personal plan');
+assert.ok(app.includes("$('#premiumReviewTool').classList.toggle('is-hidden', !premiumFeatures)"));
+assert.ok(app.includes("api('/api/premium/review')"));
+assert.ok(html.includes('id="premiumReviewTool"'));
+assert.ok(html.includes('Еженедельный ИИ-разбор дневника'));
+assert.ok(offer.includes('автоматизированный ИИ-разбор дневника'));
+
+console.log('PASS: legal/payment protections, AI plans, and Premium weekly review');
