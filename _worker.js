@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-const MODEL = '@cf/meta/llama-3.1-8b-instruct';
+const MODEL = '@cf/google/gemma-4-26b-a4b-it';
 const PLANS = {
   'Питание': { amount: '990.00', label: 'Fital Pro — Питание, 7 дней', days: 7 },
   'PRO': { amount: '1990.00', label: 'Fital Pro PRO — питание + тренировки, 14 дней', days: 14 },
