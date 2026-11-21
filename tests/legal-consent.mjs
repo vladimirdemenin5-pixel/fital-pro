@@ -29,4 +29,8 @@ assert.ok(cookieRegexSource, 'checkout cookie matcher must be present');
 const cookieRegex = new RegExp(cookieRegexSource.slice(1, cookieRegexSource.lastIndexOf('/')));
 assert.equal(cookieRegex.exec('; fitalpro_checkout_ref=sample')?.[1], 'sample');
 assert.ok(worker.includes('checkoutCookie !== order.client_ref'));
+assert.ok(worker.includes('trainingDay: day?.trainingDay === true'));
+assert.ok(worker.includes('trainingDays !== profile.days'));
+assert.ok(worker.includes('Сумма trainingDay=true должна быть ровно'));
+assert.ok(app.includes("day.trainingDay ? 'Тренировка' : 'Отдых и активность'"));
 console.log('PASS: legal pages, required consent, server-side consent records, and protected payment-token handoff');
