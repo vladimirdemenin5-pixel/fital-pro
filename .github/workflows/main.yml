@@ -40,3 +40,9 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy
+
+      - name: Verify deployed Worker health and bindings
+        run: |
+          set -euo pipefail
+          response="$(curl --fail --silent --show-error --retry 8 --retry-delay 3 --retry-all-errors --max-time 20 'https://red-waterfall-2af8.vladimirdemenin5.workers.dev/health')"
+          printf '%s' "$response" | node --input-type=module -e 'let s=""; for await (const c of process.stdin) s+=c; const d=JSON.parse(s); if (d.ok!==true || d.ai!==true || d.db!==true) throw new Error("Production Worker health check failed: AI or D1 binding is missing"); console.log("PASS: production Worker responds and AI/D1 bindings are attached")'
