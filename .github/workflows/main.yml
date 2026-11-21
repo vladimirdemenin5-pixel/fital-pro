@@ -32,7 +32,7 @@ jobs:
           test -f wrangler.jsonc
           test -f migrations/0001_init.sql
           npm install
-          npm run check
+          npm run dry-run
 
       - name: Apply D1 migrations
         uses: cloudflare/wrangler-action@v4
