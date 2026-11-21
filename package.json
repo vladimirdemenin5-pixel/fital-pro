@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler d1 migrations apply fital-pro-db --remote && wrangler deploy",
+    "deploy": "wrangler deploy",
     "db:migrate": "wrangler d1 migrations apply fital-pro-db --remote",
     "db:migrate:local": "wrangler d1 migrations apply fital-pro-db --local",
     "check": "node --check _worker.js && node --check public/app.js",
