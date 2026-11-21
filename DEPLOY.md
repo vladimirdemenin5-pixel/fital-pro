@@ -1,25 +1,25 @@
 # Fital Pro — публикация
 
-Публикация выполняется в существующий Cloudflare Worker \`red-waterfall-2af8\`.
+Публикация выполняется в существующий Cloudflare Worker `red-waterfall-2af8`.
 
 ## Локальные команды
 
-\`\`\`sh
+```sh
 npm install
 npm run db:migrate
 npm run deploy
-\`\`\`
+```
 
-Сценарий \`deploy\` сначала применяет миграции D1 к существующей базе \`fital-pro-db\`, затем публикует Worker и frontend assets.
+Сценарий `deploy` сначала применяет миграции D1 к существующей базе `fital-pro-db`, затем публикует Worker и frontend assets.
 
 ## Перед приёмом оплаты
 
 В Cloudflare Worker должны быть заданы:
-- AI binding: \`AI\`.
-- D1 binding: \`DB\` → \`fital-pro-db\`.
-- Secrets: \`ROBOKASSA_MERCHANT_LOGIN\`, \`ROBOKASSA_PASSWORD1\`, \`ROBOKASSA_PASSWORD2\`.
+- AI binding: `AI`.
+- D1 binding: `DB` → `fital-pro-db`.
+- Secrets: `ROBOKASSA_MERCHANT_LOGIN`, `ROBOKASSA_PASSWORD1`, `ROBOKASSA_PASSWORD2`.
 
-В кабинете Robokassa укажите ResultURL \`https://ВАШ-ДОМЕН/webhooks/robokassa\` с методом POST и настройте SuccessURL/FailURL на страницы сайта.
+В кабинете Robokassa укажите ResultURL `https://ВАШ-ДОМЕН/webhooks/robokassa` с методом POST и настройте SuccessURL/FailURL на страницы сайта.
 
 ## Важно
 

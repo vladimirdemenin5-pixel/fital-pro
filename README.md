@@ -1,13 +1,13 @@
 # Fital Pro
 
-Персональный сервис питания и фитнеса на существующем Cloudflare Worker \`red-waterfall-2af8\`.
+Персональный сервис питания и фитнеса на существующем Cloudflare Worker `red-waterfall-2af8`.
 
 ## Архитектура
 
-- Frontend: \`public/\` (HTML, CSS, JavaScript).
-- API и серверная логика: \`_worker.js\`.
-- Workers AI: binding \`AI\`, модель Llama 3.1 8B Instruct.
-- D1: binding \`DB\`, база \`fital-pro-db\`.
+- Frontend: `public/` (HTML, CSS, JavaScript).
+- API и серверная логика: `_worker.js`.
+- Workers AI: binding `AI`, модель Llama 3.1 8B Instruct.
+- D1: binding `DB`, база `fital-pro-db`.
 - Оплата: Robokassa с серверной проверкой подписи ResultURL.
 - Telegram не используется.
 
@@ -28,46 +28,46 @@
 
 ## API
 
-- \`GET /health\`
-- \`POST /api/checkout\` — анкета, генерация AI-плана и создание ссылки Robokassa.
-- \`POST /webhooks/robokassa\` — серверное подтверждение оплаты.
-- \`GET /api/payment-status?ref=...\`
-- \`GET /api/me\`
-- \`GET|POST /api/profile\`
-- \`GET /api/plan\`
-- \`GET|POST /api/progress\`
-- \`POST /api/chat\`
+- `GET /health`
+- `POST /api/checkout` — анкета, генерация AI-плана и создание ссылки Robokassa.
+- `POST /webhooks/robokassa` — серверное подтверждение оплаты.
+- `GET /api/payment-status?ref=...`
+- `GET /api/me`
+- `GET|POST /api/profile`
+- `GET /api/plan`
+- `GET|POST /api/progress`
+- `POST /api/chat`
 
 ## Настройка Cloudflare
 
-Используется уже существующий Worker \`red-waterfall-2af8\`. Не создавайте новый Worker.
+Используется уже существующий Worker `red-waterfall-2af8`. Не создавайте новый Worker.
 
 Нужны bindings:
-- Workers AI: \`AI\`.
-- D1: \`DB\`, база \`fital-pro-db\`.
-- Static assets: каталог \`public\`, binding \`ASSETS\`.
+- Workers AI: `AI`.
+- D1: `DB`, база `fital-pro-db`.
+- Static assets: каталог `public`, binding `ASSETS`.
 
 Секреты Worker:
-- \`ROBOKASSA_MERCHANT_LOGIN\`
-- \`ROBOKASSA_PASSWORD1\`
-- \`ROBOKASSA_PASSWORD2\`
+- `ROBOKASSA_MERCHANT_LOGIN`
+- `ROBOKASSA_PASSWORD1`
+- `ROBOKASSA_PASSWORD2`
 
-Не помещайте реальные пароли в GitHub, frontend, \`.dev.vars.example\` или публичные файлы. Добавляйте их только в Cloudflare Worker → Settings → Variables and Secrets.
+Не помещайте реальные пароли в GitHub, frontend, `.dev.vars.example` или публичные файлы. Добавляйте их только в Cloudflare Worker → Settings → Variables and Secrets.
 
 ## Robokassa
 
 В технических настройках магазина:
-- ResultURL: \`https://ВАШ-ДОМЕН/webhooks/robokassa\`, метод POST.
-- SuccessURL: \`https://ВАШ-ДОМЕН/\`.
-- FailURL: \`https://ВАШ-ДОМЕН/?payment=fail\`.
+- ResultURL: `https://ВАШ-ДОМЕН/webhooks/robokassa`, метод POST.
+- SuccessURL: `https://ВАШ-ДОМЕН/`.
+- FailURL: `https://ВАШ-ДОМЕН/?payment=fail`.
 - Метод подписи: MD5, если в кабинете магазина выбран MD5.
 
 Worker использует Password #1 для создания платежной ссылки и Password #2 для проверки серверного ResultURL. Секреты должны соответствовать одному магазину и одному режиму Robokassa.
 
 ## База данных и публикация
 
-Миграция находится в \`migrations/0001_init.sql\`. Она создаёт таблицы заказов, платежей, подписок, профилей, планов, прогресса и журнала ограничений запросов.
+Миграция находится в `migrations/0001_init.sql`. Она создаёт таблицы заказов, платежей, подписок, профилей, планов, прогресса и журнала ограничений запросов.
 
-Перед запуском примените миграции к существующей базе \`fital-pro-db\`, затем опубликуйте Worker. После этого внесите секреты Robokassa и настройте ResultURL в кабинете магазина.
+Перед запуском примените миграции к существующей базе `fital-pro-db`, затем опубликуйте Worker. После этого внесите секреты Robokassa и настройте ResultURL в кабинете магазина.
 
-Команды для локальной разработки: \`npm install\`, \`npm run db:migrate\`, \`npm run dev\`.
+Команды для локальной разработки: `npm install`, `npm run db:migrate`, `npm run dev`.

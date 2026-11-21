@@ -1,6 +1,6 @@
 # Fital Pro — подключение существующего сервиса
 
-Проект использует Worker \`red-waterfall-2af8\`, базу D1 \`fital-pro-db\` и папку frontend \`public/\`.
+Проект использует Worker `red-waterfall-2af8`, базу D1 `fital-pro-db` и папку frontend `public/`.
 
 ## Уже реализовано в коде
 
@@ -14,33 +14,33 @@
 ## Cloudflare bindings
 
 В существующем Worker должны быть доступны:
-- AI binding с именем \`AI\`.
-- D1 binding с именем \`DB\`, указывающий на \`fital-pro-db\`.
-- Assets binding \`ASSETS\`, каталог \`public\`.
+- AI binding с именем `AI`.
+- D1 binding с именем `DB`, указывающий на `fital-pro-db`.
+- Assets binding `ASSETS`, каталог `public`.
 
-D1 database ID уже записан в \`wrangler.jsonc\`. Новую базу или Worker создавать не нужно.
+D1 database ID уже записан в `wrangler.jsonc`. Новую базу или Worker создавать не нужно.
 
 ## Секреты
 
 В Worker → Settings → Variables and Secrets добавьте три секретных значения:
-- \`ROBOKASSA_MERCHANT_LOGIN\`
-- \`ROBOKASSA_PASSWORD1\`
-- \`ROBOKASSA_PASSWORD2\`
+- `ROBOKASSA_MERCHANT_LOGIN`
+- `ROBOKASSA_PASSWORD1`
+- `ROBOKASSA_PASSWORD2`
 
 Пароль №1 используется при создании платёжной ссылки. Пароль №2 — для проверки уведомления об оплате. Не отправляйте эти значения в чат и не записывайте в GitHub.
 
 ## Настройки Robokassa
 
 В настройках магазина:
-- ResultURL: \`https://ВАШ-ДОМЕН/webhooks/robokassa\`, отправка POST.
-- SuccessURL: \`https://ВАШ-ДОМЕН/\`.
-- FailURL: \`https://ВАШ-ДОМЕН/?payment=fail\`.
+- ResultURL: `https://ВАШ-ДОМЕН/webhooks/robokassa`, отправка POST.
+- SuccessURL: `https://ВАШ-ДОМЕН/`.
+- FailURL: `https://ВАШ-ДОМЕН/?payment=fail`.
 - Алгоритм подписи в кабинете и в настройках магазина: MD5.
 
 При тестовом режиме используйте тестовые Пароль №1 и №2 в секретах Worker. Для боевого режима замените их на боевые пароли.
 
 ## D1
 
-Файл миграции: \`migrations/0001_init.sql\`.
+Файл миграции: `migrations/0001_init.sql`.
 
-Примените её к уже существующей базе \`fital-pro-db\` до запуска платежей. Миграция использует \`CREATE TABLE IF NOT EXISTS\`, чтобы не удалять существующие таблицы и данные.
+Примените её к уже существующей базе `fital-pro-db` до запуска платежей. Миграция использует `CREATE TABLE IF NOT EXISTS`, чтобы не удалять существующие таблицы и данные.
