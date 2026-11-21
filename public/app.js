@@ -228,7 +228,9 @@ $('#chatForm').addEventListener('submit', async function (event) {
     return;
   }
   const ref = params.get('ref') || params.get('Shp_ref') || localStorage.getItem(REF_KEY);
-  if (ref && (params.has('ref') || params.has('Shp_ref') || params.get('payment') === 'success')) {
+  // Robokassa may return to the configured SuccessURL without query parameters.
+  // The pending reference is already stored locally before redirecting to checkout.
+  if (ref) {
     await checkPayment(ref);
     return;
   }
