@@ -18,7 +18,7 @@
 3. Workers AI создаёт персональный план на 7 дней; перед оплатой показывается пример первого дня.
 4. Клиент переходит на страницу оплаты Robokassa.
 5. Worker проверяет подпись и сумму уведомления Robokassa, после чего создаёт подписку и открывает полный план.
-6. В личном кабинете доступны меню, список покупок, дневник прогресса и ИИ-консультант.
+6. В личном кабинете доступны меню и список покупок; дневник прогресса и ИИ-консультант — только на тарифах PRO и Premium.
 
 ## Тарифы
 
@@ -51,6 +51,7 @@
 - `ROBOKASSA_MERCHANT_LOGIN`
 - `ROBOKASSA_PASSWORD1`
 - `ROBOKASSA_PASSWORD2`
+- Для отдельного Preview: `ROBOKASSA_TEST_PASSWORD1`, `ROBOKASSA_TEST_PASSWORD2` и переменная `ROBOKASSA_IS_TEST=1`.
 
 Не помещайте реальные пароли в GitHub, frontend, `.dev.vars.example` или публичные файлы. Добавляйте их только в Cloudflare Worker → Settings → Variables and Secrets.
 
