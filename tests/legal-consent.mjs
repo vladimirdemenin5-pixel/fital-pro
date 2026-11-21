@@ -101,6 +101,7 @@ assert.ok(worker.includes('stats,\n    disclaimer:'), 'Saved Premium review must
 assert.ok(worker.includes('messages: ['), 'Premium review must use the chat model message format');
 assert.ok(worker.includes("UNIQUE(access_token, period_start)"), 'Only one review may be saved per member per week');
 assert.ok(worker.includes("progress.length < 2"), 'Weekly review requires at least two diary entries');
+assert.ok(worker.includes('progressEntries >= 2'), 'Review button readiness must be based on weekly diary records');
 assert.ok(worker.includes("url.pathname === '/api/premium/review'"), 'Premium review route must be registered');
 assert.ok(worker.includes("SELECT plan_json FROM weekly_plans WHERE access_token=?"), 'Premium review must use the saved personal plan');
 assert.ok(app.includes("$('#premiumReviewTool').classList.toggle('is-hidden', !premiumFeatures)"));
