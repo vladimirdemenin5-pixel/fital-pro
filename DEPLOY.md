@@ -6,11 +6,11 @@
 
 ```sh
 npm install
-npm run db:migrate
+npm run check
 npm run deploy
 ```
 
-Сценарий `deploy` сначала применяет миграции D1 к существующей базе `fital-pro-db`, затем публикует Worker и frontend assets.
+Сценарий `deploy` публикует Worker и frontend assets в существующий сервис. Таблица заказов Robokassa создаётся через уже подключённый D1 binding при первом запросе оплаты. Отдельное применение D1 migration требуется только для новой пустой базы и выполняется отдельно с D1 edit permissions.
 
 ## Перед приёмом оплаты
 
