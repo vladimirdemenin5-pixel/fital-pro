@@ -321,8 +321,8 @@ async function checkout(request, env) {
   } catch (error) {
     return json({ error: clean(error.message, 200) }, 400);
   }
-  const contact = clean(body?.contact, 160);
-  if (!contact) return json({ error: 'Укажите email или телефон для связи.' }, 400);
+  const contact = clean(body?.contact, 160).toLowerCase();
+  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(contact)) return json({ error: 'Укажите корректный email. Он нужен для отправки доступа и его восстановления.' }, 400);
   const accepted = value => value === true || ['on', 'true', '1'].includes(String(value ?? '').toLowerCase());
   if (!accepted(body?.pd_consent)) return json({ error: 'Необходимо согласие на обработку персональных данных.' }, 400);
   if (!accepted(body?.offer_accepted)) return json({ error: 'Необходимо принять условия публичной оферты.' }, 400);
