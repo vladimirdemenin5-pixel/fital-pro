@@ -161,7 +161,7 @@ async function saveMemberPlan(env, accessToken, profile, plan) {
     'INSERT INTO profiles (access_token,profile_json,updated_at) VALUES (?,?,?) ON CONFLICT(access_token) DO UPDATE SET profile_json=excluded.profile_json,updated_at=excluded.updated_at'
   ).bind(accessToken, JSON.stringify(profile), now).run();
   await env.DB.prepare(
-    'INSERT INTO weekly_plans (id,access_token,plan_json,created_at,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET plan_json=excluded.plan_json,updated_at=excluded.updated_at'
+    'INSERT INTO weekly_plans (id,access_token,plan_json,created_at,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(access_token) DO UPDATE SET id=excluded.id,plan_json=excluded.plan_json,updated_at=excluded.updated_at'
   ).bind(accessToken, accessToken, JSON.stringify(plan), now, now).run();
 }
 
