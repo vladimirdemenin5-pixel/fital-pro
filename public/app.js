@@ -191,7 +191,7 @@ function renderFullPlan(plan) {
       '<p><strong>Обед</strong> · ' + escapeHtml(day.lunch) + '</p>' +
       '<p><strong>Перекус</strong> · ' + escapeHtml(day.snack) + '</p>' +
       '<p><strong>Ужин</strong> · ' + escapeHtml(day.dinner) + '</p>' +
-      '<p class="day-workout"><strong>Активность</strong><br>' + escapeHtml(day.workout) + '</p>' +
+      '<p class="day-workout"><strong>' + (day.trainingDay ? 'Тренировка' : 'Отдых и активность') + '</strong><br>' + escapeHtml(day.workout) + '</p>' +
       '</article>';
   }).join('');
   if (plan.shopping && plan.shopping.length) {
