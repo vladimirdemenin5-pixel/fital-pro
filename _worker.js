@@ -779,7 +779,7 @@ async function accessRecovery(request, env, confirm = false) {
       from: env.FITALPRO_FROM_EMAIL,
       to: [email],
       subject: 'Восстановление доступа к Fital Pro',
-      text: 'Чтобы восстановить доступ к Fital Pro, откройте ссылку в течение 15 минут: ' + link.toString() + '\\n\\nЕсли вы не запрашивали восстановление, просто проигнорируйте это письмо.'
+      text: 'Чтобы восстановить доступ к Fital Pro, откройте ссылку в течение 15 минут: ' + link.toString() + '\n\nЕсли вы не запрашивали восстановление, просто проигнорируйте это письмо.'
     })
   });
   if (!mail.ok) {
