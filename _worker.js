@@ -557,12 +557,17 @@ async function premiumReviewApi(request, env) {
   const periodStart = monday.toISOString().slice(0, 10);
 
   if (request.method === 'GET') {
-    const rows = await env.DB.prepare('SELECT period_start,review_json,created_at FROM premium_reviews WHERE access_token=? ORDER BY created_at DESC LIMIT 5').bind(sub.access_token).all();
+    const [rows, progressCount] = await Promise.all([
+      env.DB.prepare('SELECT period_start,review_json,created_at FROM premium_reviews WHERE access_token=? ORDER BY created_at DESC LIMIT 5').bind(sub.access_token).all(),
+      env.DB.prepare('SELECT COUNT(*) AS total FROM progress WHERE access_token=? AND date>=? AND date<=?').bind(sub.access_token, periodStart, new Date().toISOString().slice(0, 10)).first()
+    ]);
     const reviews = (rows.results || []).map(row => {
       try { return { periodStart: row.period_start, createdAt: row.created_at, review: JSON.parse(row.review_json) }; }
       catch { return null; }
     }).filter(Boolean);
-    return json({ periodStart, canGenerate: !reviews.some(item => item.periodStart === periodStart), reviews });
+    const progressEntries = Number(progressCount && progressCount.total || 0);
+    const hasCurrentReview = reviews.some(item => item.periodStart === periodStart);
+    return json({ periodStart, progressEntries, canGenerate: !hasCurrentReview && progressEntries >= 2, reviews });
   }
 
   const existing = await env.DB.prepare('SELECT id,period_start,review_json,created_at FROM premium_reviews WHERE access_token=? AND period_start=?').bind(sub.access_token, periodStart).first();
