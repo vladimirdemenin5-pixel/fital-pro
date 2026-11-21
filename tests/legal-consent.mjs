@@ -5,6 +5,7 @@ const read = (path) => readFileSync(new URL('../' + path, import.meta.url), 'utf
 const html = read('public/index.html');
 const app = read('public/app.js');
 const worker = read('_worker.js');
+const schema = read('migrations/0001_init.sql');
 
 for (const name of ['pd_consent', 'offer_accepted']) {
   assert.match(html, new RegExp('name="' + name + '"[^>]*required'));
@@ -37,6 +38,17 @@ assert.ok(worker.includes("'ROBOKASSA_TEST_PASSWORD' + number"));
 assert.ok(worker.includes("env.ROBOKASSA_IS_TEST === '1'"));
 assert.ok(worker.includes('const password1 = robokassaPassword(env, 1)'));
 assert.ok(worker.includes('const password2 = robokassaPassword(env, 2)'));
+assert.match(schema, /client_ref TEXT NOT NULL UNIQUE/);
+assert.match(schema, /payment_id TEXT NOT NULL UNIQUE/);
+assert.match(schema, /access_token TEXT NOT NULL UNIQUE/);
+assert.match(schema, /CREATE TABLE IF NOT EXISTS profiles/);
+assert.match(schema, /CREATE TABLE IF NOT EXISTS weekly_plans/);
+assert.ok(worker.includes('INSERT INTO payments'));
+assert.ok(worker.includes('ON CONFLICT(payment_id) DO NOTHING'));
+assert.ok(worker.includes('await saveMemberPlan(env, accessToken, profile, plan)'));
+assert.ok(worker.includes("UPDATE pending_orders SET status='paid'"));
+assert.ok(worker.includes('INNER JOIN profiles p'));
+assert.ok(worker.includes('INNER JOIN weekly_plans w'));
 assert.ok(worker.includes('trainingDay: day?.trainingDay === true'));
 assert.ok(worker.includes('trainingDays !== profile.days'));
 assert.ok(worker.includes("Не удалось пересобрать план. Сохранённая программа не изменена."));
