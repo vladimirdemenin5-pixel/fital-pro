@@ -241,7 +241,7 @@ function fakeAiForPlanPreview() {
     calls,
     async run(model, options) {
       calls.push({ model, options });
-      const range = options.prompt.match(/дни (\\d+)–(\\d+)/);
+      const range = options.prompt.match(/дни (\d+)–(\d+)/);
       assert.ok(range, 'AI prompt must specify an exact day range');
       const start = Number(range[1]), end = Number(range[2]);
       const types = ['breakfast', 'lunch', 'snack', 'dinner'];
@@ -249,7 +249,7 @@ function fakeAiForPlanPreview() {
       for (let day = start; day <= end; day += 1) {
         week.push({
           day,
-          training: options.prompt.includes('конкретную тренировку') ? 'Силовая тренировка: приседания 3×10, отжимания 3×8' : '',
+          training: options.prompt.includes('training: конкретная тренировка') ? 'Силовая тренировка: приседания 3×10, отжимания 3×8' : '',
           meals: types.map((type, index) => ({
             type,
             name: 'Блюдо ' + day + ' ' + type,
