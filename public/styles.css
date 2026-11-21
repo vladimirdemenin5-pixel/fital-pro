@@ -49,3 +49,14 @@
 #intakeForm .form-consent-check a,.footer-legal a{color:#a9c985;text-decoration:underline;text-underline-offset:3px;}
 .footer-legal{display:flex;flex-wrap:wrap;gap:12px;font-size:10px;}
 @media(max-width:720px){.site-footer{flex-wrap:wrap;align-items:flex-start}.footer-legal{width:100%;order:4;}}
+
+
+/* Secure email access recovery */
+.restore-section{padding-top:45px;padding-bottom:45px;background:#fff}
+.restore-panel{max-width:980px;margin:0 auto;background:#f4f7f1;border:1px solid #e1e9dc;border-radius:20px;padding:28px;display:grid;grid-template-columns:1fr .8fr;gap:35px;align-items:center}
+.restore-panel h2{font-size:clamp(28px,3vw,38px);line-height:1.08;letter-spacing:-.05em;margin:13px 0}
+.restore-panel h2 em{font-family:Georgia,serif;font-weight:400;color:#7ba345}
+.restore-panel p{font-size:11px;line-height:1.8;color:#7c8a8d;margin:0}
+.restore-panel form{display:grid;gap:12px}
+.restore-panel .form-error{min-height:18px}
+@media(max-width:720px){.restore-panel{grid-template-columns:1fr;padding:22px;gap:18px}}
