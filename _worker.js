@@ -345,28 +345,31 @@ async function checkout(request, env) {
   }
 
   const merchant = clean(env.ROBOKASSA_MERCHANT_LOGIN, 120);
-  const signature = md5(
-    merchant + ':' + product.amount + ':' + invId + ':' + password1 + ':Shp_ref=' + clientRef
-  );
   const params = new URLSearchParams();
   params.set('MerchantLogin', merchant);
   params.set('OutSum', product.amount);
   params.set('InvId', String(invId));
   params.set('Description', product.label);
-  params.set('SignatureValue', signature);
   params.set('Culture', 'ru');
   params.set('Encoding', 'utf-8');
-  params.set('Shp_ref', clientRef);
   const returnBase = new URL('/', request.url);
   const successUrl = new URL(returnBase);
   successUrl.searchParams.set('payment', 'success');
   successUrl.searchParams.set('ref', clientRef);
   const failUrl = new URL(returnBase);
   failUrl.searchParams.set('payment', 'fail');
-  params.set('SuccessURL', successUrl.toString());
-  params.set('SuccessURLMethod', 'GET');
-  params.set('FailURL', failUrl.toString());
-  params.set('FailURLMethod', 'GET');
+  const successUrl2 = encodeURIComponent(successUrl.toString());
+  const failUrl2 = encodeURIComponent(failUrl.toString());
+  params.set('SuccessUrl2', successUrl.toString());
+  params.set('SuccessUrl2Method', 'GET');
+  params.set('FailUrl2', failUrl.toString());
+  params.set('FailUrl2Method', 'GET');
+  const signature = md5(
+    merchant + ':' + product.amount + ':' + invId + ':' +
+    successUrl2 + ':GET:' + failUrl2 + ':GET:' + password1 + ':Shp_ref=' + clientRef
+  );
+  params.set('SignatureValue', signature);
+  params.set('Shp_ref', clientRef);
   if (env.ROBOKASSA_IS_TEST === '1') params.set('IsTest', '1');
 
   const response = json({
