@@ -178,7 +178,37 @@ async function saveMemberPlan(env, accessToken, profile, plan) {
   }
 }
 
+let pendingOrderSchemaReady;
+
+async function ensurePendingOrdersSchema(env) {
+  if (!env.DB) throw new Error('D1 database binding is not configured.');
+  if (!pendingOrderSchemaReady) {
+    pendingOrderSchemaReady = (async () => {
+      await env.DB.prepare(`CREATE TABLE IF NOT EXISTS pending_orders (
+        inv_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_ref TEXT NOT NULL UNIQUE,
+        plan TEXT NOT NULL,
+        amount TEXT NOT NULL,
+        customer_contact TEXT NOT NULL,
+        profile_json TEXT NOT NULL,
+        plan_json TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`).run();
+      await env.DB.prepare(
+        'CREATE INDEX IF NOT EXISTS idx_pending_orders_client_ref ON pending_orders(client_ref)'
+      ).run();
+    })().catch(error => {
+      pendingOrderSchemaReady = null;
+      throw error;
+    });
+  }
+  await pendingOrderSchemaReady;
+}
+
 async function checkout(request, env) {
+  await ensurePendingOrdersSchema(env);
   if (!(await rateLimit(request, env, 'checkout', 5, 3600000))) {
     return json({ error: 'Слишком много попыток. Попробуйте позже.' }, 429);
   }
@@ -267,6 +297,7 @@ async function parsePaymentFields(request) {
 
 async function robokassaWebhook(request, env) {
   if (!env.DB || !env.ROBOKASSA_PASSWORD2) return plain('Service unavailable', 503);
+  await ensurePendingOrdersSchema(env);
   const values = await parsePaymentFields(request);
   const outSum = getField(values, 'OutSum');
   const invId = Number(getField(values, 'InvId'));
@@ -328,6 +359,7 @@ async function robokassaWebhook(request, env) {
 
 async function paymentStatus(request, env) {
   if (!env.DB) return json({ error: 'База данных не подключена.' }, 503);
+  await ensurePendingOrdersSchema(env);
   const url = new URL(request.url);
   const ref = clean(url.searchParams.get('ref'), 80);
   const invId = Number(url.searchParams.get('id'));
