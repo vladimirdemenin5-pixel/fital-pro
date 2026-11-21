@@ -30,13 +30,13 @@ jobs:
       - name: Apply existing D1 migrations
         uses: cloudflare/wrangler-action@v4
         with:
-          apiToken: \${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: d1 migrations apply fital-pro-db --remote
 
       - name: Deploy existing Worker and site assets
         uses: cloudflare/wrangler-action@v4
         with:
-          apiToken: \${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy
