@@ -33,6 +33,10 @@ assert.ok(worker.includes('order.status === \'paid\' && subscription?.status ===
 assert.ok(worker.includes('INNER JOIN profiles p ON p.access_token=s.access_token'));
 assert.ok(worker.includes('INNER JOIN weekly_plans w ON w.access_token=s.access_token'));
 assert.ok(worker.includes('s.expires_at>?)'));
+assert.ok(worker.includes("'ROBOKASSA_TEST_PASSWORD' + number"));
+assert.ok(worker.includes("env.ROBOKASSA_IS_TEST === '1'"));
+assert.ok(worker.includes('const password1 = robokassaPassword(env, 1)'));
+assert.ok(worker.includes('const password2 = robokassaPassword(env, 2)'));
 assert.ok(worker.includes('trainingDay: day?.trainingDay === true'));
 assert.ok(worker.includes('trainingDays !== profile.days'));
 assert.ok(worker.includes("Не удалось пересобрать план. Сохранённая программа не изменена."));
