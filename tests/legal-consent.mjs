@@ -40,10 +40,15 @@ assert.ok(worker.includes("'ROBOKASSA_TEST_PASSWORD' + number"));
 assert.ok(worker.includes("env.ROBOKASSA_IS_TEST === '1'"));
 assert.ok(worker.includes('const password1 = robokassaPassword(env, 1)'));
 assert.ok(worker.includes('const password2 = robokassaPassword(env, 2)'));
-assert.ok(worker.includes("params.set('SuccessURL', successUrl.toString())"), 'Robokassa must return the buyer to the site after success');
-assert.ok(worker.includes("params.set('FailURL', failUrl.toString())"), 'Robokassa must return the buyer to the site after a failed payment');
+assert.ok(worker.includes("params.set('SuccessUrl2', successUrl.toString())"), 'Robokassa success return must use the documented SuccessUrl2 parameter');
+assert.ok(worker.includes("params.set('SuccessUrl2Method', 'GET')"), 'Robokassa success return method must be explicit');
+assert.ok(worker.includes("params.set('FailUrl2', failUrl.toString())"), 'Robokassa failed-payment return must use the documented FailUrl2 parameter');
+assert.ok(worker.includes("params.set('FailUrl2Method', 'GET')"), 'Robokassa failed-payment return method must be explicit');
 assert.ok(worker.includes("successUrl.searchParams.set('ref', clientRef)"), 'successful return must carry the order reference for activation polling');
 assert.ok(worker.includes("successUrl.searchParams.set('payment', 'success')"), 'successful return must be distinguishable from a failed payment');
+assert.ok(worker.includes("successUrl2 + ':GET:' + failUrl2 + ':GET:' + password1"), 'SuccessUrl2 and FailUrl2 values and methods must be included in the Robokassa signature before Password #1');
+assert.ok(!worker.includes("params.set('SuccessURL',"), 'legacy unrecognized success return parameter must not be sent');
+assert.ok(!worker.includes("params.set('FailURL',"), 'legacy unrecognized fail return parameter must not be sent');
 
 assert.match(schema, /client_ref TEXT NOT NULL UNIQUE/);
 assert.match(schema, /payment_id TEXT NOT NULL UNIQUE/);
