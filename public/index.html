@@ -100,8 +100,8 @@
           <button class="button button-primary select-plan" type="button" data-plan="PRO">Выбрать PRO <span>↗</span></button>
         </article>
         <article class="tariff-card" data-card-plan="Premium">
-          <div class="tariff-top"><span class="tariff-type">СОПРОВОЖДЕНИЕ</span><span class="tariff-duration">30 ДНЕЙ</span></div>
-          <h3>Premium</h3><p class="tariff-description">Максимум внимания к привычкам и динамике.</p>
+          <div class="tariff-top"><span class="tariff-type">РАСШИРЕННЫЙ ДОСТУП</span><span class="tariff-duration">30 ДНЕЙ</span></div>
+          <h3>Premium</h3><p class="tariff-description">Больше времени для работы с привычками, планом и динамикой.</p>
           <div class="price">3 990 <small>₽</small></div>
           <div class="price-note">разовая оплата · 30 дней доступа</div>
           <ul><li>Персональное меню и тренировки</li><li>План с учётом предпочтений</li><li>ИИ-консультант по питанию и фитнесу</li><li>Дневник веса и активности</li><li>Доступ на 30 дней</li></ul>
@@ -137,7 +137,9 @@
             <label class="field">Тренировок в неделю<select name="days" required><option value="2">2 дня</option><option value="3" selected>3 дня</option><option value="4">4 дня</option><option value="5">5 дней</option><option value="6">6 дней</option><option value="7">7 дней</option></select></label>
             <label class="field field-wide">Питание, аллергии и пожелания<textarea name="preferences" rows="3" maxlength="700" placeholder="Например: не ем рыбу, аллергия на орехи, предпочитаю простые блюда. Если ограничений нет — оставьте пустым."></textarea></label>
           </div>
-          <p class="form-consent">Отправляя анкету, вы подтверждаете, что указали корректные данные. Программа носит информационный характер и не заменяет медицинскую консультацию.</p>
+          <p class="form-consent">Указывайте только сведения, необходимые для составления программы. Не вводите диагнозы, результаты обследований и медицинские документы. Сервис не заменяет медицинскую консультацию.</p>
+          <label class="form-consent form-consent-check"><input name="pd_consent" type="checkbox" required> <span>Согласен(а) на обработку персональных данных по <a href="/privacy.html" target="_blank" rel="noopener">Политике обработки персональных данных</a>.</span></label>
+          <label class="form-consent form-consent-check"><input name="offer_accepted" type="checkbox" required> <span>Принимаю условия <a href="/oferta.html" target="_blank" rel="noopener">публичной оферты</a> и <a href="/delivery-refund.html" target="_blank" rel="noopener">условия оказания услуг и возврата</a>.</span></label>
           <button class="button button-primary button-full" id="generateButton" type="submit">Создать мой план с ИИ <span>↗</span></button>
           <p class="form-error" id="formError" role="alert"></p>
         </form>
@@ -214,7 +216,7 @@
     </section>
   </main>
 
-  <footer class="site-footer"><a class="brand" href="/"><span class="brand-mark">F</span><span>FITAL<span class="brand-light">PRO</span></span></a><p>Персональное питание и фитнес с поддержкой ИИ.</p><span>© 2026 Fital Pro</span></footer>
+  <footer class="site-footer"><a class="brand" href="/"><span class="brand-mark">F</span><span>FITAL<span class="brand-light">PRO</span></span></a><p>Персональное питание и фитнес с поддержкой ИИ.</p><nav class="footer-legal" aria-label="Юридическая информация"><a href="/oferta.html">Оферта</a><a href="/privacy.html">Политика ПДн</a><a href="/delivery-refund.html">Оплата и возврат</a><a href="/requisites.html">Реквизиты</a></nav><span>© 2026 Fital Pro</span></footer>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>
