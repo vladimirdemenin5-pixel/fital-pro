@@ -1,4 +1,4 @@
-name: Fital Pro production deploy
+name: Fital Pro production deploy (retry)
 
 on:
   pull_request:
