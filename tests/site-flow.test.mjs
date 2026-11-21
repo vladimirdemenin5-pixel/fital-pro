@@ -291,6 +291,24 @@ test('questionnaire API generates the exact tariff duration and persists the AI 
   }
 });
 
+
+test('questionnaire API does not save an incomplete AI response as a usable plan', async () => {
+  const DB = fakePlanPreviewDb();
+  let aiCalls = 0;
+  const response = await workerModule.fetch(new Request('https://preview.example/api/plan-preview', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      pd_consent: 'on', name: 'Тест', sex: 'male', age: 30, height: 180, weight: 80,
+      activity: 'medium', goal: 'maintain', plan: 'Питание'
+    })
+  }), { DB, AI: { async run() { aiCalls += 1; return { response: '{"week":[' }; } } });
+  const result = await response.json();
+  assert.equal(response.status, 502);
+  assert.match(result.error, /AI/);
+  assert.equal(aiCalls, 1);
+  assert.equal(DB.state.drafts.length, 0);
+});
+
 test('questionnaire API returns a clear 503 when Preview D1 migrations are missing and does not call AI', async () => {
   let aiCalls = 0;
   const DB = { prepare() { return { bind() { return this; }, async first() { throw new Error('no such table: request_log'); } }; } };
