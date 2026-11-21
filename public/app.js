@@ -9,13 +9,15 @@ $$('#nav a').forEach(a=>a.addEventListener('click',()=>menu?.classList.remove('o
 const PLAN_DURATIONS={'Питание':7,PRO:14,Premium:30};
 const PLAN_LABELS={'Питание':'Питание',PRO:'PRO',Premium:'Premium'};
 function syncSelectedPlan(code){
- if(!PLAN_DURATIONS[code])return;
- const picker=$('#planSelect');if(picker)picker.value=code;
- const trainingFields=$('#trainingFields');if(trainingFields)trainingFields.hidden=code==='Питание';
- const trainingDays=form?.elements?.days;if(trainingDays)trainingDays.required=code!=='Питание';
- localStorage.setItem('fitalpro_selected_plan',code);
+ const selected=PLAN_DURATIONS[code]?code:'';
+ const picker=$('#planSelect');if(picker)picker.value=selected;
+ const trainingFields=$('#trainingFields');if(trainingFields)trainingFields.hidden=!selected||selected==='Питание';
+ const trainingDays=form?.elements?.days;if(trainingDays)trainingDays.required=!!selected&&selected!=='Питание';
+ const submit=$('#planSubmit');if(submit)submit.disabled=!selected;
+ if(selected)localStorage.setItem('fitalpro_selected_plan',selected);
+ else localStorage.removeItem('fitalpro_selected_plan');
  const note=$('#selectedPlanNote');
- if(note)note.textContent='Выбран тариф '+PLAN_LABELS[code]+' — программа на '+PLAN_DURATIONS[code]+' дней.';
+ if(note)note.textContent=selected?'Выбран тариф '+PLAN_LABELS[selected]+' — программа на '+PLAN_DURATIONS[selected]+' дней.':'Сначала выберите тариф выше. После выбора откроется анкета.';
 }
 $$('[data-plan]').forEach(b=>b.addEventListener('click',()=>{
  if(token()){
@@ -32,8 +34,8 @@ const form=$('#profileForm'),note=$('#profileNote'),planCard=$('#planCard'),empt
 let currentDraft=localStorage.getItem('fitalpro_plan_draft')||'';
 let currentProfile=null;
 try{currentProfile=JSON.parse(localStorage.getItem('fitalpro_profile')||'null');if(currentProfile&&form)Object.entries(currentProfile).forEach(([k,v])=>{const el=form.elements[k];if(el&&el.type!=='checkbox')el.value=v;});}catch(_){}
-const savedPlan=localStorage.getItem('fitalpro_selected_plan');
-syncSelectedPlan(PLAN_DURATIONS[savedPlan]?savedPlan:($('#planSelect')?.value||'PRO'));
+const savedPlan=localStorage.getItem('fitalpro_selected_plan')||currentProfile?.plan||'';
+syncSelectedPlan(savedPlan);
 function syncPaidFeatures(plan){
  const enhanced=['PRO','Premium'].includes(plan);
  const progressBox=$('#progressBox');if(progressBox)progressBox.hidden=!enhanced;
@@ -126,7 +128,8 @@ async function requestPlan(data){
  const button=$('#planSubmit');button.disabled=true;button.textContent='ИИ составляет план…';note.textContent='Проверяем анкету и формируем меню и рекомендации.';
  try{
   const paid=!!token();
-  const planCode=paid?(localStorage.getItem('fitalpro_subscription_plan')||localStorage.getItem('fitalpro_selected_plan')||'PRO'):(data.plan||$('#planSelect')?.value||localStorage.getItem('fitalpro_selected_plan')||'PRO');
+  const planCode=paid?(localStorage.getItem('fitalpro_subscription_plan')||localStorage.getItem('fitalpro_selected_plan')||''):(data.plan||$('#planSelect')?.value||localStorage.getItem('fitalpro_selected_plan')||'');
+  if(!PLAN_DURATIONS[planCode])throw new Error('Сначала выберите тариф.');
   const payload={...data,plan:planCode};
   if(!paid){currentDraft='';localStorage.removeItem('fitalpro_plan_draft');localStorage.removeItem('fitalpro_plan_code');}
   const response=await fetch(paid?'/api/profile':'/api/plan-preview',{method:'POST',headers:{'Content-Type':'application/json',...(paid?{Authorization:'Bearer '+token()}:{})},body:JSON.stringify(payload)});
@@ -144,7 +147,8 @@ async function requestPlan(data){
 form?.addEventListener('submit',e=>{
  e.preventDefault();if(!$('#consent').checked){note.textContent='Подтвердите согласие и возраст 18+.';return;}
  const data=Object.fromEntries(new FormData(form).entries());
- const selectedPlan=$('#planSelect')?.value||localStorage.getItem('fitalpro_selected_plan')||'PRO';
+ const selectedPlan=$('#planSelect')?.value||localStorage.getItem('fitalpro_selected_plan')||'';
+ if(!PLAN_DURATIONS[selectedPlan]){note.textContent='Сначала выберите один из тарифов: Питание, PRO или Premium.';$('#plans')?.scrollIntoView({behavior:'smooth'});return;}
  for(const key of ['age','height','weight'])data[key]=Number(data[key]);
  if(selectedPlan!=='Питание')data.days=Number(data.days);
  if(data.age<18||data.age>80||(selectedPlan!=='Питание'&&(data.days<2||data.days>7))){note.textContent='Проверьте возраст и количество тренировок в неделю.';return;}
