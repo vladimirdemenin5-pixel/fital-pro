@@ -49,6 +49,13 @@ assert.ok(worker.includes('await saveMemberPlan(env, accessToken, profile, plan)
 assert.ok(worker.includes("UPDATE pending_orders SET status='paid'"));
 assert.ok(worker.includes('INNER JOIN profiles p'));
 assert.ok(worker.includes('INNER JOIN weekly_plans w'));
+assert.ok(worker.includes("if (!['PRO', 'Premium'].includes(sub.plan)) return json({ error: 'Дневник прогресса доступен на тарифах PRO и Premium.' }, 403)"));
+assert.ok(worker.includes("if (!['PRO', 'Premium'].includes(sub.plan)) return json({ error: 'ИИ-консультант доступен на тарифах PRO и Premium.' }, 403)"));
+assert.ok(app.includes("const advancedFeatures = ['PRO', 'Premium'].includes(subscription.plan)"));
+assert.ok(app.includes("$('#progressTool').classList.toggle('is-hidden', !advancedFeatures)"));
+assert.ok(app.includes("$('#chatTool').classList.toggle('is-hidden', !advancedFeatures)"));
+assert.ok(html.includes('id="progressTool"'));
+assert.ok(html.includes('id="chatTool"'));
 assert.ok(worker.includes('trainingDay: day?.trainingDay === true'));
 assert.ok(worker.includes('trainingDays !== profile.days'));
 assert.ok(worker.includes("Не удалось пересобрать план. Сохранённая программа не изменена."));
