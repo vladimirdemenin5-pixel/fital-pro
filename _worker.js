@@ -124,7 +124,7 @@ function extractAiText(result) {
   return '';
 }
 
-async function runPlanModel(env, prompt) {
+async function runPlanModel(env, prompt, profile, planKey) {
   const messages = [
     { role: 'system', content: 'Ты Fital Pro. Отвечай только валидным JSON без Markdown и пояснений.' },
     { role: 'user', content: prompt }
@@ -139,8 +139,21 @@ async function runPlanModel(env, prompt) {
         temperature: 0.25
       });
       const text = extractAiText(result);
-      if (text) return text;
-      lastError = new Error('Модель вернула пустой ответ: ' + model);
+      const normalized = text.replace(/^\\s*```(?:json)?\\s*/i, '').replace(/\\s*```\\s*$/, '').trim();
+      const match = normalized.match(/\\{[\\s\\S]*\\}/);
+      if (match) {
+        try {
+          const parsed = JSON.parse(match[0]);
+          const week = Array.isArray(parsed.week) ? parsed.week : [];
+          const complete = week.length === 7 && week.every(day =>
+            day?.breakfast && day?.lunch && day?.snack && day?.dinner && day?.workout
+          );
+          const trainingDays = week.filter(day => day?.trainingDay === true).length;
+          const correctTrainingCount = planKey === 'Питание' || trainingDays === profile.days;
+          if (complete && correctTrainingCount) return text;
+        } catch {}
+      }
+      lastError = new Error('Модель вернула неполный или некорректный JSON: ' + model);
     } catch (error) {
       lastError = error;
       console.error('Fital Pro AI model failed:', model, error?.message || 'unknown error');
@@ -170,7 +183,7 @@ async function generateAiPlan(profile, planKey, env) {
     'ТАРИФ: ' + planKey
   ].join('\n');
 
-  const raw = await runPlanModel(env, prompt);
+  const raw = await runPlanModel(env, prompt, profile, planKey);
   const normalized = raw.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
   const match = normalized.match(/\{[\s\S]*\}/);
   if (!match) throw new Error('ИИ вернул ответ без структуры плана. Повторите отправку анкеты.');
