@@ -1,0 +1,50 @@
+name: Apply Fital Pro Preview D1 migrations
+
+on:
+  push:
+    branches:
+      - robokassa-safe-repair-2026-11-19
+    paths:
+      - .github/preview-d1-migration.trigger
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fital-pro-preview-d1-migrations
+  cancel-in-progress: false
+
+jobs:
+  migrate-preview:
+    if: contains(github.event.head_commit.message, '[apply-preview-d1]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Check out the existing Fital Pro branch
+        uses: actions/checkout@v4
+
+      - name: Verify Cloudflare credentials are present
+        shell: bash
+        run: |
+          test -n "${CLOUDFLARE_API_TOKEN:-}" || { echo "::error::Missing CLOUDFLARE_API_TOKEN repository secret."; exit 1; }
+          test -n "${CLOUDFLARE_ACCOUNT_ID:-}" || { echo "::error::Missing CLOUDFLARE_ACCOUNT_ID repository secret."; exit 1; }
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install the repository's pinned Wrangler dependency
+        run: npm install --no-audit --no-fund
+
+      - name: List current Preview D1 migration status
+        run: npm run db:migrations:list:preview
+
+      - name: Apply pending migrations to Preview D1 only
+        run: npm run db:migrate:preview
+
+      - name: Verify Preview D1 migration status after apply
+        run: npm run db:migrations:list:preview

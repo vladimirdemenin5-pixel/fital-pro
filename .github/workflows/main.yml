@@ -1,37 +1,43 @@
-name: Deploy Fital Pro to Cloudflare
+name: Validate Fital Pro
 
 on:
   push:
-    branches: [main]
+    branches:
+      - robokassa-safe-repair-2026-11-19
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  deploy:
+  validate:
     runs-on: ubuntu-latest
-    name: Deploy Fital Pro
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - name: Checkout current branch source
+        uses: actions/checkout@v4
 
-      - name: Verify project
-        shell: bash
-        run: |
-          set -e
-
-          test -f _worker.js
-          test -f public/index.html
-          test -f wrangler.jsonc
-          test -d migrations
-
-          echo "Fital Pro project verified successfully."
-
-      - name: Deploy to Cloudflare
-        uses: cloudflare/wrangler-action@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Check Worker and frontend syntax
+        run: npm run check
+
+      - name: Run site-flow regression tests
+        run: npm test
+
+      - name: Validate D1 migrations locally only
+        run: npm run db:migrate:local
+
+      - name: Validate Wrangler configuration without publishing
+        run: npx wrangler deploy --dry-run --outdir .wrangler-dry-run
+
+# This workflow reads the current committed source. It never unpacks release ZIPs,
+# applies migrations to remote D1, or deploys the Worker.

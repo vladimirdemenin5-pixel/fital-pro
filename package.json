@@ -4,13 +4,18 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy && wrangler d1 migrations apply fital-pro-db --remote",
+    "deploy": "wrangler deploy",
     "db:migrate": "wrangler d1 migrations apply fital-pro-db --remote",
     "db:migrate:local": "wrangler d1 migrations apply fital-pro-db --local",
-    "check": "node --check _worker.js && node --check public/app.js",
-    "dry-run": "wrangler deploy --dry-run"
+    "check": "node --check _worker.js && node --check public/app.js && node --check scripts/verify-preview-db.mjs",
+    "build": "npm run check && npm test",
+    "db:migrate:preview": "node scripts/verify-preview-db.mjs && wrangler d1 migrations apply fital-pro-preview-db --remote --config wrangler.preview-migrations.jsonc",
+    "db:migrations:list:preview": "node scripts/verify-preview-db.mjs && wrangler d1 migrations list fital-pro-preview-db --remote --config wrangler.preview-migrations.jsonc",
+    "test": "node --test",
+    "preview": "wrangler preview",
+    "db:migrations:check:preview": "node scripts/verify-preview-db.mjs"
   },
   "devDependencies": {
-    "wrangler": "^4.68.0"
+    "wrangler": "4.135.0"
   }
 }

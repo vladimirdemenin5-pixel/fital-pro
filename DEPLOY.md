@@ -1,57 +1,82 @@
-# Fital Pro — production deployment
+# Fital Pro — безопасная публикация
 
-## 1. Cloudflare login
+## Текущее состояние
 
-Run:
+- Продолжаем существующий Worker `red-waterfall-2af8`.
+- Production D1: `fital-pro-db`.
+- Preview D1: `fital-pro-preview-db`.
+- Сайт находится в `public/`, SQL-миграции — в `migrations/`.
+- PR #1 остаётся Draft; ветка не объединена с `main`.
+- Production Worker и Production D1 этой веткой не изменялись.
 
-```bash
-npx wrangler login
-```
-
-## 2. Deploy
+## Проверка исходного кода
 
 ```bash
 npm install
-npm run deploy
+npm run check
+npm test
+npm run build
 ```
 
-Wrangler can automatically provision supported resources when the configuration declares bindings without IDs. If D1 is not auto-provisioned in your account, create `fital-pro-db` in D1 and add its `database_id` to `wrangler.jsonc`.
+Build больше не извлекает содержимое `Fital_Pro_PRODUCTION_GITHUB_READY.zip`. Архив оставлен в репозитории как старый артефакт, но не используется для сборки. Скрипт `scripts/extract-release.mjs` отключён, поскольку он мог затереть текущие файлы сайта и миграций.
 
-## 3. Apply database migrations
+## Preview: сначала тестовая среда
 
-```bash
-npm run db:migrate
-```
+Текущая ветка содержит Preview-настройки в `wrangler.jsonc`:
 
-## 4. Secrets
+- отдельная D1 `fital-pro-preview-db`;
+- Workers AI binding;
+- `ROBOKASSA_IS_TEST=1`;
+- test payment mode.
 
-Set these as Cloudflare secrets, never in HTML/JS:
+В Cloudflare Preview Base добавляются отдельные Secrets:
 
-```bash
-npx wrangler secret put YOOKASSA_SHOP_ID
-npx wrangler secret put YOOKASSA_SECRET_KEY
-```
+- `ROBOKASSA_MERCHANT_LOGIN`;
+- `ROBOKASSA_TEST_PASSWORD1`;
+- `ROBOKASSA_TEST_PASSWORD2`.
 
-## 5. YooKassa webhook
+Не устанавливайте тестовые пароли как Production Secrets и не копируйте live-пароли в Preview.
 
-Set the webhook URL to:
+Порядок:
 
-`https://YOUR_WORKER_DOMAIN/webhooks/yookassa`
+1. `npm run db:migrations:check:preview` — проверить точное совпадение имени и ID Preview D1 в конфигурациях, отличие от Production и последовательность нумерации SQL-файлов.
+2. `npm run db:migrations:list:preview` — просмотреть ожидающие миграции; команда повторно проверяет целевую базу и обращается к `fital-pro-preview-db` по точному имени.
+3. `npm run db:migrate:preview` — применить ожидающие миграции только к Preview D1 после просмотра списка. Wrangler ведёт журнал `d1_migrations` и создаёт резервную копию.
+4. `npm run db:migrations:list:preview` — убедиться, что ожидающих миграций не осталось.
+5. `npm run preview` — создать Preview этого Worker по текущей ветке.
+6. Проверить `/health`: AI и D1 должны быть доступны, `paymentMode` должен быть `test`.
+7. Проверить тарифы 7/14/30 дней, генерацию меню, список покупок, корректные права для тренировок, тестовый платёж, POST ResultURL и выдачу доступа.
 
-Enable at least `payment.succeeded`; optionally also `payment.canceled` and `payment.waiting_for_capture`.
+Preview создаётся на существующем Worker через механизм Worker Previews; новый Worker service не создаётся.
 
-## 6. Verify
+## Robokassa
 
-Open:
+В технических настройках магазина:
 
-`https://YOUR_WORKER_DOMAIN/health`
+- Result URL: `https://<preview-host>/webhooks/robokassa`;
+- Result URL method: POST;
+- Result notification password: тестовый Password #2;
+- Success URL: `https://<preview-host>/`, method GET;
+- Fail URL: `https://<preview-host>/?payment=failed`, method GET;
+- hash algorithm должен совпадать с настройкой магазина.
 
-Expected fields:
-- `ok: true`
-- `ai: true`
-- `db: true`
-- `payments: true`
+В Production live checkout закрыт кодом, пока переменная `ROBOKASSA_LIVE_ENABLED` не установлена в `1`. Не включайте её до проверки тестового платежа и публикации реальных реквизитов продавца.
 
-## 7. Custom domain
+## Production release — отдельный этап
 
-After the Worker is verified, attach `fitalpro.ru` as a custom domain in Cloudflare. Do not remove the existing site until the new Worker passes the health, AI, lead and payment tests.
+Только после успешных Preview-проверок и отдельного разрешения:
+
+1. Проверить юридические страницы и реальные реквизиты продавца.
+2. Убедиться, что Production secrets `ROBOKASSA_MERCHANT_LOGIN`, `ROBOKASSA_PASSWORD1`, `ROBOKASSA_PASSWORD2` настроены в Production Worker.
+3. Сверить Production D1 schema и статус миграций.
+4. После явного согласования включить `ROBOKASSA_LIVE_ENABLED=1`.
+5. Отдельно согласовать Production deploy и необходимые Production D1 migrations.
+
+Не запускайте `npm run db:migrate` или `npm run deploy` во время Preview-тестирования. Не выполняйте SQL миграций вручную в D1 Console: это обходит журнал `d1_migrations`.
+
+## GitHub Actions
+
+Workflow проверяет Worker и frontend syntax, выполняет регрессионные тесты, локальную проверку миграций D1 и Wrangler dry-run. Он не разворачивает Worker и не применяет remote D1 migrations.
+
+
+Миграция `0011_one_payment_per_draft.sql` предотвращает создание двух счетов из одного AI-черновика. Она входит в общий список Preview-миграций и не должна применяться к Production до отдельного согласования.

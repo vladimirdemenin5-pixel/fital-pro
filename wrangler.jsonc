@@ -18,19 +18,34 @@
     {
       "binding": "DB",
       "database_name": "fital-pro-db",
-"database_id": "d2bdb339-bc7b-420e-be7f-0496ce46a09b",
+      "database_id": "d2bdb339-bc7b-420e-be7f-0496ce46a09b",
       "migrations_dir": "migrations"
     }
   ],
-  
-"secrets": {
-  "required": [
-    "ROBOKASSA_MERCHANT_LOGIN",
-    "ROBOKASSA_PASSWORD1",
-    "ROBOKASSA_PASSWORD2"
-  ]
-},
+  "previews": {
+    "d1_databases": [
+      {
+        "binding": "DB",
+        "database_name": "fital-pro-preview-db",
+        "database_id": "54bd4cbb-f267-4c1e-af16-cdc9b24953c1",
+        "migrations_dir": "migrations"
+      }
+    ],
+    "ai": {
+      "binding": "AI"
+    },
+    "vars": {
+      "ROBOKASSA_IS_TEST": "1",
+      "ROBOKASSA_LIVE_ENABLED": "0"
+    }
+  },
   "observability": {
     "enabled": true
+  },
+  "build": {
+    "command": "npm run build"
+  },
+  "vars": {
+    "ROBOKASSA_LIVE_ENABLED": "0"
   }
 }
