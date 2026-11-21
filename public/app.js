@@ -329,6 +329,49 @@ async function checkPayment(reference) {
   showToast('Платёж ещё обрабатывается. Личный кабинет обновится после подтверждения.');
 }
 
+$('#recoveryForm').addEventListener('submit', async function (event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = $('#recoveryButton');
+  const message = $('#recoveryMessage');
+  message.textContent = '';
+  button.disabled = true;
+  button.textContent = 'Отправляем…';
+  try {
+    const data = await api('/api/access/recovery', {
+      method: 'POST',
+      body: JSON.stringify({ email: form.elements.email.value })
+    });
+    message.textContent = data.message || 'Если для этого email есть активная подписка, письмо будет отправлено.';
+    form.reset();
+  } catch (error) {
+    message.textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Отправить ссылку';
+  }
+});
+
+async function confirmAccessRecovery(token) {
+  try {
+    const data = await api('/api/access/recovery/confirm', {
+      method: 'POST',
+      body: JSON.stringify({ token: token })
+    });
+    if (!data.access_token) throw new Error('Не удалось восстановить доступ.');
+    localStorage.setItem(TOKEN_KEY, data.access_token);
+    localStorage.removeItem(REF_KEY);
+    history.replaceState({}, '', '/');
+    showToast('Доступ восстановлен.');
+    await loadAccount();
+    $('#account').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (error) {
+    history.replaceState({}, '', '/');
+    $('#recoveryMessage').textContent = error.message;
+    $('#restoreAccess').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
 $('#reloadPlan').addEventListener('click', async function () {
   try {
     const data = await api('/api/plan');
@@ -419,6 +462,11 @@ $('#chatForm').addEventListener('submit', async function (event) {
 (async function init() {
   choosePlan('PRO');
   const params = new URLSearchParams(window.location.search);
+  const recoveryToken = params.get('restore');
+  if (recoveryToken) {
+    await confirmAccessRecovery(recoveryToken);
+    return;
+  }
   if (params.get('payment') === 'fail') {
     localStorage.removeItem(REF_KEY);
     showToast('Платёж не завершён. Вы можете попробовать ещё раз.');
