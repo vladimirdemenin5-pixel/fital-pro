@@ -165,6 +165,17 @@
       <p class="form-error" id="paymentError" role="alert"></p>
     </section>
 
+    <section class="section restore-section" id="restoreAccess">
+      <div class="restore-panel">
+        <div><div class="eyebrow"><span class="eyebrow-dot"></span> УЖЕ ЕСТЬ ПОДПИСКА?</div><h2>Восстановить<br><em>доступ.</em></h2><p>Введите email, указанный при покупке. Мы отправим одноразовую ссылку для входа. Ссылка действует 15 минут.</p></div>
+        <form id="recoveryForm">
+          <label class="field">Email при покупке<input name="email" type="email" maxlength="160" autocomplete="email" placeholder="name@example.com" required></label>
+          <button class="button button-primary button-full" id="recoveryButton" type="submit">Отправить ссылку</button>
+          <p class="form-error" id="recoveryMessage" role="status" aria-live="polite"></p>
+        </form>
+      </div>
+    </section>
+
     <section class="section account-section is-hidden" id="account">
       <div class="section-heading">
         <div><div class="eyebrow"><span class="eyebrow-dot"></span> ЛИЧНЫЙ КАБИНЕТ</div><h2>Ваш план.<br><em>Каждый день.</em></h2></div>
