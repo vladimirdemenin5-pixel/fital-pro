@@ -32,6 +32,8 @@
 - `POST /api/checkout` — анкета, генерация AI-плана и создание ссылки Robokassa.
 - `POST /webhooks/robokassa` — серверное подтверждение оплаты.
 - `GET /api/payment-status?ref=...`
+- `POST /api/access/recovery` — отправка одноразовой ссылки восстановления на email.
+- `POST /api/access/recovery/confirm` — обмен одноразовой ссылки на токен доступа.
 - `GET /api/me`
 - `GET|POST /api/profile`
 - `GET /api/plan`
@@ -52,6 +54,8 @@
 - `ROBOKASSA_MERCHANT_LOGIN`
 - `ROBOKASSA_PASSWORD1`
 - `ROBOKASSA_PASSWORD2`
+- `RESEND_API_KEY` — ключ Resend для отправки писем восстановления.
+- `FITALPRO_FROM_EMAIL` — подтверждённый адрес отправителя в Resend.
 - Для отдельного Preview: `ROBOKASSA_TEST_PASSWORD1`, `ROBOKASSA_TEST_PASSWORD2` и переменная `ROBOKASSA_IS_TEST=1`.
 
 Не помещайте реальные пароли в GitHub, frontend, `.dev.vars.example` или публичные файлы. Добавляйте их только в Cloudflare Worker → Settings → Variables and Secrets.
@@ -68,11 +72,11 @@ Worker использует Password #1 для создания платежно
 
 ## База данных и публикация
 
-Используется уже существующая D1 `fital-pro-db`, привязанная как `DB`. Таблицы профилей, подписок, платежей и прогресса продолжают использовать прежнюю структуру Fital Pro. Таблица `premium_reviews` создаётся автоматически через существующий D1 binding при первом обращении к Premium-разбору. Таблица `pending_orders`, необходимая для новых заказов Robokassa, создаётся Worker автоматически через существующий D1 binding при первом запросе оплаты.
+Используется уже существующая D1 `fital-pro-db`, привязанная как `DB`. Таблицы профилей, подписок, платежей и прогресса продолжают использовать прежнюю структуру Fital Pro. Таблицы `premium_reviews`, `pending_orders` и `access_recovery_tokens` создаются автоматически через существующий D1 binding при первом обращении к соответствующим функциям. Таблица `pending_orders`, необходимая для новых заказов Robokassa, создаётся Worker автоматически через существующий D1 binding при первом запросе оплаты.
 
 Файл `migrations/0001_init.sql` сохранён для развёртывания чистой базы или ручного управления схемой. Обычная публикация Worker не требует отдельного D1 Admin API token. Для новой пустой базы миграцию можно применить командой `npm run db:migrate` с учётными данными, имеющими D1 edit permissions.
 
-После публикации используются уже сохранённые секреты Worker Robokassa и существующие настройки магазина.
+Для восстановления доступа дополнительно требуется подключить Resend: подтвердить домен отправителя и добавить `RESEND_API_KEY` и `FITALPRO_FROM_EMAIL` в секреты/переменные существующего Worker. Пока эти два значения не заданы, восстановление по email не отправляет письма. После публикации используются уже сохранённые секреты Worker Robokassa и существующие настройки магазина.
 
 Команды для локальной разработки: `npm install`, `npm run db:migrate`, `npm run dev`.
 
