@@ -140,7 +140,7 @@ async function runPlanModel(env, prompt, profile, planKey) {
       });
       const text = extractAiText(result);
       const normalized = text.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
-      const match = normalized.match(/\{[\s\\S]*\}/);
+      const match = normalized.match(/\{[\s\S]*\}/);
       if (match) {
         try {
           const parsed = JSON.parse(match[0]);
