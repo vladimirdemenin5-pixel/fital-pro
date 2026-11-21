@@ -101,10 +101,10 @@
         </article>
         <article class="tariff-card" data-card-plan="Premium">
           <div class="tariff-top"><span class="tariff-type">РАСШИРЕННЫЙ ДОСТУП</span><span class="tariff-duration">30 ДНЕЙ</span></div>
-          <h3>Premium</h3><p class="tariff-description">Больше времени для работы с привычками, планом и динамикой.</p>
+          <h3>Premium</h3><p class="tariff-description">Всё из PRO плюс регулярный ИИ-анализ динамики и следующие шаги.</p>
           <div class="price">3 990 <small>₽</small></div>
           <div class="price-note">разовая оплата · 30 дней доступа</div>
-          <ul><li>Персональное меню и тренировки</li><li>План с учётом предпочтений</li><li>ИИ-консультант по питанию и фитнесу</li><li>Дневник веса и активности</li><li>Доступ на 30 дней</li></ul>
+          <ul><li>Все возможности тарифа PRO</li><li>Еженедельный ИИ-разбор дневника</li><li>Анализ веса, питания и тренировок</li><li>Персональные ориентиры на следующую неделю</li><li>История пяти последних разборов</li><li>Доступ на 30 дней</li></ul>
           <button class="button button-outline select-plan" type="button" data-plan="Premium">Выбрать Premium <span>↗</span></button>
         </article>
       </div>
@@ -201,6 +201,14 @@
         <div class="tool-card chat-card" id="chatTool"><span class="tool-icon">✳</span><h3>Fital AI — ваш консультант</h3><p>Задайте вопрос по вашему плану питания или тренировок.</p>
           <form id="chatForm"><label class="field">Ваш вопрос<textarea name="message" rows="3" maxlength="2000" placeholder="Например: чем заменить курицу в обеде?" required></textarea></label><button class="button button-primary button-full" type="submit">Спросить ИИ ↗</button></form>
           <div id="chatReply" class="chat-reply" aria-live="polite"></div>
+        </div>
+        <div class="tool-card premium-review-card is-hidden" id="premiumReviewTool">
+          <span class="tool-icon">✦</span><h3>Еженедельный разбор Premium</h3>
+          <p>Fital AI сопоставит записи дневника с вашим планом, выделит динамику и подготовит конкретные ориентиры на следующую неделю.</p>
+          <button class="button button-primary button-full" id="premiumReviewButton" type="button">Подготовить разбор недели ↗</button>
+          <p class="tool-message" id="premiumReviewMessage" role="status">Для разбора нужны минимум две записи дневника за текущую неделю.</p>
+          <div id="premiumReviewResult" aria-live="polite"></div>
+          <div id="premiumReviewHistory"></div>
         </div>
       </div>
     </section>
