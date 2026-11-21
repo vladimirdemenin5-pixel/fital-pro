@@ -120,7 +120,7 @@ function renderProgressHistory(items) {
   }
   container.innerHTML = items.slice(0, 10).map(function (item) {
     const rawDate = String(item.date || '');
-    const parsedDate = /^\\d{4}-\\d{2}-\\d{2}$/.test(rawDate)
+    const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDate)
       ? new Date(rawDate + 'T00:00:00')
       : null;
     const dateLabel = parsedDate && !Number.isNaN(parsedDate.getTime())
