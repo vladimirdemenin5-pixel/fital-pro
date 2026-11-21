@@ -27,7 +27,11 @@ async function api(path, options) {
   const response = await fetch(path, config);
   let data = {};
   try { data = await response.json(); } catch {}
-  if (!response.ok) throw new Error(data.error || 'Не удалось выполнить запрос.');
+  if (!response.ok) {
+    const error = new Error(data.error || 'Не удалось выполнить запрос.');
+    error.status = response.status;
+    throw error;
+  }
   return data;
 }
 
@@ -107,6 +111,43 @@ $('#paymentButton').addEventListener('click', function () {
   window.location.href = checkoutData.confirmation_url;
 });
 
+function renderProgressHistory(items) {
+  const container = $('#progressHistory');
+  if (!container) return;
+  if (!Array.isArray(items) || !items.length) {
+    container.innerHTML = '<p class="progress-empty">Записей пока нет. Сохраните первый результат выше.</p>';
+    return;
+  }
+  container.innerHTML = items.slice(0, 10).map(function (item) {
+    const rawDate = String(item.date || '');
+    const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDate)
+      ? new Date(rawDate + 'T00:00:00')
+      : null;
+    const dateLabel = parsedDate && !Number.isNaN(parsedDate.getTime())
+      ? parsedDate.toLocaleDateString('ru-RU')
+      : escapeHtml(rawDate || 'Дата не указана');
+    const weight = Number(item.weight);
+    const meal = Number(item.completed_meal) === 1 ? 'питание отмечено' : 'питание не отмечено';
+    const workout = Number(item.completed_workout) === 1 ? 'тренировка отмечена' : 'тренировка не отмечена';
+    return '<article class="progress-entry">' +
+      '<div class="progress-entry-top"><strong>' + dateLabel + '</strong><b>' +
+      (Number.isFinite(weight) ? weight.toLocaleString('ru-RU') + ' кг' : '—') +
+      '</b></div><small>' + meal + ' · ' + workout + '</small></article>';
+  }).join('');
+}
+
+async function loadProgressHistory() {
+  const container = $('#progressHistory');
+  if (!container) return;
+  container.textContent = 'Загружаем историю…';
+  try {
+    const data = await api('/api/progress');
+    renderProgressHistory(data.items || []);
+  } catch {
+    container.textContent = 'Историю прогресса пока не удалось загрузить.';
+  }
+}
+
 function renderFullPlan(plan) {
   const days = Array.isArray(plan.week) ? plan.week : [];
   $('#fullPlan').innerHTML = days.map(function (day) {
@@ -144,9 +185,14 @@ async function loadAccount() {
     $('#accountStatus').textContent = '● Подписка активна';
     renderFullPlan(planData.plan);
     $('#account').classList.remove('is-hidden');
+    await loadProgressHistory();
     return true;
-  } catch {
-    localStorage.removeItem(TOKEN_KEY);
+  } catch (error) {
+    if (error.status === 401 || error.status === 403) {
+      localStorage.removeItem(TOKEN_KEY);
+    } else {
+      showToast('Временная ошибка загрузки. Доступ сохранён — обновите страницу позже.');
+    }
     return false;
   }
 }
@@ -198,6 +244,7 @@ $('#progressForm').addEventListener('submit', async function (event) {
     });
     $('#progressMessage').textContent = 'Запись сохранена.';
     event.currentTarget.reset();
+    await loadProgressHistory();
   } catch (error) {
     $('#progressMessage').textContent = error.message;
   }

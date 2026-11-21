@@ -174,6 +174,7 @@
         <div class="tool-card"><span class="tool-icon">◉</span><h3>Дневник прогресса</h3><p>Фиксируйте вес и выполнение программы.</p>
           <form id="progressForm"><label class="field">Вес сегодня, кг<input type="number" name="weight" min="35" max="250" step="0.1" required></label><label class="check-field"><input type="checkbox" name="completed_meal"> Соблюдал(а) питание</label><label class="check-field"><input type="checkbox" name="completed_workout"> Выполнил(а) тренировку</label><button class="button button-outline button-full" type="submit">Сохранить прогресс</button></form>
           <p class="tool-message" id="progressMessage"></p>
+          <div class="progress-history" id="progressHistory" aria-live="polite"></div>
         </div>
         <div class="tool-card chat-card"><span class="tool-icon">✳</span><h3>Fital AI — ваш консультант</h3><p>Задайте вопрос по вашему плану питания или тренировок.</p>
           <form id="chatForm"><label class="field">Ваш вопрос<textarea name="message" rows="3" maxlength="2000" placeholder="Например: чем заменить курицу в обеде?" required></textarea></label><button class="button button-primary button-full" type="submit">Спросить ИИ ↗</button></form>
