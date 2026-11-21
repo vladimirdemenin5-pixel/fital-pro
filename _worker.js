@@ -18,6 +18,13 @@ const plain = (value, status = 200) => new Response(value, {
 const clean = (value, max = 500) => String(value ?? '').trim().slice(0, max);
 const md5 = (value) => createHash('md5').update(String(value), 'utf8').digest('hex').toUpperCase();
 
+function robokassaPassword(env, number) {
+  const key = env.ROBOKASSA_IS_TEST === '1'
+    ? 'ROBOKASSA_TEST_PASSWORD' + number
+    : 'ROBOKASSA_PASSWORD' + number;
+  return clean(env[key], 200);
+}
+
 function sameHash(a, b) {
   const left = String(a || '').toUpperCase();
   const right = String(b || '').toUpperCase();
@@ -230,7 +237,7 @@ async function checkout(request, env) {
     return json({ error: 'Слишком много попыток. Попробуйте позже.' }, 429);
   }
   if (!env.DB) return json({ error: 'База данных пока не подключена. Оплата не создавалась.' }, 503);
-  if (!env.ROBOKASSA_MERCHANT_LOGIN || !env.ROBOKASSA_PASSWORD1 || !env.ROBOKASSA_PASSWORD2) {
+  const password1 = robokassaPassword(env, 1);\n  if (!env.ROBOKASSA_MERCHANT_LOGIN || !password1 || !robokassaPassword(env, 2)) {
     return json({ error: 'Приём оплаты ещё не активирован: не настроены секреты Robokassa.' }, 503);
   }
 
@@ -270,7 +277,7 @@ async function checkout(request, env) {
 
   const merchant = clean(env.ROBOKASSA_MERCHANT_LOGIN, 120);
   const signature = md5(
-    merchant + ':' + product.amount + ':' + invId + ':' + env.ROBOKASSA_PASSWORD1 + ':Shp_ref=' + clientRef
+    merchant + ':' + product.amount + ':' + invId + ':' + password1 + ':Shp_ref=' + clientRef
   );
   const params = new URLSearchParams();
   params.set('MerchantLogin', merchant);
@@ -318,7 +325,7 @@ async function parsePaymentFields(request) {
 }
 
 async function robokassaWebhook(request, env) {
-  if (!env.DB || !env.ROBOKASSA_PASSWORD2) return plain('Service unavailable', 503);
+  const password2 = robokassaPassword(env, 2);\n  if (!env.DB || !password2) return plain('Service unavailable', 503);
   await ensurePendingOrdersSchema(env);
   const values = await parsePaymentFields(request);
   const outSum = getField(values, 'OutSum');
@@ -335,7 +342,7 @@ async function robokassaWebhook(request, env) {
 
   const shpKeys = Object.keys(values).filter(key => /^Shp_/i.test(key)).sort((a, b) => a.localeCompare(b));
   const shpPart = shpKeys.map(key => key + '=' + String(values[key])).join(':');
-  const base = outSum + ':' + invId + ':' + env.ROBOKASSA_PASSWORD2 + (shpPart ? ':' + shpPart : '');
+  const base = outSum + ':' + invId + ':' + password2 + (shpPart ? ':' + shpPart : '');
   if (!sameHash(md5(base), receivedSignature)) return plain('Invalid signature', 403);
 
   const suppliedRef = getField(values, 'Shp_ref');
@@ -531,7 +538,7 @@ export default {
           service: 'Fital Pro',
           ai: !!env.AI,
           db: !!env.DB,
-          payments: !!(env.ROBOKASSA_MERCHANT_LOGIN && env.ROBOKASSA_PASSWORD1 && env.ROBOKASSA_PASSWORD2)
+          payments: !!(env.ROBOKASSA_MERCHANT_LOGIN && robokassaPassword(env, 1) && robokassaPassword(env, 2))
         });
       }
       if (url.pathname === '/api/checkout' && request.method === 'POST') return await checkout(request, env);
