@@ -6,6 +6,7 @@ const html = read('public/index.html');
 const app = read('public/app.js');
 const worker = read('_worker.js');
 const schema = read('migrations/0001_init.sql');
+const premiumSchema = read('migrations/0002_premium_reviews.sql');
 const offer = read('public/oferta.html');
 
 for (const name of ['pd_consent', 'offer_accepted']) {
@@ -95,6 +96,9 @@ assert.ok(chatSource.includes('сначала опирайся на сохран
 assert.ok(worker.includes("async function premiumReviewApi(request, env)"), 'Premium weekly review API must exist');
 assert.ok(worker.includes("sub.plan !== 'Premium'"), 'Premium review must be restricted to Premium');
 assert.ok(worker.includes("CREATE TABLE IF NOT EXISTS premium_reviews"), 'Premium review history must persist in D1');
+assert.ok(premiumSchema.includes('UNIQUE(access_token, period_start)'), 'Premium review migration must enforce one report per week');
+assert.ok(worker.includes('stats,\n    disclaimer:'), 'Saved Premium review must retain its numeric diary summary');
+assert.ok(worker.includes('messages: ['), 'Premium review must use the chat model message format');
 assert.ok(worker.includes("UNIQUE(access_token, period_start)"), 'Only one review may be saved per member per week');
 assert.ok(worker.includes("progress.length < 2"), 'Weekly review requires at least two diary entries');
 assert.ok(worker.includes("url.pathname === '/api/premium/review'"), 'Premium review route must be registered');
