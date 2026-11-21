@@ -110,4 +110,18 @@ assert.ok(html.includes('id="premiumReviewTool"'));
 assert.ok(html.includes('Еженедельный ИИ-разбор дневника'));
 assert.ok(offer.includes('автоматизированный ИИ-разбор дневника'));
 
-console.log('PASS: legal/payment protections, AI plans, and Premium weekly review');
+
+assert.ok(worker.includes("async function accessRecovery(request, env, confirm = false)"), 'email recovery API must exist');
+assert.ok(worker.includes("access_recovery_tokens"), 'one-time recovery tokens must be stored in D1');
+assert.ok(worker.includes("expires_at>?"), 'recovery links must expire');
+assert.ok(worker.includes("used_at IS NULL"), 'recovery links must be one-time use');
+assert.ok(worker.includes("RESEND_API_KEY") && worker.includes("FITALPRO_FROM_EMAIL"), 'recovery email must use server-side provider secrets');
+assert.ok(worker.includes("lower(trim(customer_contact))=?"), 'recovery must match the email used at purchase');
+assert.ok(worker.includes("url.pathname === '/api/access/recovery'"), 'recovery request route must be registered');
+assert.ok(worker.includes("url.pathname === '/api/access/recovery/confirm'"), 'recovery confirmation route must be registered');
+assert.ok(app.includes("api('/api/access/recovery'"), 'recovery request form must call the API');
+assert.ok(app.includes("api('/api/access/recovery/confirm'"), 'recovery link must exchange to an access token');
+assert.ok(html.includes('id="restoreAccess"') && html.includes('id="recoveryForm"'), 'recovery form must be visible on the public site');
+assert.ok(read('migrations/0003_access_recovery.sql').includes('CREATE TABLE IF NOT EXISTS access_recovery_tokens'));
+
+console.log('PASS: legal/payment protections, AI plans, Premium weekly review, and email access recovery');
