@@ -62,7 +62,8 @@ assert.ok(worker.includes('function extractAiText(result)'));
 assert.ok(worker.includes("result?.choices?.[0]?.message?.content"));
 assert.ok(worker.includes("messages,"));
 assert.ok(worker.includes("'@cf/zai-org/glm-4.7-flash'"));
-assert.ok(worker.includes('runPlanModel(env, prompt)'));
+assert.ok(worker.includes('runPlanModel(env, prompt, profile, planKey)'));
+assert.ok(worker.includes('correctTrainingCount'));
 
 assert.ok(worker.includes("Не удалось пересобрать план. Сохранённая программа не изменена."));
 assert.ok(worker.includes('Сумма trainingDay=true должна быть ровно'));
