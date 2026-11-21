@@ -27,14 +27,18 @@ $$('[data-plan]').forEach(b=>b.addEventListener('click',()=>{
   $('#profile')?.scrollIntoView({behavior:'smooth'});return;
  }
  const code=b.dataset.plan;syncSelectedPlan(code);
- if(currentProfile&&localStorage.getItem('fitalpro_plan_code')!==code)requestPlan({...currentProfile,plan:code,pd_consent:'on'});
+ note.textContent='Тариф выбран. Заполните анкету и нажмите «Рассчитать мой план».';
  $('#profile')?.scrollIntoView({behavior:'smooth'});
 }));
 const form=$('#profileForm'),note=$('#profileNote'),planCard=$('#planCard'),empty=$('#previewEmpty');
 let currentDraft=localStorage.getItem('fitalpro_plan_draft')||'';
 let currentProfile=null;
 try{currentProfile=JSON.parse(localStorage.getItem('fitalpro_profile')||'null');if(currentProfile&&form)Object.entries(currentProfile).forEach(([k,v])=>{const el=form.elements[k];if(el&&el.type!=='checkbox')el.value=v;});}catch(_){}
-const savedPlan=localStorage.getItem('fitalpro_selected_plan')||currentProfile?.plan||'';
+if(localStorage.getItem('fitalpro_tariff_flow_version')!=='2'){
+ localStorage.removeItem('fitalpro_selected_plan');
+ localStorage.setItem('fitalpro_tariff_flow_version','2');
+}
+const savedPlan=localStorage.getItem('fitalpro_selected_plan')||'';
 syncSelectedPlan(savedPlan);
 function syncPaidFeatures(plan){
  const enhanced=['PRO','Premium'].includes(plan);
