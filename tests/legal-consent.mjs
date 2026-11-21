@@ -58,6 +58,7 @@ assert.match(schema, /CREATE TABLE IF NOT EXISTS weekly_plans/);
 assert.ok(worker.includes('INSERT INTO payments'));
 assert.ok(worker.includes('ON CONFLICT(payment_id) DO NOTHING'));
 assert.ok(worker.includes('await saveMemberPlan(env, accessToken, profile, plan)'));
+assert.ok(worker.includes('await env.DB.batch([profileStatement, planStatement])'), 'profile and weekly plan must be saved atomically in D1');
 assert.ok(worker.includes("UPDATE pending_orders SET status='paid'"));
 assert.ok(worker.includes('INNER JOIN profiles p'));
 assert.ok(worker.includes('INNER JOIN weekly_plans w'));
