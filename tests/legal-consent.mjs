@@ -58,6 +58,13 @@ assert.ok(html.includes('id="progressTool"'));
 assert.ok(html.includes('id="chatTool"'));
 assert.ok(worker.includes('trainingDay: day?.trainingDay === true'));
 assert.ok(worker.includes('trainingDays !== profile.days'));
+assert.ok(worker.includes('function extractAiText(result)'));
+assert.ok(worker.includes("result?.choices?.[0]?.message?.content"));
+assert.ok(worker.includes("messages,"));
+assert.ok(worker.includes("'@cf/zai-org/glm-4.7-flash'"));
+assert.ok(worker.includes('runPlanModel(env, prompt, profile, planKey)'));
+assert.ok(worker.includes('correctTrainingCount'));
+
 assert.ok(worker.includes("Не удалось пересобрать план. Сохранённая программа не изменена."));
 assert.ok(worker.includes('Сумма trainingDay=true должна быть ровно'));
 assert.ok(app.includes("day.trainingDay ? 'Тренировка' : 'Отдых и активность'"));
