@@ -117,7 +117,7 @@ function extractAiText(result) {
   for (const value of candidates) {
     if (typeof value === 'string' && value.trim()) return value.trim();
     if (Array.isArray(value)) {
-      const text = value.map(part => typeof part === 'string' ? part : part?.text || '').filter(Boolean).join('\\n').trim();
+      const text = value.map(part => typeof part === 'string' ? part : part?.text || '').filter(Boolean).join('\n').trim();
       if (text) return text;
     }
   }
@@ -139,8 +139,8 @@ async function runPlanModel(env, prompt, profile, planKey) {
         temperature: 0.25
       });
       const text = extractAiText(result);
-      const normalized = text.replace(/^\\s*```(?:json)?\\s*/i, '').replace(/\\s*```\\s*$/, '').trim();
-      const match = normalized.match(/\\{[\\s\\S]*\\}/);
+      const normalized = text.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+      const match = normalized.match(/\{[\s\\S]*\}/);
       if (match) {
         try {
           const parsed = JSON.parse(match[0]);
