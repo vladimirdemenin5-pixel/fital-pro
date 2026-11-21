@@ -322,7 +322,7 @@ async function checkout(request, env) {
     return json({ error: clean(error.message, 200) }, 400);
   }
   const contact = clean(body?.contact, 160).toLowerCase();
-  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(contact)) return json({ error: 'Укажите корректный email. Он нужен для отправки доступа и его восстановления.' }, 400);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact)) return json({ error: 'Укажите корректный email. Он нужен для отправки доступа и его восстановления.' }, 400);
   const accepted = value => value === true || ['on', 'true', '1'].includes(String(value ?? '').toLowerCase());
   if (!accepted(body?.pd_consent)) return json({ error: 'Необходимо согласие на обработку персональных данных.' }, 400);
   if (!accepted(body?.offer_accepted)) return json({ error: 'Необходимо принять условия публичной оферты.' }, 400);
@@ -749,7 +749,7 @@ async function accessRecovery(request, env, confirm = false) {
   }
   const body = await request.json();
   const email = clean(body?.email, 160).toLowerCase();
-  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return json({ error: 'Укажите корректный email.' }, 400);
   }
   if (!env.RESEND_API_KEY || !env.FITALPRO_FROM_EMAIL) {
