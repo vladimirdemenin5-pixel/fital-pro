@@ -6,7 +6,7 @@
 
 - Frontend: `public/` (HTML, CSS, JavaScript).
 - API и серверная логика: `_worker.js`.
-- Workers AI: binding `AI`, модель Llama 3.1 8B Instruct.
+- Workers AI: binding `AI`, модель `@cf/google/gemma-4-26b-a4b-it`.
 - D1: binding `DB`, база `fital-pro-db`.
 - Оплата: Robokassa с серверной проверкой подписи ResultURL.
 - Telegram не используется.
