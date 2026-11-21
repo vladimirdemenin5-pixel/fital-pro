@@ -4,6 +4,43 @@ const REF_KEY = 'fitalpro_payment_ref';
 const prices = { 'Питание': '990 ₽', 'PRO': '1 990 ₽', 'Premium': '3 990 ₽' };
 let selectedPlan = 'PRO';
 let checkoutData = null;
+let deferredInstallPrompt = null;
+
+const installAppButton = $('#installAppButton');
+if (installAppButton) {
+  const isInstalled = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  if (!isInstalled) {
+    window.addEventListener('beforeinstallprompt', function (event) {
+      event.preventDefault();
+      deferredInstallPrompt = event;
+      installAppButton.classList.remove('is-hidden');
+    });
+    installAppButton.addEventListener('click', async function () {
+      if (!deferredInstallPrompt) return;
+      const promptEvent = deferredInstallPrompt;
+      deferredInstallPrompt = null;
+      installAppButton.disabled = true;
+      try {
+        await promptEvent.prompt();
+        const choice = await promptEvent.userChoice;
+        installAppButton.classList.add('is-hidden');
+        if (choice?.outcome === 'accepted') showToast('Fital Pro добавлен на устройство.');
+        else showToast('Установку можно запустить позже из меню браузера.');
+      } catch {
+        showToast('Откройте меню браузера и выберите «Установить приложение».');
+      } finally {
+        installAppButton.disabled = false;
+      }
+    });
+  } else {
+    installAppButton.classList.add('is-hidden');
+  }
+}
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('/sw.js').catch(function () {});
+  });
+}
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, function (char) {

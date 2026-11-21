@@ -49,3 +49,16 @@
 #intakeForm .form-consent-check a,.footer-legal a{color:#a9c985;text-decoration:underline;text-underline-offset:3px;}
 .footer-legal{display:flex;flex-wrap:wrap;gap:12px;font-size:10px;}
 @media(max-width:720px){.site-footer{flex-wrap:wrap;align-items:flex-start}.footer-legal{width:100%;order:4;}}
+
+
+/* PWA install action */
+.install-app-button{
+  border:1px solid rgba(197,243,1,.58);
+  background:transparent;
+  color:var(--lime);
+  white-space:nowrap;
+}
+.install-app-button:hover{background:rgba(197,243,1,.08)}
+@media(max-width:720px){
+  .install-app-button{width:100%;justify-content:center}
+}
