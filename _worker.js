@@ -693,10 +693,24 @@ async function chat(request, env) {
     'Сохранённый план клиента (JSON): ' + plan,
     'Вопрос клиента: ' + message
   ].join('\n');
-  const result = await env.AI.run(MODEL, { prompt, max_tokens: 650, temperature: 0.4 });
-  const reply = result?.response || result?.result?.response;
+  let result;
+  try {
+    result = await env.AI.run(MODEL, {
+      messages: [
+        { role: 'system', content: 'Ты Fital AI — консультант сервиса Fital Pro. Отвечай только по-русски.' },
+        { role: 'user', content: prompt }
+      ],
+      max_completion_tokens: 900,
+      temperature: 0.4,
+      chat_template_kwargs: { enable_thinking: false }
+    });
+  } catch (error) {
+    console.error('Fital AI chat failed:', error?.message || 'unknown error');
+    return json({ error: 'ИИ-консультант временно недоступен. Попробуйте позже.' }, 502);
+  }
+  const reply = extractAiText(result);
   if (!reply) return json({ error: 'ИИ не вернул ответ. Попробуйте ещё раз.' }, 502);
-  return json({ reply: String(reply).trim() });
+  return json({ reply });
 }
 
 async function lead(request, env) {
