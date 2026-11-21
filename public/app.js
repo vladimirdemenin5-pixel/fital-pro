@@ -220,11 +220,14 @@ $('#chatForm').addEventListener('submit', async function (event) {
 (async function init() {
   choosePlan('PRO');
   const params = new URLSearchParams(window.location.search);
-  const ref = params.get('ref') || params.get('Shp_ref') || localStorage.getItem(REF_KEY);
   if (params.get('payment') === 'fail') {
+    localStorage.removeItem(REF_KEY);
     showToast('Платёж не завершён. Вы можете попробовать ещё раз.');
     history.replaceState({}, '', '/');
+    await loadAccount();
+    return;
   }
+  const ref = params.get('ref') || params.get('Shp_ref') || localStorage.getItem(REF_KEY);
   if (ref && (params.has('ref') || params.has('Shp_ref') || params.get('payment') === 'success')) {
     await checkPayment(ref);
     return;
