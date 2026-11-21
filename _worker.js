@@ -422,7 +422,12 @@ async function profileApi(request, env) {
   const body = await request.json();
   let profile;
   try { profile = profileFrom(body); } catch (error) { return json({ error: clean(error.message, 200) }, 400); }
-  const plan = await generateAiPlan(profile, sub.plan, env);
+  let plan;
+  try {
+    plan = await generateAiPlan(profile, sub.plan, env);
+  } catch (error) {
+    return json({ error: clean(error.message, 240) || 'Не удалось пересобрать план. Сохранённая программа не изменена.' }, 502);
+  }
   await saveMemberPlan(env, sub.access_token, profile, plan);
   return json({ profile, plan });
 }
