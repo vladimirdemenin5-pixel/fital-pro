@@ -387,7 +387,7 @@ async function paymentStatus(request, env) {
     return json({ error: 'Не указан номер заказа.' }, 400);
   }
   if (!order) return json({ status: 'pending' });
-  const checkoutCookie = (request.headers.get('Cookie') || '').match(/(?:^|;\\s*)fitalpro_checkout_ref=([^;]+)/)?.[1] || '';
+  const checkoutCookie = (request.headers.get('Cookie') || '').match(/(?:^|;\s*)fitalpro_checkout_ref=([^;]+)/)?.[1] || '';
   if (checkoutCookie !== order.client_ref) return json({ status: 'pending' });
   const subscription = await env.DB.prepare(
     'SELECT plan,status,access_token,updated_at,expires_at FROM subscriptions WHERE client_ref=?'
