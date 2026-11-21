@@ -10,10 +10,17 @@ const PLAN_DURATIONS={'Питание':7,PRO:14,Premium:30};
 const PLAN_LABELS={'Питание':'Питание',PRO:'PRO',Premium:'Premium'};
 function syncSelectedPlan(code){
  const selected=PLAN_DURATIONS[code]?code:'';
+ const previous=localStorage.getItem('fitalpro_selected_plan')||'';
+ if(previous!==selected)clearPlanPreview();
  const picker=$('#planSelect');if(picker)picker.value=selected;
  const trainingFields=$('#trainingFields');if(trainingFields)trainingFields.hidden=!selected||selected==='Питание';
  const trainingDays=form?.elements?.days;if(trainingDays)trainingDays.required=!!selected&&selected!=='Питание';
  const submit=$('#planSubmit');if(submit)submit.disabled=!selected;
+ $('[data-plan]').forEach(button=>{
+  const active=button.dataset.plan===selected;
+  button.setAttribute('aria-pressed',String(active));
+  button.closest('.plan-card')?.classList.toggle('is-selected',active);
+ });
  if(selected)localStorage.setItem('fitalpro_selected_plan',selected);
  else localStorage.removeItem('fitalpro_selected_plan');
  const note=$('#selectedPlanNote');
@@ -33,10 +40,26 @@ $$('[data-plan]').forEach(b=>b.addEventListener('click',()=>{
 const form=$('#profileForm'),note=$('#profileNote'),planCard=$('#planCard'),empty=$('#previewEmpty');
 let currentDraft=localStorage.getItem('fitalpro_plan_draft')||'';
 let currentProfile=null;
+function clearPlanPreview(){
+ currentDraft='';
+ localStorage.removeItem('fitalpro_plan_draft');
+ localStorage.removeItem('fitalpro_plan_code');
+ if(planCard)planCard.hidden=true;
+ if(empty)empty.hidden=false;
+ const status=$('#previewStatus');if(status)status.textContent='ОЖИДАЕТ АНКЕТУ';
+ const step=$('#formStep');if(step)step.textContent='ШАГ 2 / 3';
+ const week=$('#weekPlan');if(week)week.replaceChildren();
+ const shopping=$('#shoppingList');if(shopping){shopping.replaceChildren();shopping.hidden=true;}
+ for(const id of ['planCalories','planProtein','planDays']){const field=$('#'+id);if(field)field.textContent='—';}
+ const checkoutButton=$('#checkoutButton');if(checkoutButton)checkoutButton.disabled=true;
+}
 try{currentProfile=JSON.parse(localStorage.getItem('fitalpro_profile')||'null');if(currentProfile&&form)Object.entries(currentProfile).forEach(([k,v])=>{const el=form.elements[k];if(el&&el.type!=='checkbox')el.value=v;});}catch(_){}
-if(localStorage.getItem('fitalpro_tariff_flow_version')!=='2'){
+if(localStorage.getItem('fitalpro_tariff_flow_version')!=='3'){
  localStorage.removeItem('fitalpro_selected_plan');
- localStorage.setItem('fitalpro_tariff_flow_version','2');
+ localStorage.removeItem('fitalpro_plan_draft');
+ localStorage.removeItem('fitalpro_plan_code');
+ currentDraft='';
+ localStorage.setItem('fitalpro_tariff_flow_version','3');
 }
 const savedPlan=localStorage.getItem('fitalpro_selected_plan')||'';
 syncSelectedPlan(savedPlan);
@@ -127,15 +150,17 @@ function renderPlan(plan){
  $('#previewStatus').textContent='ПЛАН НА '+programDays+' ДНЕЙ ГОТОВ';
  renderProgramDays(plan,$('#weekPlan'));
  renderShoppingList(plan,$('#shoppingList'));
+ const step=$('#formStep');if(step)step.textContent='ШАГ 3 / 3';
+ const checkoutButton=$('#checkoutButton');if(checkoutButton)checkoutButton.disabled=false;
 }
 async function requestPlan(data){
+ const paid=!!token();
+ if(!paid)clearPlanPreview();
  const button=$('#planSubmit');button.disabled=true;button.textContent='ИИ составляет план…';note.textContent='Проверяем анкету и формируем меню и рекомендации.';
  try{
-  const paid=!!token();
   const planCode=paid?(localStorage.getItem('fitalpro_subscription_plan')||localStorage.getItem('fitalpro_selected_plan')||''):(data.plan||$('#planSelect')?.value||localStorage.getItem('fitalpro_selected_plan')||'');
   if(!PLAN_DURATIONS[planCode])throw new Error('Сначала выберите тариф.');
   const payload={...data,plan:planCode};
-  if(!paid){currentDraft='';localStorage.removeItem('fitalpro_plan_draft');localStorage.removeItem('fitalpro_plan_code');}
   const response=await fetch(paid?'/api/profile':'/api/plan-preview',{method:'POST',headers:{'Content-Type':'application/json',...(paid?{Authorization:'Bearer '+token()}:{})},body:JSON.stringify(payload)});
   const result=await response.json();
   if(!response.ok||!result.plan||(!paid&&!result.draft_id))throw new Error(result.error||'Не удалось подготовить персональный план.');
@@ -158,15 +183,6 @@ form?.addEventListener('submit',e=>{
  if(data.age<18||data.age>80||(selectedPlan!=='Питание'&&(data.days<2||data.days>7))){note.textContent='Проверьте возраст и количество тренировок в неделю.';return;}
  data.plan=selectedPlan;
  requestPlan(data);
-});
-$('#planSelect')?.addEventListener('change',()=>{
- if(token()){
-  const active=localStorage.getItem('fitalpro_subscription_plan');
-  if(active)syncSelectedPlan(active);
-  return;
- }
- const code=$('#planSelect').value;syncSelectedPlan(code);
- if(currentProfile&&localStorage.getItem('fitalpro_plan_code')!==code)requestPlan({...currentProfile,plan:code,pd_consent:'on'});
 });
 $('#checkoutButton')?.addEventListener('click',async()=>{
  const plan=$('#planSelect').value,draftId=localStorage.getItem('fitalpro_plan_draft');
