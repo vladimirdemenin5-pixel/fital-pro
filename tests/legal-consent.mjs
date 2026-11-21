@@ -22,5 +22,7 @@ assert.ok(worker.includes('pd_consent_at'));
 assert.ok(worker.includes('pd_policy_version'));
 assert.ok(worker.includes('offer_accepted_at'));
 assert.ok(worker.includes('HttpOnly; Secure; SameSite=Lax'));
+assert.ok(worker.includes(String.raw`match(/(?:^|;\\s*)fitalpro_checkout_ref=`) === false, 'cookie matcher must use whitespace, not a literal backslash');
+assert.ok(worker.includes(String.raw`match(/(?:^|;\\s*)fitalpro_checkout_ref=`) === false);
 assert.ok(worker.includes('checkoutCookie !== order.client_ref'));
 console.log('PASS: legal pages, required consent, server-side consent records, and protected payment-token handoff');
