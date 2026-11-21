@@ -112,6 +112,8 @@ assert.ok(offer.includes('автоматизированный ИИ-разбор
 
 
 assert.ok(worker.includes("async function accessRecovery(request, env, confirm = false)"), 'email recovery API must exist');
+assert.ok(worker.includes("Укажите корректный email. Он нужен для отправки доступа и его восстановления."), 'checkout must require an email usable for recovery');
+assert.ok(html.includes('name="contact" type="email"'), 'checkout must collect a valid email');
 assert.ok(worker.includes("access_recovery_tokens"), 'one-time recovery tokens must be stored in D1');
 assert.ok(worker.includes("expires_at>?"), 'recovery links must expire');
 assert.ok(worker.includes("used_at IS NULL"), 'recovery links must be one-time use');
