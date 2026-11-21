@@ -321,8 +321,8 @@ async function checkout(request, env) {
   } catch (error) {
     return json({ error: clean(error.message, 200) }, 400);
   }
-  const contact = clean(body?.contact, 160);
-  if (!contact) return json({ error: 'Укажите email или телефон для связи.' }, 400);
+  const contact = clean(body?.contact, 160).toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact)) return json({ error: 'Укажите корректный email. Он нужен для отправки доступа и его восстановления.' }, 400);
   const accepted = value => value === true || ['on', 'true', '1'].includes(String(value ?? '').toLowerCase());
   if (!accepted(body?.pd_consent)) return json({ error: 'Необходимо согласие на обработку персональных данных.' }, 400);
   if (!accepted(body?.offer_accepted)) return json({ error: 'Необходимо принять условия публичной оферты.' }, 400);
@@ -700,6 +700,96 @@ async function lead(request, env) {
   return json({ ok: true, id });
 }
 
+
+let recoverySchemaReady;
+async function ensureRecoverySchema(env) {
+  if (!recoverySchemaReady) {
+    recoverySchemaReady = env.DB.prepare(`CREATE TABLE IF NOT EXISTS access_recovery_tokens (
+      token_hash TEXT PRIMARY KEY,
+      access_token TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      used_at TEXT,
+      created_at TEXT NOT NULL
+    )`).run().catch(error => { recoverySchemaReady = null; throw error; });
+  }
+  await recoverySchemaReady;
+}
+
+async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function accessRecovery(request, env, confirm = false) {
+  if (!env.DB) return json({ error: 'Сервис восстановления временно недоступен.' }, 503);
+  await ensureRecoverySchema(env);
+  if (confirm) {
+    const body = await request.json();
+    const token = clean(body?.token, 100);
+    if (!/^[a-f0-9]{64}$/i.test(token)) return json({ error: 'Ссылка восстановления недействительна или устарела.' }, 400);
+    const tokenHash = await sha256Hex(token);
+    const now = new Date().toISOString();
+    const row = await env.DB.prepare(
+      'SELECT access_token FROM access_recovery_tokens WHERE token_hash=? AND used_at IS NULL AND expires_at>?'
+    ).bind(tokenHash, now).first();
+    if (!row) return json({ error: 'Ссылка восстановления недействительна или устарела.' }, 400);
+    const subscription = await env.DB.prepare(
+      "SELECT access_token FROM subscriptions WHERE access_token=? AND status='active' AND (expires_at IS NULL OR expires_at>?)"
+    ).bind(row.access_token, now).first();
+    if (!subscription) return json({ error: 'Подписка уже не активна.' }, 403);
+    const consumed = await env.DB.prepare(
+      'UPDATE access_recovery_tokens SET used_at=? WHERE token_hash=? AND used_at IS NULL AND expires_at>?'
+    ).bind(now, tokenHash, now).run();
+    if (!consumed.meta?.changes) return json({ error: 'Ссылка уже использована. Запросите новую.' }, 400);
+    return json({ ok: true, access_token: subscription.access_token });
+  }
+
+  if (!(await rateLimit(request, env, 'access-recovery', 3, 3600000))) {
+    return json({ error: 'Слишком много запросов. Попробуйте позже.' }, 429);
+  }
+  const body = await request.json();
+  const email = clean(body?.email, 160).toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return json({ error: 'Укажите корректный email.' }, 400);
+  }
+  if (!env.RESEND_API_KEY || !env.FITALPRO_FROM_EMAIL) {
+    return json({ error: 'Восстановление по email ещё не подключено. Напишите в поддержку Fital Pro.' }, 503);
+  }
+  const now = new Date().toISOString();
+  const subscription = await env.DB.prepare(
+    "SELECT access_token FROM subscriptions WHERE lower(trim(customer_contact))=? AND status='active' AND (expires_at IS NULL OR expires_at>?) ORDER BY created_at DESC LIMIT 1"
+  ).bind(email, now).first();
+  // Always return the same public response so the endpoint does not disclose registered email addresses.
+  const generic = { ok: true, message: 'Если для этого email есть активная подписка, письмо со ссылкой восстановления будет отправлено.' };
+  if (!subscription) return json(generic);
+  const tokenBytes = crypto.getRandomValues(new Uint8Array(32));
+  const token = [...tokenBytes].map(byte => byte.toString(16).padStart(2, '0')).join('');
+  const tokenHash = await sha256Hex(token);
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+  await env.DB.prepare('DELETE FROM access_recovery_tokens WHERE access_token=? OR expires_at<=?').bind(subscription.access_token, now).run();
+  await env.DB.prepare(
+    'INSERT INTO access_recovery_tokens (token_hash,access_token,expires_at,created_at) VALUES (?,?,?,?)'
+  ).bind(tokenHash, subscription.access_token, expiresAt, now).run();
+  const link = new URL('/', request.url);
+  link.searchParams.set('restore', token);
+  const mail = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + env.RESEND_API_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: env.FITALPRO_FROM_EMAIL,
+      to: [email],
+      subject: 'Восстановление доступа к Fital Pro',
+      text: 'Чтобы восстановить доступ к Fital Pro, откройте ссылку в течение 15 минут: ' + link.toString() + '\n\nЕсли вы не запрашивали восстановление, просто проигнорируйте это письмо.'
+    })
+  });
+  if (!mail.ok) {
+    await env.DB.prepare('DELETE FROM access_recovery_tokens WHERE token_hash=?').bind(tokenHash).run();
+    console.error('Fital Pro recovery email delivery failed:', mail.status);
+    return json({ error: 'Не удалось отправить письмо. Попробуйте позже.' }, 502);
+  }
+  return json(generic);
+}
+
 async function me(request, env) {
   const sub = await getSubscription(request, env);
   if (!sub) return json({ error: 'Активная подписка не найдена.' }, 401);
@@ -738,6 +828,8 @@ export default {
       if (url.pathname === '/api/plan' && request.method === 'GET') return await personalizedPlan(request, env);
       if (url.pathname === '/api/progress' && (request.method === 'GET' || request.method === 'POST')) return await progressApi(request, env);
       if (url.pathname === '/api/lead' && request.method === 'POST') return await lead(request, env);
+      if (url.pathname === '/api/access/recovery' && request.method === 'POST') return await accessRecovery(request, env, false);
+      if (url.pathname === '/api/access/recovery/confirm' && request.method === 'POST') return await accessRecovery(request, env, true);
       if (url.pathname === '/api/me' && request.method === 'GET') return await me(request, env);
       if (env.ASSETS) return env.ASSETS.fetch(request);
       return json({ error: 'Not found' }, 404);
