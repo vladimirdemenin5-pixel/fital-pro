@@ -5,6 +5,21 @@
 @media(max-width:390px){.hero h1{font-size:42px}.form-grid{grid-template-columns:1fr}.field-wide{grid-column:auto}.preview-meals{grid-template-columns:1fr}.header-cta{font-size:10px}.steps-grid{grid-template-columns:1fr}}
 
 .tariff-card.selected{outline:2px solid #9dc75e;outline-offset:3px}
+.premium-review-card{grid-column:1/-1}
+.premium-review-output{background:#f5f7f3;border:1px solid #e3eae1;border-radius:13px;padding:16px;margin-top:12px}
+.premium-review-output h4{font-size:16px;margin:6px 0 8px;color:#263740}
+.premium-review-output h5{font-size:11px;margin:15px 0 7px;color:#34464c}
+.premium-review-output p,.premium-review-output li{font-size:11px;line-height:1.7;color:#65757a}
+.premium-review-output ul{padding-left:18px;margin:5px 0}
+.premium-review-meta,.premium-review-focus small{font-size:8px;letter-spacing:.13em;color:#899895;font-weight:850}
+.premium-review-metrics{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0}
+.premium-review-metrics span{font-size:9px;background:#e8efe2;color:#526d42;border-radius:20px;padding:5px 9px}
+.premium-review-focus{display:grid;gap:5px;background:#eaf3df;border-radius:10px;padding:12px;margin-top:13px}
+.premium-review-focus strong{font-size:11px;color:#405b35}
+.premium-review-disclaimer{display:block;font-size:9px;color:#93a09c;line-height:1.6;margin-top:12px}
+.premium-review-empty{font-size:10px;color:#819096;background:#f4f6f2;border-radius:9px;padding:12px}
+#premiumReviewHistory>h4{font-size:12px;margin:20px 0 8px;color:#617078}
+@media(max-width:720px){.premium-review-card{grid-column:auto}}
 
 
 /* Progress diary history */

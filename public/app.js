@@ -88,7 +88,9 @@ $('#intakeForm').addEventListener('submit', async function (event) {
     $('#previewWorkout').textContent = day.workout;
     $('#previewDescription').textContent = selectedPlan === 'Питание'
       ? 'Полное меню на неделю, список покупок и рекомендации на 7 дней.'
-      : 'Полное меню, программа активности и доступ к ИИ-консультанту на ' + checkoutData.preview.durationDays + ' дней.';
+      : selectedPlan === 'Premium'
+        ? 'Все возможности PRO, еженедельный ИИ-разбор прогресса и персональные ориентиры на 30 дней.'
+        : 'Полное меню, программа активности и доступ к ИИ-консультанту на ' + checkoutData.preview.durationDays + ' дней.';
     $('#paymentButton').textContent = 'Оплатить ' + prices[selectedPlan] + ' ↗';
     $('#planPreview').classList.remove('is-hidden');
     $('#planPreview').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -145,6 +147,71 @@ async function loadProgressHistory() {
     renderProgressHistory(data.items || []);
   } catch {
     container.textContent = 'Историю прогресса пока не удалось загрузить.';
+  }
+}
+
+
+function formatReviewDate(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString('ru-RU');
+}
+
+function renderPremiumReviewItem(item) {
+  const review = item.review || {};
+  const stats = review.stats || {};
+  const weightText = stats.weightChangeKg !== null && stats.weightChangeKg !== undefined
+    ? 'Изменение веса по записям: ' + (Number(stats.weightChangeKg) > 0 ? '+' : '') + String(stats.weightChangeKg) + ' кг'
+    : '';
+  const metrics = [
+    'Записей в дневнике: ' + Number(stats.trackingDays || 0),
+    'Питание отмечено: ' + Number(stats.nutritionDays || 0) + ' дн.',
+    'Тренировки отмечены: ' + Number(stats.workoutDays || 0) + ' дн.',
+    weightText
+  ].filter(Boolean);
+  const observations = Array.isArray(review.observations) ? review.observations : [];
+  const recommendations = Array.isArray(review.recommendations) ? review.recommendations : [];
+  return '<article class="premium-review-output">' +
+    '<div class="premium-review-meta">РАЗБОР ЗА НЕДЕЛЮ · ' + escapeHtml(formatReviewDate(item.createdAt)) + '</div>' +
+    '<h4>' + escapeHtml(review.headline || 'Ваш недельный разбор') + '</h4>' +
+    '<p>' + escapeHtml(review.summary || '') + '</p>' +
+    '<div class="premium-review-metrics">' + metrics.map(value => '<span>' + escapeHtml(value) + '</span>').join('') + '</div>' +
+    (observations.length ? '<h5>Что видно по дневнику</h5><ul>' + observations.map(value => '<li>' + escapeHtml(value) + '</li>').join('') + '</ul>' : '') +
+    (recommendations.length ? '<h5>Что сделать на следующей неделе</h5><ul>' + recommendations.map(value => '<li>' + escapeHtml(value) + '</li>').join('') + '</ul>' : '') +
+    (review.nextWeekFocus ? '<div class="premium-review-focus"><small>ГЛАВНЫЙ ФОКУС</small><strong>' + escapeHtml(review.nextWeekFocus) + '</strong></div>' : '') +
+    '<small class="premium-review-disclaimer">' + escapeHtml(review.disclaimer || '') + '</small>' +
+  '</article>';
+}
+
+function renderPremiumReviews(data) {
+  const reviews = Array.isArray(data.reviews) ? data.reviews : [];
+  const current = reviews.find(item => item.periodStart === data.periodStart);
+  const button = $('#premiumReviewButton');
+  button.disabled = !data.canGenerate;
+  button.textContent = current
+    ? 'Разбор этой недели готов'
+    : data.progressEntries >= 2 ? 'Подготовить разбор недели ↗' : 'Добавьте записи в дневник';
+  $('#premiumReviewMessage').textContent = current
+    ? 'Разбор за текущую неделю сохранён. Новый отчёт станет доступен на следующей неделе.'
+    : 'Записей за эту неделю: ' + Number(data.progressEntries || 0) + ' из 2 необходимых для разбора.';
+  $('#premiumReviewResult').innerHTML = current
+    ? renderPremiumReviewItem(current)
+    : '<p class="premium-review-empty">Здесь появится персональный разбор после накопления записей в дневнике.</p>';
+  const history = reviews.filter(item => item.periodStart !== data.periodStart);
+  $('#premiumReviewHistory').innerHTML = history.length
+    ? '<h4>Предыдущие разборы</h4>' + history.map(renderPremiumReviewItem).join('')
+    : '';
+}
+
+async function loadPremiumReviews() {
+  const result = $('#premiumReviewResult');
+  if (result) result.textContent = 'Загружаем историю разборов…';
+  try {
+    const data = await api('/api/premium/review');
+    renderPremiumReviews(data);
+  } catch (error) {
+    $('#premiumReviewMessage').textContent = error.message || 'Не удалось загрузить историю разборов.';
+    $('#premiumReviewButton').disabled = false;
+    $('#premiumReviewButton').textContent = 'Повторить загрузку ↻';
   }
 }
 
@@ -218,12 +285,15 @@ async function loadAccount() {
       : 'Подписка активна';
     $('#accountStatus').textContent = '● Подписка активна';
     const advancedFeatures = ['PRO', 'Premium'].includes(subscription.plan);
+    const premiumFeatures = subscription.plan === 'Premium';
     $('#progressTool').classList.toggle('is-hidden', !advancedFeatures);
     $('#chatTool').classList.toggle('is-hidden', !advancedFeatures);
+    $('#premiumReviewTool').classList.toggle('is-hidden', !premiumFeatures);
     renderFullPlan(planData.plan);
     $('#account').classList.remove('is-hidden');
     const accountTasks = [loadProfileEditor()];
     if (advancedFeatures) accountTasks.push(loadProgressHistory());
+    if (premiumFeatures) accountTasks.push(loadPremiumReviews());
     await Promise.all(accountTasks);
     return true;
   } catch (error) {
@@ -310,8 +380,25 @@ $('#progressForm').addEventListener('submit', async function (event) {
     $('#progressMessage').textContent = 'Запись сохранена.';
     event.currentTarget.reset();
     await loadProgressHistory();
+    if (!$('#premiumReviewTool').classList.contains('is-hidden')) await loadPremiumReviews();
   } catch (error) {
     $('#progressMessage').textContent = error.message;
+  }
+});
+
+$('#premiumReviewButton').addEventListener('click', async function () {
+  const button = $('#premiumReviewButton');
+  button.disabled = true;
+  button.textContent = 'ИИ анализирует дневник…';
+  $('#premiumReviewMessage').textContent = '';
+  try {
+    await api('/api/premium/review', { method: 'POST', body: JSON.stringify({}) });
+    await loadPremiumReviews();
+    showToast('Недельный разбор Premium готов.');
+  } catch (error) {
+    $('#premiumReviewMessage').textContent = error.message;
+    button.disabled = false;
+    button.textContent = 'Подготовить разбор недели ↗';
   }
 });
 
