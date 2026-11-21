@@ -40,6 +40,11 @@ assert.ok(worker.includes("'ROBOKASSA_TEST_PASSWORD' + number"));
 assert.ok(worker.includes("env.ROBOKASSA_IS_TEST === '1'"));
 assert.ok(worker.includes('const password1 = robokassaPassword(env, 1)'));
 assert.ok(worker.includes('const password2 = robokassaPassword(env, 2)'));
+assert.ok(worker.includes("params.set('SuccessURL', successUrl.toString())"), 'Robokassa must return the buyer to the site after success');
+assert.ok(worker.includes("params.set('FailURL', failUrl.toString())"), 'Robokassa must return the buyer to the site after a failed payment');
+assert.ok(worker.includes("successUrl.searchParams.set('ref', clientRef)"), 'successful return must carry the order reference for activation polling');
+assert.ok(worker.includes("successUrl.searchParams.set('payment', 'success')"), 'successful return must be distinguishable from a failed payment');
+
 assert.match(schema, /client_ref TEXT NOT NULL UNIQUE/);
 assert.match(schema, /payment_id TEXT NOT NULL UNIQUE/);
 assert.match(schema, /access_token TEXT NOT NULL UNIQUE/);
