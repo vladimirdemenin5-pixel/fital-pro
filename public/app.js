@@ -75,7 +75,7 @@ $('#intakeForm').addEventListener('submit', async function (event) {
   try {
     checkoutData = await api('/api/checkout', {
       method: 'POST',
-      body: JSON.stringify({ plan: selectedPlan, contact: fields.get('contact'), profile: profile })
+      body: JSON.stringify({ plan: selectedPlan, contact: fields.get('contact'), profile: profile, pd_consent: fields.get('pd_consent') === 'on', offer_accepted: fields.get('offer_accepted') === 'on' })
     });
     $('#previewCalories').textContent = Number(checkoutData.preview.calories).toLocaleString('ru-RU');
     $('#previewProtein').textContent = String(checkoutData.preview.protein);
