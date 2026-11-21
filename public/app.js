@@ -187,10 +187,12 @@ function renderPremiumReviews(data) {
   const current = reviews.find(item => item.periodStart === data.periodStart);
   const button = $('#premiumReviewButton');
   button.disabled = !data.canGenerate;
-  button.textContent = current ? 'Разбор этой недели готов' : 'Подготовить разбор недели ↗';
+  button.textContent = current
+    ? 'Разбор этой недели готов'
+    : data.progressEntries >= 2 ? 'Подготовить разбор недели ↗' : 'Добавьте записи в дневник';
   $('#premiumReviewMessage').textContent = current
     ? 'Разбор за текущую неделю сохранён. Новый отчёт станет доступен на следующей неделе.'
-    : 'Для содержательного разбора внесите минимум две записи в дневник за текущую неделю.';
+    : 'Записей за эту неделю: ' + Number(data.progressEntries || 0) + ' из 2 необходимых для разбора.';
   $('#premiumReviewResult').innerHTML = current
     ? renderPremiumReviewItem(current)
     : '<p class="premium-review-empty">Здесь появится персональный разбор после накопления записей в дневнике.</p>';
@@ -208,6 +210,8 @@ async function loadPremiumReviews() {
     renderPremiumReviews(data);
   } catch (error) {
     $('#premiumReviewMessage').textContent = error.message || 'Не удалось загрузить историю разборов.';
+    $('#premiumReviewButton').disabled = false;
+    $('#premiumReviewButton').textContent = 'Повторить загрузку ↻';
   }
 }
 
@@ -376,6 +380,7 @@ $('#progressForm').addEventListener('submit', async function (event) {
     $('#progressMessage').textContent = 'Запись сохранена.';
     event.currentTarget.reset();
     await loadProgressHistory();
+    if (!$('#premiumReviewTool').classList.contains('is-hidden')) await loadPremiumReviews();
   } catch (error) {
     $('#progressMessage').textContent = error.message;
   }
