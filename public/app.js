@@ -222,7 +222,9 @@ async function loadAccount() {
     $('#chatTool').classList.toggle('is-hidden', !advancedFeatures);
     renderFullPlan(planData.plan);
     $('#account').classList.remove('is-hidden');
-    await Promise.all([loadProgressHistory(), loadProfileEditor()]);
+    const accountTasks = [loadProfileEditor()];
+    if (advancedFeatures) accountTasks.push(loadProgressHistory());
+    await Promise.all(accountTasks);
     return true;
   } catch (error) {
     if (error.status === 401 || error.status === 403) {
