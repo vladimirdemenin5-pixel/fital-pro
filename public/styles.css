@@ -16,3 +16,14 @@
 .progress-entry small,.progress-empty{font-size:10px;line-height:1.5;color:#7d8a8d}
 .progress-entry small{display:block;margin-top:5px}
 .progress-empty{margin:0}
+
+
+/* Editable client profile */
+.profile-editor{background:#fff;border:1px solid #e2e8e2;border-radius:15px;padding:18px 21px;margin:0 0 18px}
+.profile-editor summary{cursor:pointer;list-style:none;font-size:13px;font-weight:750;color:#263740;display:flex;align-items:center;justify-content:space-between;gap:15px}
+.profile-editor summary::-webkit-details-marker{display:none}
+.profile-editor summary:after{content:"+";font-size:20px;color:#80a24f;font-weight:400}
+.profile-editor[open] summary:after{content:"−"}
+.profile-editor-note{font-size:11px;line-height:1.6;color:#7d8a8d;margin:12px 0}
+.profile-editor .form-grid{margin:14px 0}
+.profile-editor #profileMessage{margin-bottom:0}

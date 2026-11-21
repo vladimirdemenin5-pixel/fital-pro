@@ -148,6 +148,40 @@ async function loadProgressHistory() {
   }
 }
 
+function fillProfileForm(profile) {
+  const form = $('#profileUpdateForm');
+  if (!form || !profile) return;
+  for (const [key, value] of Object.entries(profile)) {
+    const field = form.elements.namedItem(key);
+    if (field && value !== null && value !== undefined) field.value = String(value);
+  }
+}
+
+function profileFromFields(fields) {
+  return {
+    name: fields.get('name'),
+    sex: fields.get('sex'),
+    age: Number(fields.get('age')),
+    height: Number(fields.get('height')),
+    weight: Number(fields.get('weight')),
+    activity: fields.get('activity'),
+    goal: fields.get('goal'),
+    training: fields.get('training'),
+    days: Number(fields.get('days')),
+    preferences: fields.get('preferences')
+  };
+}
+
+async function loadProfileEditor() {
+  try {
+    const data = await api('/api/profile');
+    fillProfileForm(data.profile);
+  } catch {
+    const message = $('#profileMessage');
+    if (message) message.textContent = 'Не удалось загрузить анкету. Повторите попытку позже.';
+  }
+}
+
 function renderFullPlan(plan) {
   const days = Array.isArray(plan.week) ? plan.week : [];
   $('#fullPlan').innerHTML = days.map(function (day) {
@@ -185,7 +219,7 @@ async function loadAccount() {
     $('#accountStatus').textContent = '● Подписка активна';
     renderFullPlan(planData.plan);
     $('#account').classList.remove('is-hidden');
-    await loadProgressHistory();
+    await Promise.all([loadProgressHistory(), loadProfileEditor()]);
     return true;
   } catch (error) {
     if (error.status === 401 || error.status === 403) {
@@ -227,6 +261,32 @@ $('#reloadPlan').addEventListener('click', async function () {
     showToast('План обновлён.');
   } catch (error) {
     showToast(error.message);
+  }
+});
+
+$('#profileUpdateForm').addEventListener('submit', async function (event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = $('#saveProfileButton');
+  const message = $('#profileMessage');
+  button.disabled = true;
+  button.textContent = 'ИИ обновляет вашу программу…';
+  message.textContent = '';
+  try {
+    const profile = profileFromFields(new FormData(form));
+    const data = await api('/api/profile', {
+      method: 'POST',
+      body: JSON.stringify(profile)
+    });
+    fillProfileForm(data.profile || profile);
+    renderFullPlan(data.plan);
+    message.textContent = 'Анкета сохранена. Персональная программа обновлена.';
+    showToast('Новый план готов.');
+  } catch (error) {
+    message.textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Сохранить анкету и пересобрать план';
   }
 });
 

@@ -169,6 +169,26 @@
         <div class="account-status" id="accountStatus">Подписка активна</div>
       </div>
       <div class="account-welcome"><div><span class="mini-label">FITAL PRO</span><h3 id="accountPlanName">Ваша программа</h3><p id="accountExpiry">Доступ активен</p></div><button class="button button-outline button-small" id="reloadPlan" type="button">Обновить план ↻</button></div>
+      <details class="profile-editor">
+        <summary>Изменить анкету и пересобрать программу</summary>
+        <p class="profile-editor-note">Обновите вес, цель, активность или предпочтения. Fital AI создаст новый план на основе этих данных.</p>
+        <form id="profileUpdateForm">
+          <div class="form-grid">
+            <label class="field field-wide">Как к вам обращаться<input name="name" type="text" maxlength="80" autocomplete="name" required></label>
+            <label class="field">Пол<select name="sex" required><option value="female">Женский</option><option value="male">Мужской</option></select></label>
+            <label class="field">Возраст<input name="age" type="number" min="16" max="90" required></label>
+            <label class="field">Рост, см<input name="height" type="number" min="120" max="230" required></label>
+            <label class="field">Вес, кг<input name="weight" type="number" min="35" max="250" step="0.1" required></label>
+            <label class="field">Активность<select name="activity" required><option value="low">Низкая</option><option value="medium">Средняя</option><option value="high">Высокая</option></select></label>
+            <label class="field">Цель<select name="goal" required><option value="loss">Снижение веса</option><option value="maintenance">Поддержание формы</option><option value="gain">Набор массы</option></select></label>
+            <label class="field">Где тренируетесь<select name="training" required><option value="home">Дома</option><option value="gym">В зале</option><option value="mixed">Дома и в зале</option></select></label>
+            <label class="field">Тренировок в неделю<select name="days" required><option value="2">2 дня</option><option value="3">3 дня</option><option value="4">4 дня</option><option value="5">5 дней</option><option value="6">6 дней</option><option value="7">7 дней</option></select></label>
+            <label class="field field-wide">Питание, аллергии и пожелания<textarea name="preferences" rows="3" maxlength="700" placeholder="Укажите продукты, которые исключить, аллергии и предпочтения"></textarea></label>
+          </div>
+          <button class="button button-primary button-full" id="saveProfileButton" type="submit">Сохранить анкету и пересобрать план</button>
+          <p class="tool-message" id="profileMessage" role="status"></p>
+        </form>
+      </details>
       <div id="fullPlan" class="full-plan"></div>
       <div class="account-tools">
         <div class="tool-card"><span class="tool-icon">◉</span><h3>Дневник прогресса</h3><p>Фиксируйте вес и выполнение программы.</p>
