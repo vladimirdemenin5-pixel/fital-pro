@@ -18,8 +18,8 @@ test('tariff durations are fixed on the server', () => {
   assert.match(worker, /'Premium':\s*\{[^}]*durationDays:\s*30/);
   assert.match(worker, /week\.length!==durationDays/);
   assert.match(worker, /trainingIncluded:includeTraining/);
-  assert.match(app, /trainingFields\)trainingFields\.hidden=code==='Питание'/);
-  assert.match(app, /trainingDays\.required=code!=='Питание'/);
+  assert.match(app, /trainingFields\)trainingFields\.hidden=!selected\|\|selected==='Питание'/);
+  assert.match(app, /trainingDays\)trainingDays\.required=!!selected&&selected!=='Питание'/);
   assert.match(app, /trainingIncluded=plan\.trainingIncluded!==false/);
   assert.match(html, /id="trainingFields"/);
   assert.match(html, /id="planDaysLabel"/);
@@ -27,7 +27,7 @@ test('tariff durations are fixed on the server', () => {
 });
 
 test('nutrition-only tariff does not require hidden training fields', () => {
-  assert.match(app, /const selectedPlan=\$\('#planSelect'\)\?\.value\|\|localStorage\.getItem\('fitalpro_selected_plan'\)\|\|'PRO'/);
+  assert.match(app, /const selectedPlan=\$\('#planSelect'\)\?\.value\|\|localStorage\.getItem\('fitalpro_selected_plan'\)\|\|''/);
   assert.match(app, /if\(selectedPlan!=='Питание'\)data\.days=Number\(data\.days\)/);
   assert.match(app, /selectedPlan!=='Питание'&&\(data\.days<2\|\|data\.days>7\)/);
   assert.match(worker, /function normalizeProfile\(body,planCode='PRO'\)/);
@@ -84,6 +84,27 @@ test('progress API validates dates and checkbox flags before writing D1', () => 
   assert.match(worker, /!Number\.isInteger\(completedMeal\).*!Number\.isInteger\(completedWorkout\)/);
   assert.match(worker, /!\[0,1\]\.includes\(completedMeal\).*!\[0,1\]\.includes\(completedWorkout\)/);
   assert.match(worker, /Некорректные данные прогресса/);
+});
+
+
+test('visitor must choose a tariff before submitting the questionnaire', () => {
+  assert.match(app, /if\(localStorage\.getItem\('fitalpro_tariff_flow_version'\)!=='3'\)/);
+  assert.match(app, /submit\)submit\.disabled=!selected/);
+  assert.match(html, /id="planSubmit" disabled/);
+  assert.match(html, /id="planSelect" disabled/);
+  assert.match(html, /id="formStep">ШАГ 2 \/ 3/);
+  assert.match(html, /data-plan="Питание" aria-pressed="false"/);
+  assert.match(css, /\.plan-card\.is-selected/);
+});
+
+test('changing tariff or questionnaire invalidates an old preview and locks checkout until regeneration', () => {
+  assert.match(app, /function clearPlanPreview\(\)/);
+  assert.match(app, /if\(previous!==selected\)clearPlanPreview\(\)/);
+  assert.match(app, /if\(!paid\)clearPlanPreview\(\)/);
+  assert.match(app, /checkoutButton\)checkoutButton\.disabled=true/);
+  assert.match(app, /checkoutButton\)checkoutButton\.disabled=false/);
+  assert.match(app, /ШАГ 3 \/ 3/);
+  assert.match(html, /id="checkoutButton" type="button" disabled/);
 });
 
 test('NodeList handlers use querySelectorAll, not querySelector', () => {
