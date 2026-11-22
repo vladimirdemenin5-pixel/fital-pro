@@ -580,6 +580,57 @@ async function parsePaymentFields(request) {
   return Object.fromEntries(new URLSearchParams(body).entries());
 }
 
+async function aiPlanDiagnostic(request, env) {
+  const expectedKey = clean(env.ROBOKASSA_TEST_ACCESS_KEY, 256);
+  const suppliedKey = clean(request.headers.get('X-Fital-Test-Key'), 256);
+  if (!expectedKey || !suppliedKey || !sameHash(md5(expectedKey), md5(suppliedKey))) {
+    return json({ error: 'Диагностический доступ не настроен или ключ неверен.' }, 404);
+  }
+  if (!env.AI) return json({ error: 'Workers AI не подключён.' }, 503);
+
+  let body;
+  try { body = await request.json(); }
+  catch { return json({ error: 'Передайте корректный JSON.' }, 400); }
+
+  const planKey = clean(body?.plan, 40);
+  if (!PLANS[planKey]) return json({ error: 'Выберите корректный тариф.' }, 400);
+
+  let profile;
+  try { profile = profileFrom(body?.profile || {}); }
+  catch (error) { return json({ error: clean(error.message, 200) }, 400); }
+
+  let plan;
+  try {
+    // This diagnostic path deliberately does not call checkout, rateLimit, or any D1 write.
+    plan = await generateAiPlan(profile, planKey, env);
+  } catch (error) {
+    return json({ ok: false, error: clean(error.message, 240) || 'Не удалось проверить генерацию.' }, 502);
+  }
+
+  return json({
+    ok: true,
+    plan: plan.plan,
+    durationDays: plan.durationDays,
+    menuDays: plan.menuDays,
+    targets: { calories: plan.calories, protein: plan.protein },
+    dailyAverage: plan.dailyAverage,
+    days: plan.week.map(day => ({
+      day: day.day,
+      meals: Object.fromEntries(MEAL_KEYS.map(key => [key, {
+        title: day[key],
+        ingredients: day[key + 'Ingredients'].map(item => ({
+          foodId: item.foodId,
+          name: item.name,
+          grams: item.grams
+        }))
+      }])),
+      calculatedNutrition: day.nutrition
+    })),
+    shopping: plan.shopping,
+    nutritionSource: plan.nutritionSource
+  });
+}
+
 async function testCheckout(request, env) {
   const expectedKey = clean(env.ROBOKASSA_TEST_ACCESS_KEY, 256);
   const suppliedKey = clean(request.headers.get('X-Fital-Test-Key'), 256);
@@ -954,6 +1005,7 @@ export default {
           payments: !!(env.ROBOKASSA_MERCHANT_LOGIN && robokassaPassword(env, 1) && robokassaPassword(env, 2))
         });
       }
+      if (url.pathname === '/api/ai-diagnostic' && request.method === 'POST') return await aiPlanDiagnostic(request, env);
       if (url.pathname === '/api/checkout-test' && request.method === 'POST') return await testCheckout(request, env);
       if (url.pathname === '/api/checkout' && request.method === 'POST') return await checkout(request, env);
       if (url.pathname === '/webhooks/robokassa' && (request.method === 'POST' || request.method === 'GET')) {
@@ -976,4 +1028,4 @@ export default {
   }
 };
 
-export { buildRobokassaPaymentSignature, robokassaResultSignature, verifyRobokassaResultSignature, robokassaWebhook, paymentStatus, testCheckout, generateAiPlan, runAiTextWithFallback };
+export { buildRobokassaPaymentSignature, robokassaResultSignature, verifyRobokassaResultSignature, robokassaWebhook, paymentStatus, testCheckout, aiPlanDiagnostic, generateAiPlan, runAiTextWithFallback };
