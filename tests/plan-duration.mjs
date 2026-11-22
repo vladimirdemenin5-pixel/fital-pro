@@ -132,16 +132,19 @@ await assert.rejects(
 );
 
 let nutritionRetryCalls = 0;
+const nutritionRetryModels = [];
 const nutritionRetryAi = {
   async run(model, input) {
     nutritionRetryCalls++;
+    nutritionRetryModels.push(model);
     const fixture = nutritionRetryCalls <= 2 ? makeAi(7, false, false, false, true) : makeAi(7);
     return fixture.run(model, input);
   }
 };
 const recoveredNutritionPlan = await generateAiPlan(profile, 'Питание', { AI: nutritionRetryAi });
-assert.equal(recoveredNutritionPlan.week.length, 7, 'a corrected second-pass AI response must produce a complete plan');
-assert.equal(nutritionRetryCalls, 3, 'the stronger third model must recover after both fast models return nutritionally invalid plans');
+assert.equal(recoveredNutritionPlan.week.length, 7, 'a corrected fallback-model response must produce a complete plan');
+assert.equal(nutritionRetryCalls, 3, 'the plan generator must reach the third fallback after two invalid fast-model responses');
+assert.equal(nutritionRetryModels[2], '@cf/meta/llama-3.3-70b-instruct-fp8-fast', 'the third attempt must use the configured stronger fallback model');
 
 const modelCalls = [];
 const fallbackText = await runAiTextWithFallback({
