@@ -165,9 +165,14 @@ function hasWorkoutPrescription(value) {
 async function runAiTextWithFallback(env, options, purpose, validate = () => true) {
   // Prefer the low-latency Flash model for chat; keep the stronger models as fallbacks.
   const models = ['@cf/zai-org/glm-4.7-flash', MODEL, '@cf/meta/llama-3.3-70b-instruct-fp8-fast'];
+  const aiOptions = {
+    ...(options || {}),
+    reasoning_effort: null,
+    chat_template_kwargs: { ...((options && options.chat_template_kwargs) || {}), enable_thinking: false }
+  };
   for (const model of models) {
     try {
-      const result = await env.AI.run(model, options, { rejectIfBusy: true });
+      const result = await env.AI.run(model, aiOptions, { rejectIfBusy: true });
       const text = extractAiText(result);
       if (text && validate(text)) return text;
       console.error('Fital Pro AI returned an empty or invalid response:', purpose, model);
