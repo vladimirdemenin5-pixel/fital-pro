@@ -797,6 +797,89 @@ async function personalizedPlan(request, env) {
   return json({ plan: JSON.parse(row.plan_json) });
 }
 
+
+
+async function aiDataFlowDiagnostic(request, env) {
+  const expectedKey = clean(env.ROBOKASSA_TEST_ACCESS_KEY, 256);
+  const suppliedKey = clean(request.headers.get('X-Fital-Test-Key'), 256);
+  if (!expectedKey || !suppliedKey || !sameHash(md5(expectedKey), md5(suppliedKey))) {
+    return json({ error: 'Диагностический доступ не настроен или ключ неверен.' }, 404);
+  }
+  if (!env.DB || !env.AI) return json({ error: 'Для проверки необходимы подключения D1 и Workers AI.' }, 503);
+
+  let body;
+  try { body = await request.json(); }
+  catch { return json({ error: 'Передайте корректный JSON.' }, 400); }
+  const planKey = clean(body?.plan, 40);
+  if (!PLANS[planKey]) return json({ error: 'Выберите корректный тариф.' }, 400);
+
+  // Only synthetic data is used. The route is protected by the existing test secret.
+  const profile = profileFrom({
+    name: 'Fital Pro automated test',
+    sex: 'female',
+    age: 32,
+    height: 168,
+    weight: 68,
+    activity: 'medium',
+    goal: 'maintenance',
+    training: 'home',
+    days: 3,
+    preferences: 'Обычное питание, без аллергий. Тестовые данные.'
+  });
+  const plan = await generateAiPlan(profile, planKey, env);
+  const suffix = crypto.randomUUID().replaceAll('-', '');
+  const accessToken = 'test_' + suffix;
+  const now = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  let subscriptionCreated = false;
+
+  try {
+    await env.DB.prepare(
+      'INSERT INTO subscriptions (id,payment_id,client_ref,plan,status,access_token,customer_contact,created_at,updated_at,expires_at) VALUES (?,?,?,?,?,?,?,?,?,?)'
+    ).bind(crypto.randomUUID(), 'ai-flow-test-' + suffix, 'ai-flow-test-' + suffix, planKey, 'active', accessToken, 'automated-test', now, now, expiresAt).run();
+    subscriptionCreated = true;
+    await saveMemberPlan(env, accessToken, profile, plan);
+
+    const authHeaders = { Authorization: 'Bearer ' + accessToken };
+    const [planResponse, profileResponse, memberResponse] = await Promise.all([
+      personalizedPlan(new Request('https://fitalpro.internal/api/plan', { headers: authHeaders }), env),
+      profileApi(new Request('https://fitalpro.internal/api/profile', { headers: authHeaders }), env),
+      me(new Request('https://fitalpro.internal/api/me', { headers: authHeaders }), env)
+    ]);
+    if (!planResponse.ok || !profileResponse.ok || !memberResponse.ok) {
+      throw new Error('D1 сохранение или чтение личного кабинета завершилось ошибкой.');
+    }
+    const [savedPlan, savedProfile, member] = await Promise.all([
+      planResponse.json(), profileResponse.json(), memberResponse.json()
+    ]);
+    if (savedPlan.plan?.week?.length !== PLANS[planKey].menuDays ||
+        savedProfile.profile?.name !== profile.name ||
+        member.subscription?.status !== 'active') {
+      throw new Error('Сохранённые данные не совпали с созданным планом или активной тестовой подпиской.');
+    }
+    return json({
+      ok: true,
+      plan: planKey,
+      days: savedPlan.plan.week.length,
+      meals: savedPlan.plan.week.length * MEAL_KEYS.length,
+      d1Write: true,
+      cabinetPlanRead: true,
+      cabinetProfileRead: true,
+      memberAccessRead: true,
+      dailyAverage: savedPlan.plan.dailyAverage
+    });
+  } finally {
+    if (subscriptionCreated) {
+      await env.DB.batch([
+        env.DB.prepare('DELETE FROM progress WHERE access_token=?').bind(accessToken),
+        env.DB.prepare('DELETE FROM weekly_plans WHERE access_token=?').bind(accessToken),
+        env.DB.prepare('DELETE FROM profiles WHERE access_token=?').bind(accessToken),
+        env.DB.prepare('DELETE FROM subscriptions WHERE access_token=?').bind(accessToken)
+      ]);
+    }
+  }
+}
+
 async function progressApi(request, env) {
   const sub = await getSubscription(request, env);
   if (!sub || !env.DB) return json({ error: 'Нужна активная подписка.' }, 403);
@@ -1026,6 +1109,7 @@ export default {
         });
       }
       if (url.pathname === '/api/ai-diagnostic' && request.method === 'POST') return await aiPlanDiagnostic(request, env);
+      if (url.pathname === '/api/ai-data-flow-diagnostic' && request.method === 'POST') return await aiDataFlowDiagnostic(request, env);
       if (url.pathname === '/api/checkout-test' && request.method === 'POST') return await testCheckout(request, env);
       if (url.pathname === '/api/checkout' && request.method === 'POST') return await checkout(request, env);
       if (url.pathname === '/webhooks/robokassa' && (request.method === 'POST' || request.method === 'GET')) {
@@ -1048,4 +1132,4 @@ export default {
   }
 };
 
-export { buildRobokassaPaymentSignature, robokassaResultSignature, verifyRobokassaResultSignature, robokassaWebhook, paymentStatus, testCheckout, aiPlanDiagnostic, generateAiPlan, runAiTextWithFallback, FOOD_CATALOG };
+export { buildRobokassaPaymentSignature, robokassaResultSignature, verifyRobokassaResultSignature, robokassaWebhook, paymentStatus, testCheckout, aiPlanDiagnostic, aiDataFlowDiagnostic, generateAiPlan, runAiTextWithFallback, FOOD_CATALOG };
