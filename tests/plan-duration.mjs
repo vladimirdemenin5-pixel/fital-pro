@@ -19,24 +19,29 @@ const profile = {
   preferences: 'Без ограничений'
 };
 
-function makeAi(menuDays, wrongLength = false, invalidMeal = false, invalidWorkout = false) {
+function makeAi(menuDays, wrongLength = false, invalidMeal = false, invalidWorkout = false, invalidNutrition = false) {
   return {
     async run() {
       const count = wrongLength ? 7 : menuDays;
       const week = Array.from({ length: count }, (_, index) => {
         const dayInWeek = index % 7;
         const trainingDay = dayInWeek === 0 || dayInWeek === 2 || dayInWeek === 4;
+        const tiny = invalidNutrition;
         return {
           day: 'День ' + (index + 1),
           trainingDay,
-          breakfast: invalidMeal ? 'Овсянка с ягодами и йогуртом' : 'Овсянка 200 г и йогурт 150 г',
-          lunch: 'Курица 150 г, рис 100 г и овощи 200 г',
-          snack: 'Творог 150 г и яблоко',
-          dinner: 'Рыба 150 г и овощи 200 г',
+          breakfast: 'Овсяная каша с бананом',
+          breakfastIngredients: invalidMeal ? [] : (tiny ? [['oats_dry', 5]] : [['oats_dry', 80], ['milk_2pct', 200], ['banana', 120]]),
+          lunch: 'Курица с рисом и брокколи',
+          lunchIngredients: tiny ? [['chicken_raw', 5]] : [['chicken_raw', 100], ['rice_dry', 85], ['broccoli', 100]],
+          snack: 'Йогурт с яблоком и миндалём',
+          snackIngredients: tiny ? [['greek_yogurt', 5]] : [['greek_yogurt', 150], ['apple', 150], ['almonds', 15]],
+          dinner: 'Лосось с картофелем и овощами',
+          dinnerIngredients: tiny ? [['salmon_raw', 5]] : [['salmon_raw', 100], ['potato_raw', 200], ['olive_oil', 28], ['tomato', 100], ['avocado', 50]],
           workout: trainingDay ? (invalidWorkout ? 'Разминка, приседания и тяга' : 'Разминка, приседания 3×10, тяга 3×10, заминка') : 'Прогулка и восстановление'
         };
       });
-      return { response: JSON.stringify({ intro: 'План создан по тестовой анкете.', week, shopping: ['Продукты на весь период'], tips: ['Пейте воду по жажде.'] }) };
+      return { response: JSON.stringify({ intro: 'План создан по тестовой анкете.', week, tips: ['Пейте воду по жажде.'] }) };
     }
   };
 }
@@ -46,6 +51,13 @@ assert.equal(proPlan.week.length, 14, 'PRO must contain 14 complete menu days');
 assert.equal(proPlan.menuDays, 14);
 assert.equal(proPlan.week[0].day, 'День 1');
 assert.equal(proPlan.week[13].day, 'День 14');
+assert.deepEqual(proPlan.week[0].nutrition, { calories: 1935, protein: 95 });
+assert.equal(proPlan.dailyAverage.calories, 1935);
+assert.equal(proPlan.dailyAverage.protein, 95);
+assert.ok(proPlan.shopping.includes('Овсяные хлопья, сухие — 1,12 кг'));
+assert.ok(proPlan.shopping.includes('Молоко 2% — 2,8 кг'));
+assert.ok(!proPlan.shopping.includes('Продукты на весь период'));
+assert.ok(proPlan.nutritionSource.includes('USDA FoodData Central'));
 assert.equal(proPlan.week.slice(0, 7).filter(day => day.trainingDay).length, 3);
 assert.equal(proPlan.week.slice(7, 14).filter(day => day.trainingDay).length, 3);
 
@@ -85,6 +97,11 @@ await assert.rejects(
   /временно не вернул текстовый ответ/,
   'training days without sets or repetitions must be rejected'
 );
+await assert.rejects(
+  () => generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, false, false, true) }),
+  /временно не вернул текстовый ответ/,
+  'days with implausibly low calculated calories and protein must be rejected'
+);
 
 const modelCalls = [];
 const fallbackText = await runAiTextWithFallback({
@@ -118,8 +135,10 @@ const validatedFallback = await runAiTextWithFallback({
 assert.ok(validatedFallback.includes('Готово'));
 assert.equal(invalidOutputCalls.length, 2, 'fallback must also run when the primary model returns malformed output');
 
-console.log('PASS: 7/14/30-day plans, meal portions, workout prescriptions and AI fallback');
+console.log('PASS: 7/14/30-day plans, USDA-based nutrition totals, shopping aggregation, workout prescriptions and AI fallback');
 assert.ok(workerSource.includes("'Premium': { amount: '3990.00', label: 'Fital Pro Premium — меню и тренировки, 30 дней', days: 30, menuDays: 30 }"), 'Premium must configure 30 menu days');
+assert.ok(workerSource.includes('profile.age < 18'), 'adult nutrition formula must not be used for minors');
+assert.ok(htmlSource.includes('min="18"'), 'both questionnaire forms must require adult age');
 assert.ok(appSource.includes('Меню и тренировки на 30 дней, доступ на 30 дней'), 'Premium checkout description must promise 30 days');
 assert.ok(htmlSource.includes('тренировочная программа на все 30 дней'), 'Premium tariff must advertise a 30-day training program');
 
