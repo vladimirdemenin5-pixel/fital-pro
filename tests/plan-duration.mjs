@@ -141,6 +141,7 @@ assert.ok(workerSource.includes("'Premium': { amount: '3990.00', label: 'Fital P
 assert.ok(workerSource.includes('profile.age < 18'), 'adult nutrition formula must not be used for minors');
 assert.ok(htmlSource.includes('min="18"'), 'both questionnaire forms must require adult age');
 assert.ok(appSource.includes('Меню и тренировки на 30 дней, доступ на 30 дней'), 'Premium checkout description must promise 30 days');
+assert.ok(appSource.includes('Среднее меню по составу продуктов'), 'the member cabinet must show the calculated daily average against the target');
 assert.ok(htmlSource.includes('тренировочная программа на все 30 дней'), 'Premium tariff must advertise a 30-day training program');
 
 const checkoutStart = workerSource.indexOf('async function checkout(');
