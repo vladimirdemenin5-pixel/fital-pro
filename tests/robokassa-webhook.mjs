@@ -136,9 +136,21 @@ function callback(overrides = {}, signingPassword = password2) {
 async function status() {
   return paymentStatus(new Request(
     'https://fitalpro.test/api/payment-status?ref=' + order.client_ref,
-    { headers: { Cookie: 'fitalpro_checkout_ref=' + order.client_ref } }
+    { headers: { Cookie: 'fitalpro_checkout_' + order.client_ref + '=' + order.client_ref } }
   ), env);
 }
+
+// A newer pending checkout must not overwrite authorization for this order.
+const multiCookieStatus = await paymentStatus(new Request(
+  'https://fitalpro.test/api/payment-status?ref=' + order.client_ref,
+  { headers: { Cookie: 'fitalpro_checkout_other=other; fitalpro_checkout_' + order.client_ref + '=' + order.client_ref } }
+), env);
+assert.equal((await multiCookieStatus.json()).status, 'pending');
+const mismatchedCookieStatus = await paymentStatus(new Request(
+  'https://fitalpro.test/api/payment-status?ref=' + order.client_ref,
+  { headers: { Cookie: 'fitalpro_checkout_' + order.client_ref + '=different-ref' } }
+), env);
+assert.equal((await mismatchedCookieStatus.json()).status, 'pending');
 
 // Before a confirmed callback, there must be no access token.
 let response = await status();
@@ -205,7 +217,7 @@ await assert.rejects(() => robokassaWebhook(callback(), retryEnv), /simulated D1
 assert.equal(retryEnv.DB.orders.get(42).status, 'pending');
 let retryResponse = await paymentStatus(new Request(
   'https://fitalpro.test/api/payment-status?ref=' + order.client_ref,
-  { headers: { Cookie: 'fitalpro_checkout_ref=' + order.client_ref } }
+  { headers: { Cookie: 'fitalpro_checkout_' + order.client_ref + '=' + order.client_ref } }
 ), retryEnv);
 let retryPayload = await retryResponse.json();
 assert.equal(retryPayload.status, 'pending');
@@ -216,7 +228,7 @@ assert.equal(retryResponse.status, 200);
 assert.equal(retryEnv.DB.orders.get(42).status, 'paid');
 retryResponse = await paymentStatus(new Request(
   'https://fitalpro.test/api/payment-status?ref=' + order.client_ref,
-  { headers: { Cookie: 'fitalpro_checkout_ref=' + order.client_ref } }
+  { headers: { Cookie: 'fitalpro_checkout_' + order.client_ref + '=' + order.client_ref } }
 ), retryEnv);
 retryPayload = await retryResponse.json();
 assert.equal(retryPayload.status, 'active');
@@ -238,7 +250,7 @@ const concurrentTokens = [...concurrentEnv.DB.subscriptions.values()].map(item =
 assert.equal(new Set(concurrentTokens).size, 1);
 const concurrentStatus = await paymentStatus(new Request(
   'https://fitalpro.test/api/payment-status?ref=' + order.client_ref,
-  { headers: { Cookie: 'fitalpro_checkout_ref=' + order.client_ref } }
+  { headers: { Cookie: 'fitalpro_checkout_' + order.client_ref + '=' + order.client_ref } }
 ), concurrentEnv);
 const concurrentPayload = await concurrentStatus.json();
 assert.equal(concurrentPayload.status, 'active');
