@@ -108,7 +108,7 @@ function profileFrom(input) {
   };
   if (!profile.name) throw new Error('Укажите имя.');
   if (!['female', 'male'].includes(profile.sex)) throw new Error('Укажите пол.');
-  if (!Number.isFinite(profile.age) || profile.age < 16 || profile.age > 90) throw new Error('Проверьте возраст.');
+  if (!Number.isFinite(profile.age) || profile.age < 18 || profile.age > 90) throw new Error('Fital Pro пока формирует персональные программы только для совершеннолетних пользователей (18+).');
   if (!Number.isFinite(profile.height) || profile.height < 120 || profile.height > 230) throw new Error('Проверьте рост.');
   if (!Number.isFinite(profile.weight) || profile.weight < 35 || profile.weight > 250) throw new Error('Проверьте вес.');
   if (!['low', 'medium', 'high'].includes(profile.activity)) throw new Error('Выберите уровень активности.');
