@@ -65,6 +65,21 @@ async function rateLimit(request, env, route, limit = 12, windowMs = 60000) {
   return true;
 }
 
+async function memberRateLimit(env, accessToken, route, limit = 5, windowMs = 3600000) {
+  if (!env.DB) return true;
+  const raw = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('member|' + accessToken + '|' + route));
+  const hash = [...new Uint8Array(raw)].map(x => x.toString(16).padStart(2, '0')).join('');
+  const cutoff = Date.now() - windowMs;
+  const count = await env.DB.prepare(
+    'SELECT COUNT(*) AS n FROM request_log WHERE ip_hash=? AND route=? AND created_at>?'
+  ).bind(hash, route, cutoff).first();
+  if ((count?.n || 0) >= limit) return false;
+  await env.DB.prepare(
+    'INSERT INTO request_log (ip_hash,route,created_at) VALUES (?,?,?)'
+  ).bind(hash, route, Date.now()).run();
+  return true;
+}
+
 function tokenFromRequest(request) {
   const header = request.headers.get('Authorization') || '';
   return header.startsWith('Bearer ') ? clean(header.slice(7), 120) : '';
@@ -560,6 +575,11 @@ async function profileApi(request, env) {
   if (request.method === 'GET') {
     const row = await env.DB.prepare('SELECT profile_json FROM profiles WHERE access_token=?').bind(sub.access_token).first();
     return json({ profile: row ? JSON.parse(row.profile_json) : null });
+  }
+  // Regenerating a full AI plan is expensive. Limit by subscription token,
+  // not IP, so customers sharing a household or mobile network do not block each other.
+  if (!(await memberRateLimit(env, sub.access_token, 'profile-update', 5, 3600000))) {
+    return json({ error: 'Слишком много обновлений программы за час. Попробуйте позже.' }, 429);
   }
   const body = await request.json();
   let profile;
