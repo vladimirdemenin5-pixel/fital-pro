@@ -54,7 +54,7 @@ assert.equal(proPlan.week[13].day, 'День 14');
 assert.deepEqual(proPlan.week[0].nutrition, { calories: 1935, protein: 95 });
 assert.equal(proPlan.dailyAverage.calories, 1935);
 assert.equal(proPlan.dailyAverage.protein, 95);
-assert.ok(proPlan.shopping.includes('Овсяные хлопья, сухие — 1,1 кг'));
+assert.ok(proPlan.shopping.includes('Овсяные хлопья, сухие — 1,12 кг'));
 assert.ok(proPlan.shopping.includes('Молоко 2% — 2,8 кг'));
 assert.ok(!proPlan.shopping.includes('Продукты на весь период'));
 assert.ok(proPlan.nutritionSource.includes('USDA FoodData Central'));
