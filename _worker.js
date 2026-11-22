@@ -294,6 +294,44 @@ function normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, target
   return week;
 }
 
+
+function diagnosePlanWeekFailure(parsed, profile, planKey, menuDays, targets) {
+  if (!Array.isArray(parsed?.week)) return 'week-not-array';
+  if (parsed.week.length !== menuDays) return 'week-length-' + parsed.week.length + '-expected-' + menuDays;
+  const includesTraining = planKey !== 'Питание';
+  const week = [];
+  for (let index = 0; index < parsed.week.length; index++) {
+    const source = parsed.week[index];
+    const dayLabel = 'day-' + (index + 1);
+    if (typeof source?.trainingDay !== 'boolean') return dayLabel + '-trainingDay-not-boolean';
+    const day = { trainingDay: includesTraining && source.trainingDay };
+    for (const key of MEAL_KEYS) {
+      if (!clean(source?.[key], 120)) return dayLabel + '-' + key + '-title-missing';
+      if (clean(source?.[key + 'Recipe'], 300).length < 15) return dayLabel + '-' + key + '-recipe-short-or-missing';
+      const ingredients = normalizeMealIngredients(source?.[key + 'Ingredients']);
+      if (!ingredients) return dayLabel + '-' + key + '-ingredients-invalid';
+      day[key + 'Ingredients'] = ingredients;
+    }
+    day.workout = clean(source?.workout, 400);
+    if (!day.workout) return dayLabel + '-workout-missing';
+    if (includesTraining && day.trainingDay && !hasWorkoutPrescription(day.workout)) return dayLabel + '-workout-prescription-missing';
+    day.nutrition = calculateDayNutrition(day);
+    if (day.nutrition.calories < targets.calories * 0.8 || day.nutrition.calories > targets.calories * 1.2) return dayLabel + '-calories-out-of-range-' + day.nutrition.calories;
+    if (day.nutrition.protein < targets.protein * 0.8 || day.nutrition.protein > targets.protein * 1.2) return dayLabel + '-protein-out-of-range-' + day.nutrition.protein;
+    if (targets.fat > 0 && (day.nutrition.fat < targets.fat * 0.7 || day.nutrition.fat > targets.fat * 1.3)) return dayLabel + '-fat-out-of-range-' + day.nutrition.fat;
+    if (targets.carbs > 0 && (day.nutrition.carbs < targets.carbs * 0.7 || day.nutrition.carbs > targets.carbs * 1.3)) return dayLabel + '-carbs-out-of-range-' + day.nutrition.carbs;
+    week.push(day);
+  }
+  if (includesTraining) {
+    const counts = Array.from({ length: Math.ceil(menuDays / 7) }, (_, index) =>
+      week.slice(index * 7, (index + 1) * 7).filter(day => day.trainingDay).length
+    );
+    const invalidBlock = counts.findIndex((count, index) => count !== expectedTrainingDaysInBlock(menuDays, index, profile.days));
+    if (invalidBlock >= 0) return 'training-block-' + (invalidBlock + 1) + '-count-' + counts[invalidBlock] + '-expected-' + expectedTrainingDaysInBlock(menuDays, invalidBlock, profile.days);
+  }
+  return 'plan-validation-failed-without-specific-rule';
+}
+
 function buildShoppingList(week) {
   const totals = {};
   for (const day of week) for (const key of MEAL_KEYS) for (const item of day[key + 'Ingredients']) {
@@ -330,23 +368,27 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
       const text = extractAiText(result);
       const normalized = text.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
       const match = normalized.match(/\{[\s\S]*\}/);
-      if (match) {
+      if (!text) {
+        const resultKeys = result && typeof result === 'object' ? Object.keys(result).slice(0, 12).join(',') : typeof result;
+        diagnostics.push(model + ': empty-text; resultKeys=' + resultKeys);
+      } else if (!match) {
+        diagnostics.push(model + ': no-json-object; outputLength=' + text.length + '; preview=' + text.slice(0, 100).replace(/\s+/g, ' '));
+      } else {
         try {
           const parsed = JSON.parse(match[0]);
           const week = normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, nutritionTargets(profile));
           if (week) return text;
-        } catch {}
+          const reason = diagnosePlanWeekFailure(parsed, profile, planKey, menuDays, nutritionTargets(profile));
+          diagnostics.push(model + ': json-parsed-but-rejected; ' + reason + '; outputLength=' + text.length);
+        } catch (error) {
+          diagnostics.push(model + ': json-parse-error=' + clean(error?.message, 140) + '; outputLength=' + text.length);
+        }
       }
       const finishReason = result?.choices?.[0]?.finish_reason || result?.result?.choices?.[0]?.finish_reason || null;
-      const resultKeys = result && typeof result === 'object' ? Object.keys(result).slice(0, 12).join(',') : typeof result;
-      const detail = !text
-        ? 'empty text; resultKeys=' + resultKeys
-        : 'invalid plan JSON; outputLength=' + text.length + '; finishReason=' + (finishReason || 'none');
-      diagnostics.push(model + ': ' + detail);
-      console.error('Fital Pro AI returned incomplete plan:', model, detail);
+      console.error('Fital Pro AI plan rejected:', model, diagnostics[diagnostics.length - 1], 'finishReason=' + (finishReason || 'none'));
     } catch (error) {
       const detail = clean(error?.message, 180) || 'unknown model error';
-      diagnostics.push(model + ': request error: ' + detail);
+      diagnostics.push(model + ': request-error=' + detail);
       console.error('Fital Pro AI model failed:', model, detail);
     }
   }
