@@ -436,6 +436,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
         const result = await env.AI.run(model, {
           messages: currentMessages,
           max_completion_tokens: 6500,
+          reasoning_effort: null,
           temperature: 0.2,
           response_format: { type: 'json_object' },
           chat_template_kwargs: { enable_thinking: false }
