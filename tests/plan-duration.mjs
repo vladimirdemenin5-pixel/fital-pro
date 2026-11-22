@@ -19,24 +19,29 @@ const profile = {
   preferences: 'Без ограничений'
 };
 
-function makeAi(menuDays, wrongLength = false, invalidMeal = false, invalidWorkout = false) {
+function makeAi(menuDays, wrongLength = false, invalidMeal = false, invalidWorkout = false, invalidNutrition = false) {
   return {
     async run() {
       const count = wrongLength ? 7 : menuDays;
       const week = Array.from({ length: count }, (_, index) => {
         const dayInWeek = index % 7;
         const trainingDay = dayInWeek === 0 || dayInWeek === 2 || dayInWeek === 4;
+        const tiny = invalidNutrition;
         return {
           day: 'День ' + (index + 1),
           trainingDay,
-          breakfast: invalidMeal ? 'Овсянка с ягодами и йогуртом' : 'Овсянка 200 г и йогурт 150 г',
-          lunch: 'Курица 150 г, рис 100 г и овощи 200 г',
-          snack: 'Творог 150 г и яблоко',
-          dinner: 'Рыба 150 г и овощи 200 г',
+          breakfast: 'Овсяная каша с бананом',
+          breakfastIngredients: invalidMeal ? [] : (tiny ? [['oats_dry', 5]] : [['oats_dry', 80], ['milk_2pct', 200], ['banana', 120]]),
+          lunch: 'Курица с рисом и брокколи',
+          lunchIngredients: tiny ? [['chicken_raw', 5]] : [['chicken_raw', 100], ['rice_dry', 85], ['broccoli', 100]],
+          snack: 'Йогурт с яблоком и миндалём',
+          snackIngredients: tiny ? [['greek_yogurt', 5]] : [['greek_yogurt', 150], ['apple', 150], ['almonds', 15]],
+          dinner: 'Лосось с картофелем и овощами',
+          dinnerIngredients: tiny ? [['salmon_raw', 5]] : [['salmon_raw', 100], ['potato_raw', 200], ['olive_oil', 28], ['tomato', 100], ['avocado', 50]],
           workout: trainingDay ? (invalidWorkout ? 'Разминка, приседания и тяга' : 'Разминка, приседания 3×10, тяга 3×10, заминка') : 'Прогулка и восстановление'
         };
       });
-      return { response: JSON.stringify({ intro: 'План создан по тестовой анкете.', week, shopping: ['Продукты на весь период'], tips: ['Пейте воду по жажде.'] }) };
+      return { response: JSON.stringify({ intro: 'План создан по тестовой анкете.', week, tips: ['Пейте воду по жажде.'] }) };
     }
   };
 }
