@@ -18,6 +18,23 @@ const plain = (value, status = 200) => new Response(value, {
 const clean = (value, max = 500) => String(value ?? '').trim().slice(0, max);
 const md5 = (value) => createHash('md5').update(String(value), 'utf8').digest('hex').toUpperCase();
 
+function buildRobokassaPaymentSignature({ merchant, outSum, invId, successUrl2, failUrl2, password1, clientRef }) {
+  // Robokassa's parameter order includes empty Receipt, StepByStep and ResultUrl2 slots.
+  const base = merchant + ':' + outSum + ':' + invId + ':::' +
+    successUrl2 + ':GET:' + failUrl2 + ':GET:' + password1 + ':Shp_ref=' + clientRef;
+  return md5(base);
+}
+
+function robokassaResultSignature(outSum, invId, password2, values) {
+  const shpKeys = Object.keys(values).filter(key => /^Shp_/i.test(key)).sort((a, b) => a.localeCompare(b));
+  const shpPart = shpKeys.map(key => key + '=' + String(values[key])).join(':');
+  return md5(outSum + ':' + invId + ':' + password2 + (shpPart ? ':' + shpPart : ''));
+}
+
+function verifyRobokassaResultSignature(outSum, invId, password2, values, receivedSignature) {
+  return sameHash(robokassaResultSignature(outSum, invId, password2, values), receivedSignature);
+}
+
 function robokassaPassword(env, number) {
   const key = env.ROBOKASSA_IS_TEST === '1'
     ? 'ROBOKASSA_TEST_PASSWORD' + number
@@ -369,10 +386,15 @@ async function checkout(request, env) {
   params.set('SuccessUrl2Method', 'GET');
   params.set('FailUrl2', failUrl.toString());
   params.set('FailUrl2Method', 'GET');
-  const signature = md5(
-    merchant + ':' + product.amount + ':' + invId + ':' +
-    successUrl2 + ':GET:' + failUrl2 + ':GET:' + password1 + ':Shp_ref=' + clientRef
-  );
+  const signature = buildRobokassaPaymentSignature({
+    merchant,
+    outSum: product.amount,
+    invId,
+    successUrl2,
+    failUrl2,
+    password1,
+    clientRef
+  });
   params.set('SignatureValue', signature);
   params.set('Shp_ref', clientRef);
   if (env.ROBOKASSA_IS_TEST === '1') params.set('IsTest', '1');
@@ -428,10 +450,9 @@ async function robokassaWebhook(request, env) {
   ).bind(invId).first();
   if (!order) return plain('Order not found', 404);
 
-  const shpKeys = Object.keys(values).filter(key => /^Shp_/i.test(key)).sort((a, b) => a.localeCompare(b));
-  const shpPart = shpKeys.map(key => key + '=' + String(values[key])).join(':');
-  const base = outSum + ':' + invId + ':' + password2 + (shpPart ? ':' + shpPart : '');
-  if (!sameHash(md5(base), receivedSignature)) return plain('Invalid signature', 403);
+  if (!verifyRobokassaResultSignature(outSum, invId, password2, values, receivedSignature)) {
+    return plain('Invalid signature', 403);
+  }
 
   const suppliedRef = getField(values, 'Shp_ref');
   if (!suppliedRef || suppliedRef !== order.client_ref) return plain('Order reference mismatch', 400);
@@ -779,3 +800,5 @@ export default {
     }
   }
 };
+
+export { buildRobokassaPaymentSignature, robokassaResultSignature, verifyRobokassaResultSignature };
