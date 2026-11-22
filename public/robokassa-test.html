@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Fital Pro — тест Robokassa</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px 14px; background: #111923; color: #f4f7fb; font: 16px/1.5 system-ui, sans-serif; }
+    main { max-width: 620px; margin: 28px auto; padding: 24px; background: #1b2735; border: 1px solid #344456; border-radius: 18px; }
+    h1 { margin: 0 0 8px; font-size: 25px; }
+    p { color: #b9c7d6; }
+    label { display: block; margin: 15px 0 6px; font-weight: 600; }
+    input, select { width: 100%; padding: 12px; border: 1px solid #526477; border-radius: 9px; background: #101a26; color: white; font: inherit; }
+    button { width: 100%; margin-top: 20px; padding: 14px; border: 0; border-radius: 10px; background: #e7a8d1; color: #201323; font: inherit; font-weight: 700; cursor: pointer; }
+    button:disabled { opacity: .6; cursor: wait; }
+    #message { margin-top: 18px; padding: 12px; border-radius: 9px; background: #101a26; white-space: pre-wrap; }
+    .note { font-size: 13px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Тестовая оплата Fital Pro</h1>
+    <p>Закрытая техническая страница. Создаёт тестовый заказ Robokassa через отдельный защищённый маршрут. Рабочий режим оплаты не переключается.</p>
+    <form id="testForm">
+      <label for="testKey">Ключ доступа к тестированию</label>
+      <input id="testKey" type="password" autocomplete="off" required>
+      <label for="plan">Тариф для теста</label>
+      <select id="plan">
+        <option value="Питание">Питание — 990 ₽</option>
+        <option value="PRO">PRO — 1 990 ₽</option>
+        <option value="Premium">Premium — 3 990 ₽</option>
+      </select>
+      <label for="contact">Контакт тестового клиента</label>
+      <input id="contact" type="email" value="fitalpro-test@example.invalid" required>
+      <label for="name">Имя</label>
+      <input id="name" value="Тестовый клиент" required>
+      <label for="sex">Пол</label>
+      <select id="sex"><option value="female">Женский</option><option value="male">Мужской</option></select>
+      <label for="age">Возраст</label>
+      <input id="age" type="number" min="16" max="90" value="30" required>
+      <label for="height">Рост, см</label>
+      <input id="height" type="number" min="120" max="230" value="170" required>
+      <label for="weight">Вес, кг</label>
+      <input id="weight" type="number" min="35" max="250" value="70" required>
+      <label for="activity">Активность</label>
+      <select id="activity"><option value="low">Низкая</option><option value="medium" selected>Средняя</option><option value="high">Высокая</option></select>
+      <label for="goal">Цель</label>
+      <select id="goal"><option value="loss">Снижение веса</option><option value="gain">Набор массы</option><option value="maintenance" selected>Поддержание</option></select>
+      <label for="training">Место тренировок</label>
+      <select id="training"><option value="home" selected>Дома</option><option value="gym">Зал</option><option value="mixed">Смешанный вариант</option></select>
+      <label for="days">Тренировок в неделю</label>
+      <input id="days" type="number" min="2" max="7" value="3" required>
+      <label for="preferences">Пожелания (необязательно)</label>
+      <input id="preferences" maxlength="700" placeholder="Нет">
+      <button id="submit" type="submit">Перейти к тестовой оплате</button>
+    </form>
+    <div id="message" role="status" aria-live="polite">Тестовая страница не отображается в основном меню сайта.</div>
+    <p class="note">Не вводите здесь рабочие пароли Robokassa. Ключ тестирования не сохраняется в браузере и не передаётся в адресной строке.</p>
+  </main>
+  <script>
+    const form = document.getElementById('testForm');
+    const button = document.getElementById('submit');
+    const message = document.getElementById('message');
+    const params = new URLSearchParams(location.search);
+    const say = value => { message.textContent = value; };
+    const value = id => document.getElementById(id).value;
+    const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+    async function checkPayment(ref) {
+      form.hidden = true;
+      say('Возврат из Robokassa получен. Проверяю серверное подтверждение и создание доступа…');
+      for (let i = 0; i < 24; i++) {
+        try {
+          const response = await fetch('/api/payment-status?ref=' + encodeURIComponent(ref), { credentials: 'same-origin', cache: 'no-store' });
+          const data = await response.json();
+          if (data.status === 'active' && data.access_token) {
+            say('УСПЕШНО: тестовая оплата подтверждена сервером. Подписка и доступ созданы, профиль и персональный план сохранены в D1. Токен не выводится на эту страницу.');
+            return;
+          }
+          if (data.status === 'processing') say('Платёж подтверждён. Завершается сохранение профиля и плана…');
+        } catch {}
+        await wait(2500);
+      }
+      say('Пока нет подтверждённого доступа. Не повторяйте оплату. Заказ можно проверить повторно — webhook Robokassa может прийти с задержкой.');
+    }
+
+    if (params.get('payment') === 'success' && params.get('ref')) {
+      checkPayment(params.get('ref'));
+    } else if (params.get('payment') === 'fail') {
+      say('Robokassa вернула неуспешную тестовую оплату. Рабочий режим не затронут. Можно вернуться к форме и повторить тест.');
+    }
+
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      button.disabled = true;
+      say('Готовлю тестовый персональный план и заказ…');
+      const profile = {
+        name: value('name'),
+        sex: value('sex'),
+        age: Number(value('age')),
+        height: Number(value('height')),
+        weight: Number(value('weight')),
+        activity: value('activity'),
+        goal: value('goal'),
+        training: value('training'),
+        days: Number(value('days')),
+        preferences: value('preferences')
+      };
+      try {
+        const response = await fetch('/api/checkout-test', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json', 'X-Fital-Test-Key': value('testKey') },
+          body: JSON.stringify({ plan: value('plan'), contact: value('contact'), profile, pd_consent: true, offer_accepted: true })
+        });
+        const data = await response.json();
+        if (!response.ok || !data.confirmation_url) throw new Error(data.error || 'Не удалось создать тестовый заказ.');
+        say('Заказ готов. Перенаправляю в Robokassa…');
+        location.assign(data.confirmation_url);
+      } catch (error) {
+        say(error.message || 'Ошибка тестирования. Проверьте тестовые настройки.');
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

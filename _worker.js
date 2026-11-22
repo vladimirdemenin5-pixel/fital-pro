@@ -35,10 +35,8 @@ function verifyRobokassaResultSignature(outSum, invId, password2, values, receiv
   return sameHash(robokassaResultSignature(outSum, invId, password2, values), receivedSignature);
 }
 
-function robokassaPassword(env, number) {
-  const key = env.ROBOKASSA_IS_TEST === '1'
-    ? 'ROBOKASSA_TEST_PASSWORD' + number
-    : 'ROBOKASSA_PASSWORD' + number;
+function robokassaPassword(env, number, testMode = env.ROBOKASSA_IS_TEST === '1') {
+  const key = testMode ? 'ROBOKASSA_TEST_PASSWORD' + number : 'ROBOKASSA_PASSWORD' + number;
   return clean(env[key], 200);
 }
 
@@ -297,6 +295,7 @@ async function ensurePendingOrdersSchema(env) {
         profile_json TEXT NOT NULL,
         plan_json TEXT NOT NULL,
         status TEXT NOT NULL DEFAULT 'pending',
+        is_test INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )`).run();
@@ -306,7 +305,8 @@ async function ensurePendingOrdersSchema(env) {
         ['pd_consent_at', 'TEXT'],
         ['pd_policy_version', 'TEXT'],
         ['offer_accepted_at', 'TEXT'],
-        ['offer_version', 'TEXT']
+        ['offer_version', 'TEXT'],
+        ['is_test', 'INTEGER NOT NULL DEFAULT 0']
       ]) {
         if (!columns.has(name)) await env.DB.prepare(`ALTER TABLE pending_orders ADD COLUMN ${name} ${type}`).run();
       }
@@ -321,14 +321,15 @@ async function ensurePendingOrdersSchema(env) {
   await pendingOrderSchemaReady;
 }
 
-async function checkout(request, env) {
+async function checkout(request, env, forceTestMode = false) {
   await ensurePendingOrdersSchema(env);
-  if (!(await rateLimit(request, env, 'checkout', 5, 3600000))) {
+  const testMode = forceTestMode || env.ROBOKASSA_IS_TEST === '1';
+  if (!(await rateLimit(request, env, testMode ? 'checkout-test' : 'checkout', 5, 3600000))) {
     return json({ error: 'Слишком много попыток. Попробуйте позже.' }, 429);
   }
   if (!env.DB) return json({ error: 'База данных пока не подключена. Оплата не создавалась.' }, 503);
-  const password1 = robokassaPassword(env, 1);
-  if (!env.ROBOKASSA_MERCHANT_LOGIN || !password1 || !robokassaPassword(env, 2)) {
+  const password1 = robokassaPassword(env, 1, testMode);
+  if (!env.ROBOKASSA_MERCHANT_LOGIN || !password1 || !robokassaPassword(env, 2, testMode)) {
     return json({ error: 'Приём оплаты ещё не активирован: не настроены секреты Robokassa.' }, 503);
   }
 
@@ -359,8 +360,8 @@ async function checkout(request, env) {
   const clientRef = crypto.randomUUID().replaceAll('-', '');
   const now = new Date().toISOString();
   const order = await env.DB.prepare(
-    'INSERT INTO pending_orders (client_ref,plan,amount,customer_contact,profile_json,plan_json,status,created_at,updated_at,pd_consent_at,pd_policy_version,offer_accepted_at,offer_version) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING inv_id'
-  ).bind(clientRef, planKey, product.amount, contact, JSON.stringify(profile), JSON.stringify(plan), 'pending', now, now, now, '2026-11-21', now, '2026-11-21').first();
+    'INSERT INTO pending_orders (client_ref,plan,amount,customer_contact,profile_json,plan_json,status,created_at,updated_at,pd_consent_at,pd_policy_version,offer_accepted_at,offer_version,is_test) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING inv_id'
+  ).bind(clientRef, planKey, product.amount, contact, JSON.stringify(profile), JSON.stringify(plan), 'pending', now, now, now, '2026-11-21', now, '2026-11-21', testMode ? 1 : 0).first();
   const invId = Number(order?.inv_id);
   if (!Number.isSafeInteger(invId) || invId < 1) {
     throw new Error('Не удалось сохранить заказ. Попробуйте ещё раз.');
@@ -374,7 +375,7 @@ async function checkout(request, env) {
   params.set('Description', product.label);
   params.set('Culture', 'ru');
   params.set('Encoding', 'utf-8');
-  const returnBase = new URL('/', request.url);
+  const returnBase = new URL(testMode ? '/robokassa-test.html' : '/', request.url);
   const successUrl = new URL(returnBase);
   successUrl.searchParams.set('payment', 'success');
   successUrl.searchParams.set('ref', clientRef);
@@ -397,7 +398,7 @@ async function checkout(request, env) {
   });
   params.set('SignatureValue', signature);
   params.set('Shp_ref', clientRef);
-  if (env.ROBOKASSA_IS_TEST === '1') params.set('IsTest', '1');
+  if (testMode) params.set('IsTest', '1');
 
   const response = json({
     ok: true,
@@ -433,9 +434,20 @@ async function parsePaymentFields(request) {
   return Object.fromEntries(new URLSearchParams(body).entries());
 }
 
+async function testCheckout(request, env) {
+  const expectedKey = clean(env.ROBOKASSA_TEST_ACCESS_KEY, 256);
+  const suppliedKey = clean(request.headers.get('X-Fital-Test-Key'), 256);
+  if (!expectedKey || !suppliedKey || !sameHash(md5(expectedKey), md5(suppliedKey))) {
+    return json({ error: 'Тестовый доступ не настроен или ключ неверен.' }, 404);
+  }
+  if (!env.ROBOKASSA_MERCHANT_LOGIN || !robokassaPassword(env, 1, true) || !robokassaPassword(env, 2, true)) {
+    return json({ error: 'Тестовые реквизиты Robokassa не настроены.' }, 503);
+  }
+  return checkout(request, env, true);
+}
+
 async function robokassaWebhook(request, env) {
-  const password2 = robokassaPassword(env, 2);
-  if (!env.DB || !password2) return plain('Service unavailable', 503);
+  if (!env.DB) return plain('Service unavailable', 503);
   await ensurePendingOrdersSchema(env);
   const values = await parsePaymentFields(request);
   const outSum = getField(values, 'OutSum');
@@ -449,6 +461,9 @@ async function robokassaWebhook(request, env) {
     'SELECT * FROM pending_orders WHERE inv_id=?'
   ).bind(invId).first();
   if (!order) return plain('Order not found', 404);
+  const testMode = Number(order.is_test) === 1;
+  const password2 = robokassaPassword(env, 2, testMode);
+  if (!password2) return plain('Service unavailable', 503);
 
   if (!verifyRobokassaResultSignature(outSum, invId, password2, values, receivedSignature)) {
     return plain('Invalid signature', 403);
@@ -461,7 +476,7 @@ async function robokassaWebhook(request, env) {
     return plain('Payment amount mismatch', 400);
   }
 
-  const paymentId = 'robokassa-' + invId;
+  const paymentId = 'robokassa-' + (testMode ? 'test-' : '') + invId;
   await env.DB.prepare(
     'INSERT INTO payments (id,status,plan,amount,currency,created_at) VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,plan=excluded.plan,amount=excluded.amount,currency=excluded.currency'
   ).bind(paymentId, 'succeeded', order.plan, order.amount, 'RUB', new Date().toISOString()).run();
@@ -780,6 +795,7 @@ export default {
           payments: !!(env.ROBOKASSA_MERCHANT_LOGIN && robokassaPassword(env, 1) && robokassaPassword(env, 2))
         });
       }
+      if (url.pathname === '/api/checkout-test' && request.method === 'POST') return await testCheckout(request, env);
       if (url.pathname === '/api/checkout' && request.method === 'POST') return await checkout(request, env);
       if (url.pathname === '/webhooks/robokassa' && (request.method === 'POST' || request.method === 'GET')) {
         return await robokassaWebhook(request, env);
@@ -801,4 +817,4 @@ export default {
   }
 };
 
-export { buildRobokassaPaymentSignature, robokassaResultSignature, verifyRobokassaResultSignature, robokassaWebhook, paymentStatus };
+export { buildRobokassaPaymentSignature, robokassaResultSignature, verifyRobokassaResultSignature, robokassaWebhook, paymentStatus, testCheckout };

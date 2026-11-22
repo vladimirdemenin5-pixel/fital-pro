@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import {
   robokassaWebhook,
   paymentStatus,
-  robokassaResultSignature
+  robokassaResultSignature,
+  testCheckout
 } from '../_worker.js';
 
 // Minimal in-memory D1 double. It implements only the SQL used by the real
@@ -49,7 +50,7 @@ class MockD1 {
       },
       async all() {
         if (sql.includes('PRAGMA table_info(pending_orders)')) {
-          return { results: ['pd_consent_at','pd_policy_version','offer_accepted_at','offer_version'].map(name => ({ name })) };
+          return { results: ['pd_consent_at','pd_policy_version','offer_accepted_at','offer_version','is_test'].map(name => ({ name })) };
         }
         return { results: [] };
       },
@@ -101,7 +102,7 @@ class MockD1 {
 }
 
 const password2 = 'test-password-2';
-const env = { DB: new MockD1(), ROBOKASSA_IS_TEST: '1', ROBOKASSA_TEST_PASSWORD2: password2 };
+const env = { DB: new MockD1(), ROBOKASSA_IS_TEST: '0', ROBOKASSA_TEST_PASSWORD2: password2 };
 const order = {
   inv_id: 42,
   client_ref: 'safe-test-order',
@@ -111,19 +112,20 @@ const order = {
   profile_json: JSON.stringify({ name: 'Тестовый клиент' }),
   plan_json: JSON.stringify({ plan: 'Питание', week: [{ day: 'День 1' }] }),
   status: 'pending',
+  is_test: 1,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString()
 };
 env.DB.orders.set(order.inv_id, { ...order });
 
-function callback(overrides = {}) {
+function callback(overrides = {}, signingPassword = password2) {
   const fields = {
     OutSum: '990.00',
     InvId: '42',
     Shp_ref: order.client_ref,
     ...overrides
   };
-  fields.SignatureValue = robokassaResultSignature(fields.OutSum, fields.InvId, password2, fields);
+  fields.SignatureValue = robokassaResultSignature(fields.OutSum, fields.InvId, signingPassword, fields);
   return new Request('https://fitalpro.test/webhooks/robokassa', {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -149,6 +151,7 @@ assert.equal(response.status, 200);
 assert.equal(await response.text(), 'OK42');
 assert.equal(env.DB.orders.get(42).status, 'paid');
 assert.equal(env.DB.payments.size, 1);
+assert.ok(env.DB.payments.has('robokassa-test-42'), 'test payment must use a separate payment identifier');
 assert.equal(env.DB.subscriptions.size, 1);
 assert.equal(env.DB.profiles.size, 1);
 assert.equal(env.DB.plans.size, 1);
@@ -240,5 +243,28 @@ const concurrentStatus = await paymentStatus(new Request(
 const concurrentPayload = await concurrentStatus.json();
 assert.equal(concurrentPayload.status, 'active');
 assert.equal(concurrentPayload.access_token, concurrentTokens[0]);
+
+// The test-only checkout endpoint is closed unless the private access key matches.
+const deniedTestCheckout = await testCheckout(new Request('https://fitalpro.test/api/checkout-test', {
+  method: 'POST',
+  headers: { 'X-Fital-Test-Key': 'wrong-key', 'content-type': 'application/json' },
+  body: '{}'
+}), { ROBOKASSA_TEST_ACCESS_KEY: 'expected-key' });
+assert.equal(deniedTestCheckout.status, 404);
+
+// Production orders continue to use Password #2 even while test credentials
+// are present and the global Worker mode remains production (0).
+const livePassword2 = 'live-password-2';
+const liveEnv = {
+  DB: new MockD1(),
+  ROBOKASSA_IS_TEST: '0',
+  ROBOKASSA_PASSWORD2: livePassword2,
+  ROBOKASSA_TEST_PASSWORD2: password2
+};
+liveEnv.DB.orders.set(42, { ...order, is_test: 0 });
+const liveCallback = await robokassaWebhook(callback({}, livePassword2), liveEnv);
+assert.equal(liveCallback.status, 200);
+assert.ok(liveEnv.DB.payments.has('robokassa-42'));
+assert.equal(liveEnv.DB.payments.has('robokassa-test-42'), false);
 
 console.log('PASS: Robokassa webhook idempotency, validation, retry and access-gating tests');
