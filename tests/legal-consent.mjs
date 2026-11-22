@@ -110,7 +110,7 @@ assert.ok(chatSource.includes('const reply = extractAiText(result)'), 'AI consul
 assert.ok(chatSource.includes('Fital AI chat failed:'), 'AI provider failures must return a controlled API error');
 
 
-assert.ok(worker.includes("rateLimit(request, env, 'profile-update', 5, 3600000)"), 'AI profile regeneration must be rate limited');
+assert.ok(worker.includes("memberRateLimit(env, sub.access_token, 'profile-update', 5, 3600000)"), 'AI profile regeneration must be limited per active subscription');
 assert.ok(worker.includes("async function premiumReviewApi(request, env)"), 'Premium weekly review API must exist');
 assert.ok(worker.includes("sub.plan !== 'Premium'"), 'Premium review must be restricted to Premium');
 assert.ok(worker.includes("CREATE TABLE IF NOT EXISTS premium_reviews"), 'Premium review history must persist in D1');
