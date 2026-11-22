@@ -1,6 +1,23 @@
 const endpoint = process.env.FITALPRO_WORKER_URL || 'https://red-waterfall-2af8.vladimirdemenin5.workers.dev';
-const testKey = process.env.FITALPRO_CI_TEST_KEY;
-if (!testKey) throw new Error('Temporary Fital Pro CI diagnostic key was not created.');
+const oidcRequestUrl = process.env.ACTIONS_ID_TOKEN_REQUEST_URL;
+const oidcRequestToken = process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
+if (!oidcRequestUrl || !oidcRequestToken) {
+  throw new Error('GitHub Actions OIDC is not enabled for the live integration job.');
+}
+
+async function getOidcToken() {
+  const url = new URL(oidcRequestUrl);
+  url.searchParams.set('audience', 'fitalpro-ai-data-flow');
+  const response = await fetch(url, {
+    headers: { Authorization: 'Bearer ' + oidcRequestToken },
+    signal: AbortSignal.timeout(30000)
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result.value) {
+    throw new Error('Could not obtain the GitHub Actions OIDC identity token.');
+  }
+  return result.value;
+}
 
 const plans = [
   { key: 'Питание', days: 7 },
@@ -10,6 +27,7 @@ const plans = [
 
 for (const item of plans) {
   const started = Date.now();
+  const oidcToken = await getOidcToken();
   console.log(`LIVE FLOW: starting ${item.key} (${item.days} days)`);
   let response;
   let result = {};
@@ -19,7 +37,7 @@ for (const item of plans) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Fital-Test-Key': testKey
+        Authorization: 'Bearer ' + oidcToken
       },
       body: JSON.stringify({ plan: item.key }),
       signal: AbortSignal.timeout(240000)
@@ -27,16 +45,16 @@ for (const item of plans) {
     result = await response.json().catch(() => ({}));
     if (response.status !== 404 || result.error !== 'Диагностический доступ не настроен или ключ неверен.' ||
         Date.now() >= authPropagationDeadline) break;
-    console.log('Temporary Worker secret is not visible yet; retrying in 5 seconds.');
+    console.log('GitHub OIDC authorization is not ready yet; retrying in 5 seconds.');
     await new Promise(resolve => setTimeout(resolve, 5000));
   } while (Date.now() < authPropagationDeadline);
   if (!response.ok || result.ok !== true) {
-    throw new Error(`${item.key}: live Worker flow failed (HTTP ${response.status}): ${result.error || 'unknown error'}`);
+    throw new Error(`${item.key}: live Worker flow failed (HTTP ${response.status}, stage ${result.stage || 'authorization'}): ${result.error || 'unknown error'}`);
   }
   if (result.days !== item.days || result.meals !== item.days * 4 ||
       result.d1Write !== true || result.cabinetPlanRead !== true ||
       result.cabinetProfileRead !== true || result.memberAccessRead !== true) {
-    throw new Error(`${item.key}: AI → D1 → personal cabinet verification returned incomplete results.`);
+    throw new Error(`${item.key}: AI → D1 → personal-cabinet verification returned incomplete results.`);
   }
   console.log(JSON.stringify({
     plan: item.key,

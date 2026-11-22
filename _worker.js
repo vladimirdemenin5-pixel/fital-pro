@@ -799,10 +799,80 @@ async function personalizedPlan(request, env) {
 
 
 
+let githubOidcJwksCache = null;
+let githubOidcJwksCacheExpiresAt = 0;
+
+function base64UrlBytes(value) {
+  const normalized = String(value).replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+  const binary = atob(padded);
+  return Uint8Array.from(binary, character => character.charCodeAt(0));
+}
+
+async function githubOidcJwks() {
+  if (githubOidcJwksCache && githubOidcJwksCacheExpiresAt > Date.now()) return githubOidcJwksCache;
+  const response = await fetch('https://token.actions.githubusercontent.com/.well-known/jwks', {
+    headers: { Accept: 'application/json' }
+  });
+  if (!response.ok) throw new Error('GitHub OIDC public keys are temporarily unavailable.');
+  const data = await response.json();
+  if (!Array.isArray(data.keys) || !data.keys.length) throw new Error('GitHub OIDC public keys are invalid.');
+  githubOidcJwksCache = data.keys;
+  githubOidcJwksCacheExpiresAt = Date.now() + 10 * 60 * 1000;
+  return githubOidcJwksCache;
+}
+
+async function verifyGitHubActionsOidc(request) {
+  const authorization = request.headers.get('Authorization') || '';
+  const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+  if (!token) return false;
+  const parts = token.split('.');
+  if (parts.length !== 3) return false;
+
+  try {
+    const header = JSON.parse(new TextDecoder().decode(base64UrlBytes(parts[0])));
+    const claims = JSON.parse(new TextDecoder().decode(base64UrlBytes(parts[1])));
+    const now = Math.floor(Date.now() / 1000);
+    const repository = 'vladimirdemenin5-pixel/fital-pro';
+    const workflowRef = repository + '/.github/workflows/main.yml@refs/heads/main';
+    if (header.alg !== 'RS256' || !header.kid ||
+        claims.iss !== 'https://token.actions.githubusercontent.com' ||
+        claims.aud !== 'fitalpro-ai-data-flow' ||
+        claims.repository !== repository ||
+        claims.ref !== 'refs/heads/main' ||
+        claims.workflow_ref !== workflowRef ||
+        claims.event_name !== 'push' ||
+        claims.sub !== 'repo:' + repository + ':ref:refs/heads/main' ||
+        !Number.isFinite(claims.exp) || claims.exp <= now ||
+        !Number.isFinite(claims.iat) || claims.iat > now + 60 || now - claims.iat > 600 ||
+        (Number.isFinite(claims.nbf) && claims.nbf > now + 60)) return false;
+
+    const keys = await githubOidcJwks();
+    const jwk = keys.find(key => key.kid === header.kid && key.kty === 'RSA');
+    if (!jwk) return false;
+    const publicKey = await crypto.subtle.importKey(
+      'jwk', jwk,
+      { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+      false, ['verify']
+    );
+    return await crypto.subtle.verify(
+      'RSASSA-PKCS1-v1_5',
+      publicKey,
+      base64UrlBytes(parts[2]),
+      new TextEncoder().encode(parts[0] + '.' + parts[1])
+    );
+  } catch (error) {
+    console.error('Fital Pro GitHub OIDC verification failed:', clean(error?.message, 180));
+    return false;
+  }
+}
+
 async function aiDataFlowDiagnostic(request, env) {
   const expectedKey = clean(env.FITALPRO_CI_TEST_KEY || env.ROBOKASSA_TEST_ACCESS_KEY, 256);
   const suppliedKey = clean(request.headers.get('X-Fital-Test-Key'), 256);
-  if (!expectedKey || !suppliedKey || !sameHash(md5(expectedKey), md5(suppliedKey))) {
+  const secretAuthorized = !!expectedKey && !!suppliedKey && sameHash(md5(expectedKey), md5(suppliedKey));
+  const oidcAuthorized = secretAuthorized ? false : await verifyGitHubActionsOidc(request);
+  if (!secretAuthorized && !oidcAuthorized) {
     return json({ error: 'Диагностический доступ не настроен или ключ неверен.' }, 404);
   }
   if (!env.DB || !env.AI) return json({ error: 'Для проверки необходимы подключения D1 и Workers AI.' }, 503);
