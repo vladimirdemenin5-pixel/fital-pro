@@ -69,7 +69,7 @@ assert.ok(!proPlan.shopping.includes('Продукты на весь перио�
 assert.ok(proPlan.nutritionSource.includes('USDA FoodData Central'));
 assert.ok(workerSource.includes('fdcId:173904'), 'oats reference must retain its USDA food record identifier');
 assert.ok(workerSource.includes('for (let offset = 0; offset < totalDays; offset += 7)'), 'long plans must be generated and validated in seven-day blocks');
-assert.ok(workerSource.includes('week must contain exactly'), 'the model prompt must explicitly require the exact block length');
+assert.ok(workerSource.includes('week должен содержать РОВНО'), 'the model prompt must explicitly require the exact block length');
 assert.equal(proPlan.week.slice(0, 7).filter(day => day.trainingDay).length, 3);
 assert.equal(proPlan.week.slice(7, 14).filter(day => day.trainingDay).length, 3);
 
