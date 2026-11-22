@@ -88,7 +88,8 @@ assert.ok(worker.includes("INSERT INTO pending_orders (client_ref,plan,amount,cu
 assert.ok(worker.includes("await saveMemberPlan(env, accessToken, profile, plan)"));
 assert.ok(worker.includes("SELECT plan_json FROM weekly_plans WHERE access_token=?"));
 
-assert.ok(worker.includes('trainingDays !== profile.days'));
+assert.ok(worker.includes('trainingCounts.every(count => count === profile.days)'), 'each seven-day block must contain the selected weekly training frequency');
+assert.ok(worker.includes('week.length === menuDays'), 'AI generation must validate the tariff menu duration');
 assert.ok(worker.includes('function extractAiText(result)'));
 assert.ok(worker.includes("result?.choices?.[0]?.message?.content"));
 assert.ok(worker.includes("messages,"));
