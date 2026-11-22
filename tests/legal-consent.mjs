@@ -93,8 +93,12 @@ assert.ok(worker.includes("result?.choices?.[0]?.message?.content"));
 assert.ok(worker.includes("messages,"));
 assert.ok(worker.includes("'@cf/zai-org/glm-4.7-flash'"));
 assert.ok(worker.includes('runPlanModel(env, prompt, profile, planKey, menuDays)'));
-assert.ok(worker.includes('correctTrainingCount'));
-assert.ok(worker.includes('shoppingComplete'), 'AI plan generation must not accept a plan without a shopping list');
+assert.ok(worker.includes('normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, nutritionTargets(profile))'), 'the server must validate structured ingredients and calculated daily nutrition');
+assert.ok(worker.includes('counts.every((count,index)=>count===expectedTrainingDaysInBlock(menuDays,index,profile.days))'), 'training schedule must be checked by the server');
+assert.ok(worker.includes('function buildShoppingList(week)'), 'shopping quantities must be derived from the exact ingredients in the saved plan');
+assert.ok(worker.includes('calculateDayNutrition(day)'), 'daily calories and protein must be calculated from ingredient weights');
+assert.ok(worker.includes('targets.protein * 0.8') && worker.includes('targets.protein * 1.2'), 'daily protein must stay within the validated tolerance');
+assert.ok(worker.includes('profile.age < 18'), 'adult nutrition calculations must reject minors');
 
 assert.ok(worker.includes("Не удалось пересобрать план. Сохранённая программа не изменена."));
 assert.ok(worker.includes('Соблюдай указанное количество тренировок в каждом блоке'));
@@ -107,8 +111,8 @@ assert.ok(chatSource.includes("'SELECT plan_json FROM weekly_plans WHERE access_
 assert.ok(chatSource.includes("'Сохранённый план клиента (JSON): ' + plan"), 'AI consultant prompt must include the saved weekly plan');
 assert.equal(worker.split('clean(planRow.plan_json, 24000)').length - 1, 2, 'AI chat and Premium review must receive the complete saved plan');
 assert.ok(chatSource.includes('сначала опирайся на сохранённый план'), 'AI consultant must prioritize the actual plan for substitutions and workouts');
-assert.ok(chatSource.includes('const reply = extractAiText(result)'), 'AI consultant must support the model response formats already handled by the shared extractor');
-assert.ok(chatSource.includes('Fital AI chat failed:'), 'AI provider failures must return a controlled API error');
+assert.ok(chatSource.includes("reply = await runAiTextWithFallback(env,"), 'AI consultant must use the primary and existing fallback model');
+assert.ok(chatSource.includes('ИИ-консультант временно недоступен'), 'AI provider failures must return a controlled API error');
 
 
 assert.ok(worker.includes("memberRateLimit(env, sub.access_token, 'profile-update', 5, 3600000)"), 'AI profile regeneration must be limited per active subscription');
