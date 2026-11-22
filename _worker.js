@@ -561,6 +561,11 @@ async function profileApi(request, env) {
     const row = await env.DB.prepare('SELECT profile_json FROM profiles WHERE access_token=?').bind(sub.access_token).first();
     return json({ profile: row ? JSON.parse(row.profile_json) : null });
   }
+  // Regenerating a full AI plan is an expensive operation. Apply a per-IP
+  // hourly limit before calling the model; failed generation attempts count too.
+  if (!(await rateLimit(request, env, 'profile-update', 5, 3600000))) {
+    return json({ error: 'Слишком много обновлений программы за час. Попробуйте позже.' }, 429);
+  }
   const body = await request.json();
   let profile;
   try { profile = profileFrom(body); } catch (error) { return json({ error: clean(error.message, 200) }, 400); }
