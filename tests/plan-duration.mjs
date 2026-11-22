@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
-import { generateAiPlan, runAiTextWithFallback, aiPlanDiagnostic } from '../_worker.js';
+import { generateAiPlan, runAiTextWithFallback, aiPlanDiagnostic, FOOD_CATALOG } from '../_worker.js';
 import { readFile } from 'node:fs/promises';
 
 const workerSource = await readFile(new URL('../_worker.js', import.meta.url), 'utf8');
 const appSource = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
 const htmlSource = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+assert.ok(Object.entries(FOOD_CATALOG).length >= 30, 'food reference catalog must remain populated');
+assert.ok(Object.entries(FOOD_CATALOG).every(([id, food]) => Number.isFinite(food.kcal) && Number.isFinite(food.protein) && Number.isFinite(food.fat) && Number.isFinite(food.carbs)), 'every food must define calories, protein, fat and carbohydrates');
 
 const profile = {
   name: 'Тестовый клиент',
@@ -51,9 +53,12 @@ assert.equal(proPlan.week.length, 14, 'PRO must contain 14 complete menu days');
 assert.equal(proPlan.menuDays, 14);
 assert.equal(proPlan.week[0].day, 'День 1');
 assert.equal(proPlan.week[13].day, 'День 14');
-assert.deepEqual(proPlan.week[0].nutrition, { calories: 1943, protein: 98.1 });
+assert.deepEqual(proPlan.week[0].nutrition, { calories: 1943, protein: 98.1, fat: 71, carbs: 237.1 });
 assert.equal(proPlan.dailyAverage.calories, 1943);
 assert.equal(proPlan.dailyAverage.protein, 98.1);
+assert.equal(proPlan.dailyAverage.fat, 71);
+assert.equal(proPlan.dailyAverage.carbs, 237.1);
+assert.ok(proPlan.fat > 0 && proPlan.carbs > 0, 'daily fat and carbohydrate targets must be calculated');
 assert.ok(proPlan.shopping.includes('Овсяные хлопья, сухие — 1,12 кг'));
 assert.ok(proPlan.shopping.includes('Молоко 2% — 2,8 кг'));
 assert.ok(!proPlan.shopping.includes('Продукты на весь период'));
@@ -136,7 +141,7 @@ const validatedFallback = await runAiTextWithFallback({
 assert.ok(validatedFallback.includes('Готово'));
 assert.equal(invalidOutputCalls.length, 2, 'fallback must also run when the primary model returns malformed output');
 
-console.log('PASS: 7/14/30-day plans, USDA-based nutrition totals, shopping aggregation, workout prescriptions and AI fallback');
+console.log('PASS: 7/14/30-day plans, calories/protein/fat/carbohydrates, shopping aggregation, workout prescriptions and AI fallback');
 assert.ok(workerSource.includes("'Premium': { amount: '3990.00', label: 'Fital Pro Premium — меню и тренировки, 30 дней', days: 30, menuDays: 30 }"), 'Premium must configure 30 menu days');
 assert.ok(workerSource.includes('profile.age < 18'), 'adult nutrition formula must not be used for minors');
 assert.ok(htmlSource.includes('min="18"'), 'both questionnaire forms must require adult age');
@@ -184,6 +189,10 @@ assert.equal(diagnosticData.ok, true);
 assert.equal(diagnosticData.days.length, 7);
 assert.ok(diagnosticData.days[0].meals.breakfast.ingredients.length > 0);
 assert.ok(diagnosticData.days[0].calculatedNutrition.calories > 0);
+assert.ok(diagnosticData.days[0].calculatedNutrition.protein > 0);
+assert.ok(diagnosticData.days[0].calculatedNutrition.fat > 0);
+assert.ok(diagnosticData.days[0].calculatedNutrition.carbs > 0);
+assert.ok(diagnosticData.targets.fat > 0 && diagnosticData.targets.carbs > 0);
 assert.ok(diagnosticData.shopping.length > 0);
 assert.ok(workerSource.includes("url.pathname === '/api/ai-diagnostic'"), 'diagnostic route must be registered');
 assert.ok(workerSource.includes('async function aiPlanDiagnostic(request, env)'), 'diagnostic route handler must exist');
