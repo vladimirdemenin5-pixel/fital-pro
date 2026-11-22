@@ -183,6 +183,11 @@ assert.equal(response.status, 403);
 assert.equal(env.DB.payments.size, beforePayments);
 assert.equal(env.DB.subscriptions.size, beforeSubs);
 
+const wrongReference = await robokassaWebhook(callback({ Shp_ref: 'different-order' }), env);
+assert.equal(wrongReference.status, 400);
+assert.equal(env.DB.payments.size, beforePayments);
+assert.equal(env.DB.subscriptions.size, beforeSubs);
+
 const wrongAmount = await robokassaWebhook(callback({ OutSum: '1.00' }), env);
 assert.equal(wrongAmount.status, 400);
 assert.equal(env.DB.payments.size, beforePayments);
