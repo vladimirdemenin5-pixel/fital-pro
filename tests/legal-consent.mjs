@@ -74,8 +74,8 @@ assert.ok(app.includes("$('#chatTool').classList.toggle('is-hidden', !advancedFe
 assert.ok(html.includes('id="progressTool"'));
 assert.ok(html.includes('id="chatTool"'));
 assert.ok(worker.includes('trainingDay: includesTraining && source.trainingDay'), 'training-day flag must be normalized from the validated AI response');
-assert.ok(worker.includes("max_tokens: 6500"), 'Workers AI token limit must use the supported max_tokens field');
-assert.ok(!worker.includes("max_completion_tokens: 6500"), 'unsupported max_completion_tokens field must not be used');
+assert.ok(worker.includes("max_completion_tokens: 6500"), 'Workers AI token limit must use the supported max_completion_tokens field');
+assert.ok(!worker.includes("max_tokens: 6500"), 'deprecated max_tokens field must not be used');
 assert.ok(worker.includes("response_format: { type: 'json_object' }"));
 assert.ok(worker.includes("chat_template_kwargs: { enable_thinking: false }"));
 assert.ok(!worker.includes("max_tokens: 4500"));
