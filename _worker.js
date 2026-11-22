@@ -155,11 +155,11 @@ function extractAiText(result) {
 }
 
 function hasMealPortion(value) {
-  return /\\d+(?:[.,]\\d+)?\\s*(?:г|гр|кг|мл|л|шт|яиц|яйца|яйцо|кусоч(?:ек|ка|ков)?)(?=\\s|$|[),.;])/i.test(String(value || ''));
+  return /\d+(?:[.,]\d+)?\s*(?:г|гр|кг|мл|л|шт|яиц|яйца|яйцо|кусоч(?:ек|ка|ков)?)(?=\s|$|[),.;])/i.test(String(value || ''));
 }
 
 function hasWorkoutPrescription(value) {
-  return /\\d+\\s*(?:[×xх]\\s*\\d+|подход(?:а|ов)?|повтор(?:а|ений)?)/i.test(String(value || ''));
+  return /\d+\s*(?:[×xх]\s*\d+|подход(?:а|ов)?|повтор(?:а|ений)?)/i.test(String(value || ''));
 }
 
 async function runAiTextWithFallback(env, options, purpose) {
