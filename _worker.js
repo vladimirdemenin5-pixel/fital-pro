@@ -155,21 +155,21 @@ function extractAiText(result) {
 }
 
 function hasMealPortion(value) {
-  return /\d+(?:[.,]\d+)?\s*(?:г|гр|кг|мл|л|шт|яиц|яйца|яйцо|кусоч(?:ек|ка|ков)?)(?=\s|$|[),.;])/i.test(String(value || ''));
+  return /\d+(?:[.,]\d+)?\s*(?:грамм(?:а|ов)?|г|гр|кг|миллилитр(?:а|ов)?|мл|литр(?:а|ов)?|л|шт|штук|яиц|яйца|яйцо|кусоч(?:ек|ка|ков)?)(?=\s|$|[),.;])/i.test(String(value || ''));
 }
 
 function hasWorkoutPrescription(value) {
   return /\d+\s*(?:[×xх]\s*\d+|подход(?:а|ов)?|повтор(?:а|ений)?)/i.test(String(value || ''));
 }
 
-async function runAiTextWithFallback(env, options, purpose) {
+async function runAiTextWithFallback(env, options, purpose, validate = () => true) {
   const models = [MODEL, '@cf/zai-org/glm-4.7-flash'];
   for (const model of models) {
     try {
       const result = await env.AI.run(model, options);
       const text = extractAiText(result);
-      if (text) return text;
-      console.error('Fital Pro AI returned an empty response:', purpose, model);
+      if (text && validate(text)) return text;
+      console.error('Fital Pro AI returned an empty or invalid response:', purpose, model);
     } catch (error) {
       console.error('Fital Pro AI model failed:', purpose, model, error?.message || 'unknown error');
     }
@@ -207,6 +207,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
           const parsed = JSON.parse(match[0]);
           const week = Array.isArray(parsed.week) ? parsed.week : [];
           const complete = week.length === menuDays && week.every(day =>
+            typeof day?.trainingDay === 'boolean' &&
             day?.breakfast && hasMealPortion(day.breakfast) &&
             day?.lunch && hasMealPortion(day.lunch) &&
             day?.snack && hasMealPortion(day.snack) &&
@@ -745,7 +746,18 @@ async function premiumReviewApi(request, env) {
       temperature: 0.2,
       response_format: { type: 'json_object' },
       chat_template_kwargs: { enable_thinking: false }
-    }, 'premium-review');
+    }, 'premium-review', text => {
+      const candidate = text.match(/\\{[\\s\\S]*\\}/);
+      if (!candidate) return false;
+      try {
+        const parsed = JSON.parse(candidate[0]);
+        return !!clean(parsed.summary, 900) &&
+          Array.isArray(parsed.recommendations) &&
+          parsed.recommendations.map(item => clean(item, 300)).filter(Boolean).length >= 2;
+      } catch {
+        return false;
+      }
+    });
   } catch {
     return json({ error: 'Не удалось подготовить разбор. Попробуйте позже.' }, 502);
   }
