@@ -88,7 +88,8 @@ $('#intakeForm').addEventListener('submit', async function (event) {
       const ingredients = Array.isArray(day[meal[1] + 'Ingredients']) ? day[meal[1] + 'Ingredients'] : [];
       const composition = ingredients.map(item => escapeHtml(item.name) + ' — ' + Number(item.grams).toLocaleString('ru-RU') + ' г').join(' · ');
       return '<div class="preview-meal"><small>' + meal[0] + '</small><strong>' + escapeHtml(day[meal[1]]) + '</strong>' +
-        (composition ? '<small>Состав: ' + composition + '</small>' : '') + '</div>';
+        (composition ? '<small>Состав: ' + composition + '</small>' : '') +
+        (day[meal[1] + 'Recipe'] ? '<small>Приготовление: ' + escapeHtml(day[meal[1] + 'Recipe']) + '</small>' : '') + '</div>';
     }).join('');
     const actual = day.nutrition || {};
     $('#previewDayNutrition').textContent = 'Первый день по составу продуктов: ' +
@@ -266,7 +267,8 @@ function renderMeal(day, label, key) {
     escapeHtml(item.name) + ' — ' + Number(item.grams).toLocaleString('ru-RU') + ' г'
   ).join(' · ');
   return '<p><strong>' + label + '</strong> · ' + escapeHtml(day[key]) +
-    (composition ? '<br><small>Состав, вес до приготовления: ' + composition + '</small>' : '') + '</p>';
+    (composition ? '<br><small>Состав, вес до приготовления: ' + composition + '</small>' : '') +
+    (day[key + 'Recipe'] ? '<br><small>Приготовление: ' + escapeHtml(day[key + 'Recipe']) + '</small>' : '') + '</p>';
 }
 
 function renderFullPlan(plan, targetSelector) {
