@@ -235,6 +235,7 @@ assert.ok(workerSource.includes('await saveMemberPlan(env, accessToken, profile,
 assert.ok(workerSource.includes('verifyGitHubActionsOidc(request)'), 'live diagnostic must authenticate GitHub Actions using OIDC');
 assert.ok(workerSource.includes("claims.aud !== 'fitalpro-ai-data-flow'"), 'OIDC authorization must restrict the token audience');
 assert.ok(workerSource.includes("claims.ref !== 'refs/heads/main'"), 'OIDC authorization must restrict execution to the production branch');
+assert.ok(workerSource.includes('fitalpro-pixel@324070911/fital-pro@1354815283:ref:refs/heads/main'), 'OIDC authorization must accept the repository immutable subject claim');
 assert.ok(workerSource.includes('env.FITALPRO_CI_TEST_KEY || env.ROBOKASSA_TEST_ACCESS_KEY'), 'integration diagnostic must support the temporary CI-only key without changing the Robokassa test key');
 assert.ok(workerSource.includes("personalizedPlan(new Request('https://fitalpro.internal/api/plan'"), 'integration diagnostic must read the saved plan through the personal-cabinet API');
 assert.ok(workerSource.includes("profileApi(new Request('https://fitalpro.internal/api/profile'"), 'integration diagnostic must read the saved profile through the personal-cabinet API');
