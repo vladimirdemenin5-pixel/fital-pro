@@ -63,6 +63,6 @@ await assert.rejects(
 
 console.log('PASS: 7-day Nutrition and 14-day PRO/Premium menu generation');
 
-assert.match(workerSource, /fullPlan:\\s*plan/, 'checkout response must include the complete generated plan');
-assert.match(appSource, /renderFullPlan\\(checkoutData\\.preview\\.fullPlan,\\s*'#previewFullPlan'\\)/, 'the complete plan must be rendered before payment');
-assert.match(htmlSource, /id="previewFullPlan"/, 'the pre-payment preview must contain a full-plan container');
+assert.ok(workerSource.includes('fullPlan: plan'), 'checkout response must include the complete generated plan');
+assert.ok(appSource.includes("renderFullPlan(checkoutData.preview.fullPlan, '#previewFullPlan')"), 'the complete plan must be rendered before payment');
+assert.ok(htmlSource.includes('id="previewFullPlan"'), 'the pre-payment preview must contain a full-plan container');
