@@ -79,6 +79,8 @@ $('#intakeForm').addEventListener('submit', async function (event) {
     });
     $('#previewCalories').textContent = Number(checkoutData.preview.calories).toLocaleString('ru-RU');
     $('#previewProtein').textContent = String(checkoutData.preview.protein);
+    $('#previewFat').textContent = String(checkoutData.preview.fat);
+    $('#previewCarbs').textContent = String(checkoutData.preview.carbs);
     $('#previewDayTitle').textContent = checkoutData.preview.firstDay.day;
     const day = checkoutData.preview.firstDay;
     const mealLabels = [['Завтрак', 'breakfast'], ['Обед', 'lunch'], ['Перекус', 'snack'], ['Ужин', 'dinner']];
