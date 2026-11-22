@@ -400,6 +400,8 @@ async function generateAiPlan(profile, planKey, env) {
     intro: clean(parsed.intro, 700) || 'Персональный план подготовлен с учётом вашей анкеты.',
     calories: targets.calories,
     protein: targets.protein,
+    fat: targets.fat,
+    carbs: targets.carbs,
     week,
     menuDays,
     shopping,
