@@ -800,7 +800,7 @@ async function personalizedPlan(request, env) {
 
 
 async function aiDataFlowDiagnostic(request, env) {
-  const expectedKey = clean(env.ROBOKASSA_TEST_ACCESS_KEY, 256);
+  const expectedKey = clean(env.FITALPRO_CI_TEST_KEY || env.ROBOKASSA_TEST_ACCESS_KEY, 256);
   const suppliedKey = clean(request.headers.get('X-Fital-Test-Key'), 256);
   if (!expectedKey || !suppliedKey || !sameHash(md5(expectedKey), md5(suppliedKey))) {
     return json({ error: 'Диагностический доступ не настроен или ключ неверен.' }, 404);
