@@ -747,7 +747,7 @@ async function premiumReviewApi(request, env) {
       response_format: { type: 'json_object' },
       chat_template_kwargs: { enable_thinking: false }
     }, 'premium-review', text => {
-      const candidate = text.match(/\\{[\\s\\S]*\\}/);
+      const candidate = text.match(/\{[\s\S]*\}/);
       if (!candidate) return false;
       try {
         const parsed = JSON.parse(candidate[0]);
