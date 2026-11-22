@@ -92,6 +92,5 @@ jobs:
         run: npm install
       - name: Generate all plans using the real Cloudflare Workers AI models
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ROBOKASSA_TEST_ACCESS_KEY: ${{ secrets.ROBOKASSA_TEST_ACCESS_KEY }}
         run: node scripts/live-ai-plans.mjs
