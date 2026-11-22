@@ -45,7 +45,10 @@ jobs:
             const required = [
               "ROBOKASSA_MERCHANT_LOGIN",
               "ROBOKASSA_PASSWORD1",
-              "ROBOKASSA_PASSWORD2"
+              "ROBOKASSA_PASSWORD2",
+              "ROBOKASSA_TEST_PASSWORD1",
+              "ROBOKASSA_TEST_PASSWORD2",
+              "ROBOKASSA_TEST_ACCESS_KEY"
             ];
             let input = "";
             for await (const chunk of process.stdin) input += chunk;
