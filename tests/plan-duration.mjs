@@ -23,8 +23,11 @@ const profile = {
 
 function makeAi(menuDays, wrongLength = false, invalidMeal = false, invalidWorkout = false, invalidNutrition = false) {
   return {
-    async run() {
-      const count = wrongLength ? 7 : menuDays;
+    async run(model, input) {
+      const prompt = input?.messages?.[1]?.content || '';
+      const block = prompt.match(/БЛОК: дни (\d+)–(\d+) из (\d+)/);
+      const requestedDays = block ? Number(block[2]) - Number(block[1]) + 1 : menuDays;
+      const count = wrongLength ? 3 : requestedDays;
       const week = Array.from({ length: count }, (_, index) => {
         const dayInWeek = index % 7;
         const trainingDay = dayInWeek === 0 || dayInWeek === 2 || dayInWeek === 4;
@@ -68,6 +71,8 @@ assert.ok(proPlan.shopping.includes('Молоко 2% — 2,8 кг'));
 assert.ok(!proPlan.shopping.includes('Продукты на весь период'));
 assert.ok(proPlan.nutritionSource.includes('USDA FoodData Central'));
 assert.ok(workerSource.includes('fdcId:173904'), 'oats reference must retain its USDA food record identifier');
+assert.ok(workerSource.includes('for (let offset = 0; offset < totalDays; offset += 7)'), 'long plans must be generated and validated in seven-day blocks');
+assert.ok(workerSource.includes('week должен содержать РОВНО'), 'the model prompt must explicitly require the exact block length');
 assert.equal(proPlan.week.slice(0, 7).filter(day => day.trainingDay).length, 3);
 assert.equal(proPlan.week.slice(7, 14).filter(day => day.trainingDay).length, 3);
 
@@ -105,7 +110,7 @@ await assert.rejects(
   'PRO must reject an AI response containing only seven days'
 );
 await assert.rejects(
-  () => generateAiPlan(profile, 'Premium', { AI: makeAi(14) }),
+  () => generateAiPlan(profile, 'Premium', { AI: makeAi(30, true) }),
   /временно не вернул текстовый ответ/,
   'Premium must reject a 14-day response and require all 30 days'
 );
