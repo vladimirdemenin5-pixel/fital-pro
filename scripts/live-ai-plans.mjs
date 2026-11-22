@@ -51,7 +51,7 @@ for (const item of plans) {
     await new Promise(resolve => setTimeout(resolve, 5000));
   } while (Date.now() < authPropagationDeadline);
   if (!response.ok || result.ok !== true) {
-    throw new Error(`${item.key}: live Worker flow failed (HTTP ${response.status}, stage ${result.stage || 'authorization'}): ${result.error || 'unknown error'}`);
+    throw new Error(`${item.key}: live Worker flow failed (HTTP ${response.status}, stage ${result.stage || 'authorization'}): ${result.error || 'unknown error'}${result.diagnostic ? ' [' + result.diagnostic + ']' : ''}`);
   }
   if (result.days !== item.days || result.meals !== item.days * 4 ||
       result.d1Write !== true || result.cabinetPlanRead !== true ||
