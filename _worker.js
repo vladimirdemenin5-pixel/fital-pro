@@ -163,7 +163,8 @@ function hasWorkoutPrescription(value) {
 }
 
 async function runAiTextWithFallback(env, options, purpose, validate = () => true) {
-  const models = [MODEL, '@cf/zai-org/glm-4.7-flash'];
+  // Keep the fast models first; use the larger instruction model only when both return invalid nutrition.
+  const models = [MODEL, '@cf/zai-org/glm-4.7-flash', '@cf/meta/llama-3.3-70b-instruct-fp8-fast'];
   for (const model of models) {
     try {
       const result = await env.AI.run(model, options);
