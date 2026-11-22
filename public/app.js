@@ -86,7 +86,6 @@ $('#intakeForm').addEventListener('submit', async function (event) {
       return '<div class="preview-meal"><small>' + meal[0] + '</small><strong>' + escapeHtml(meal[1]) + '</strong></div>';
     }).join('');
     $('#previewWorkout').textContent = day.workout;
-    renderFullPlan(checkoutData.preview.fullPlan, '#previewFullPlan');
     $('#previewDescription').textContent = selectedPlan === 'Питание'
       ? 'Меню на 7 дней, список покупок и сохранение программы в личном кабинете.'
       : selectedPlan === 'Premium'
