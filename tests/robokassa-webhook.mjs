@@ -22,6 +22,8 @@ class MockD1 {
     const db = this;
     let args = [];
     return {
+      sql,
+      get args() { return args; },
       bind(...values) { args = values; return this; },
       async first() {
         if (sql.includes('FROM pending_orders WHERE inv_id=?')) return db.orders.get(Number(args[0])) || null;
