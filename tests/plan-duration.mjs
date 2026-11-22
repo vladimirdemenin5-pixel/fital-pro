@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
-import { generateAiPlan, runAiTextWithFallback, aiPlanDiagnostic } from '../_worker.js';
+import { generateAiPlan, runAiTextWithFallback, aiPlanDiagnostic, FOOD_CATALOG } from '../_worker.js';
 import { readFile } from 'node:fs/promises';
 
 const workerSource = await readFile(new URL('../_worker.js', import.meta.url), 'utf8');
 const appSource = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
 const htmlSource = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+assert.ok(Object.entries(FOOD_CATALOG).length >= 30, 'food reference catalog must remain populated');
+assert.ok(Object.entries(FOOD_CATALOG).every(([id, food]) => Number.isFinite(food.kcal) && Number.isFinite(food.protein) && Number.isFinite(food.fat) && Number.isFinite(food.carbs)), 'every food must define calories, protein, fat and carbohydrates');
 
 const profile = {
   name: 'Тестовый клиент',
