@@ -20,7 +20,7 @@ const md5 = (value) => createHash('md5').update(String(value), 'utf8').digest('h
 
 function buildRobokassaPaymentSignature({ merchant, outSum, invId, successUrl2, failUrl2, password1, clientRef }) {
   // Robokassa's parameter order includes empty Receipt, StepByStep and ResultUrl2 slots.
-  const base = merchant + ':' + outSum + ':' + invId + ':::' +
+  const base = merchant + ':' + outSum + ':' + invId + '::::' +
     successUrl2 + ':GET:' + failUrl2 + ':GET:' + password1 + ':Shp_ref=' + clientRef;
   return md5(base);
 }
