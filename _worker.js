@@ -432,6 +432,7 @@ async function checkout(request, env, forceTestMode = false) {
       calories: plan.calories,
       protein: plan.protein,
       firstDay: plan.week[0],
+      fullPlan: plan,
       trainingIncluded: plan.trainingIncluded,
       durationDays: plan.durationDays
     }
