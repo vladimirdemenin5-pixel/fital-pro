@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
-const MODEL = '@cf/google/gemma-4-26b-a4b-it';
+const MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+const FALLBACK_MODEL = '@cf/meta/llama-3.1-8b-instruct';
 const PLANS = {
   'Питание': { amount: '990.00', label: 'Fital Pro — Питание, 7 дней', days: 7, menuDays: 7 },
   'PRO': { amount: '1990.00', label: 'Fital Pro PRO — питание + тренировки, 14 дней', days: 14, menuDays: 14 },
@@ -163,7 +164,7 @@ function hasWorkoutPrescription(value) {
 }
 
 async function runAiTextWithFallback(env, options, purpose, validate = () => true) {
-  const models = [MODEL, '@cf/zai-org/glm-4.7-flash'];
+  const models = [MODEL, FALLBACK_MODEL];
   for (const model of models) {
     try {
       const result = await env.AI.run(model, options);
@@ -294,7 +295,6 @@ function normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, target
   return week;
 }
 
-
 function diagnosePlanWeekFailure(parsed, profile, planKey, menuDays, targets) {
   if (!Array.isArray(parsed?.week)) return 'week-not-array';
   if (parsed.week.length !== menuDays) return 'week-length-' + parsed.week.length + '-expected-' + menuDays;
@@ -354,7 +354,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
     { role: 'system', content: 'Ты Fital Pro. Отвечай только валидным JSON без Markdown и пояснений.' },
     { role: 'user', content: prompt }
   ];
-  const models = [MODEL, '@cf/zai-org/glm-4.7-flash'];
+  const models = [MODEL, FALLBACK_MODEL];
   const diagnostics = [];
   // A structurally valid answer can still fail the server's ingredient-based
   // nutrition checks. Give the models one targeted correction pass before failing
@@ -370,10 +370,10 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
       try {
         const result = await env.AI.run(model, {
           messages: currentMessages,
-          max_completion_tokens: 6500,
+          max_tokens: 6500,
           temperature: 0.2,
           response_format: { type: 'json_object' },
-          chat_template_kwargs: { enable_thinking: false }
+          
         });
         const text = extractAiText(result);
         const normalized = text.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
@@ -882,7 +882,6 @@ async function personalizedPlan(request, env) {
 }
 
 
-
 let githubOidcJwksCache = null;
 let githubOidcJwksCacheExpiresAt = 0;
 
@@ -1067,7 +1066,6 @@ async function progressApi(request, env) {
   return json({ ok: true });
 }
 
-
 async function premiumReviewApi(request, env) {
   const sub = await getSubscription(request, env);
   if (!sub || !env.DB) return json({ error: 'Нужна активная подписка.' }, 403);
@@ -1139,10 +1137,10 @@ async function premiumReviewApi(request, env) {
         { role: 'system', content: 'Ты Fital Pro Premium. Верни только корректный JSON без Markdown.' },
         { role: 'user', content: prompt }
       ],
-      max_completion_tokens: 1400,
+      max_tokens: 1400,
       temperature: 0.2,
       response_format: { type: 'json_object' },
-      chat_template_kwargs: { enable_thinking: false }
+      
     }, 'premium-review', text => {
       const candidate = text.match(/\{[\s\S]*\}/);
       if (!candidate) return false;
@@ -1220,9 +1218,9 @@ async function chat(request, env) {
         { role: 'system', content: 'Ты Fital AI — консультант сервиса Fital Pro. Отвечай только по-русски.' },
         { role: 'user', content: prompt }
       ],
-      max_completion_tokens: 900,
+      max_tokens: 900,
       temperature: 0.4,
-      chat_template_kwargs: { enable_thinking: false }
+      
     }, 'chat');
   } catch {
     return json({ error: 'ИИ-консультант временно недоступен. Попробуйте позже.' }, 502);
