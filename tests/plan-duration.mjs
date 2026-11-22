@@ -63,6 +63,15 @@ await assert.rejects(
 
 console.log('PASS: 7-day Nutrition and 14-day PRO/Premium menu generation');
 
-assert.ok(workerSource.includes('fullPlan: plan'), 'checkout response must include the complete generated plan');
-assert.ok(appSource.includes("renderFullPlan(checkoutData.preview.fullPlan, '#previewFullPlan')"), 'the complete plan must be rendered before payment');
-assert.ok(htmlSource.includes('id="previewFullPlan"'), 'the pre-payment preview must contain a full-plan container');
+const checkoutStart = workerSource.indexOf('async function checkout(');
+const checkoutEnd = workerSource.indexOf('\nasync function ', checkoutStart + 1);
+const checkoutSource = workerSource.slice(checkoutStart, checkoutEnd);
+const previewStart = checkoutSource.indexOf('    preview: {');
+const previewEnd = checkoutSource.indexOf('\n    }\n  });', previewStart);
+const previewSource = checkoutSource.slice(previewStart, previewEnd);
+assert.ok(previewSource.includes('firstDay: plan.week[0]'), 'checkout may show only the first-day teaser');
+assert.ok(!previewSource.includes('fullPlan'), 'checkout response must not expose the complete paid plan');
+assert.ok(checkoutSource.includes('JSON.stringify(plan)'), 'the complete generated plan must remain saved server-side for post-payment activation');
+assert.ok(!appSource.includes('checkoutData.preview.fullPlan'), 'the browser must not render the full paid plan before payment');
+assert.ok(!htmlSource.includes('id="previewFullPlan"'), 'the pre-payment page must not contain a full-plan container');
+assert.ok(htmlSource.includes('после подтверждения оплаты'), 'the page must explain that full access follows payment');
