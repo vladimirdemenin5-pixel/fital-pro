@@ -126,10 +126,10 @@ function nutritionTargets(profile) {
   let calories = Math.round((bmr * activity) / 50) * 50;
   if (profile.goal === 'loss') calories = Math.max(1400, calories - 300);
   if (profile.goal === 'gain') calories += 250;
-  return {
-    calories,
-    protein: Math.round(profile.weight * (profile.goal === 'gain' ? 1.6 : 1.4))
-  };
+  const protein = Math.round(profile.weight * (profile.goal === 'gain' ? 1.6 : 1.4));
+  const fat = Math.round(calories * 0.28 / 9);
+  const carbs = Math.max(0, Math.round((calories - protein * 4 - fat * 9) / 4));
+  return { calories, protein, fat, carbs };
 }
 
 function extractAiText(result) {
@@ -180,42 +180,42 @@ async function runAiTextWithFallback(env, options, purpose, validate = () => tru
 // Generic reference composition per 100 g, based on USDA FoodData Central (CC0).
 // Ingredient weights are edible raw/dry weights; branded products may differ.
 const FOOD_CATALOG = Object.freeze({
-  oats_dry:{name:'Овсяные хлопья, сухие',kcal:389,protein:16.9,fdcId:173904},
-  rice_dry:{name:'Рис белый, сухой',kcal:365,protein:7.1,fdcId:169756},
-  buckwheat_dry:{name:'Гречка, сухая',kcal:343,protein:13.3,fdcId:170286},
-  pasta_dry:{name:'Макароны, сухие',kcal:371,protein:13.0,fdcId:169736},
-  quinoa_dry:{name:'Киноа, сухая',kcal:368,protein:14.1,fdcId:168874},
-  chicken_raw:{name:'Куриная грудка без кожи, сырая',kcal:120,protein:22.5,fdcId:171077},
-  turkey_raw:{name:'Филе индейки, сырое',kcal:114,protein:23.7,fdcId:171098},
-  salmon_raw:{name:'Лосось атлантический фермерский, сырой',kcal:208,protein:20.4,fdcId:175167},
-  cod_raw:{name:'Треска атлантическая, сырая',kcal:82,protein:17.8,fdcId:171955},
-  egg_raw:{name:'Яйцо без скорлупы, сырое',kcal:143,protein:12.6,fdcId:171287},
-  greek_yogurt:{name:'Греческий йогурт натуральный 0%',kcal:59,protein:10.2,fdcId:170903},
-  cottage_cheese:{name:'Творог обычный, справочный состав',kcal:98,protein:11.1,fdcId:172179},
-  milk_2pct:{name:'Молоко 2%',kcal:50,protein:3.3,fdcId:171267},
-  banana:{name:'Банан без кожуры',kcal:89,protein:1.1,fdcId:173944},
-  apple:{name:'Яблоко без сердцевины',kcal:52,protein:0.3},
-  blueberries:{name:'Черника',kcal:57,protein:0.7,fdcId:171711},
-  strawberry:{name:'Клубника',kcal:32,protein:0.7},
-  broccoli:{name:'Брокколи',kcal:34,protein:2.8,fdcId:170379},
-  tomato:{name:'Помидор',kcal:18,protein:0.9},
-  cucumber:{name:'Огурец',kcal:15,protein:0.7,fdcId:168409},
-  carrot:{name:'Морковь',kcal:41,protein:0.9},
-  spinach:{name:'Шпинат',kcal:23,protein:2.9},
-  cabbage:{name:'Капуста',kcal:25,protein:1.3},
-  potato_raw:{name:'Картофель очищенный, сырой',kcal:77,protein:2.05,fdcId:170026},
-  sweet_potato:{name:'Батат сырой',kcal:86,protein:1.6},
-  avocado:{name:'Авокадо без косточки и кожуры',kcal:160,protein:2.0,fdcId:171705},
-  almonds:{name:'Миндаль',kcal:579,protein:21.2},
-  walnuts:{name:'Грецкие орехи',kcal:654,protein:15.2,fdcId:170187},
-  olive_oil:{name:'Оливковое масло',kcal:884,protein:0},
-  lentils_dry:{name:'Чечевица, сухая',kcal:352,protein:24.6,fdcId:172420},
-  chickpeas_dry:{name:'Нут, сухой',kcal:378,protein:20.5,fdcId:173756},
-  tofu:{name:'Тофу натуральный',kcal:83,protein:10.0},
-  wholegrain_bread:{name:'Хлеб цельнозерновой',kcal:252,protein:12.45,fdcId:172688},
-  cheddar:{name:'Сыр чеддер',kcal:403,protein:24.9},
-  orange:{name:'Апельсин без кожуры',kcal:47,protein:0.9},
-  peanut_butter:{name:'Арахисовая паста без добавок',kcal:588,protein:25.0}
+  oats_dry:{name:'Овсяные хлопья, сухие',kcal:389,protein:16.9,fat:6.9,carbs:66.3,fdcId:173904},
+  rice_dry:{name:'Рис белый, сухой',kcal:365,protein:7.1,fat:0.7,carbs:80,fdcId:169756},
+  buckwheat_dry:{name:'Гречка, сухая',kcal:343,protein:13.3,fat:3.4,carbs:71.5,fdcId:170286},
+  pasta_dry:{name:'Макароны, сухие',kcal:371,protein:13.0,fat:1.5,carbs:74.7,fdcId:169736},
+  quinoa_dry:{name:'Киноа, сухая',kcal:368,protein:14.1,fat:6.1,carbs:64.2,fdcId:168874},
+  chicken_raw:{name:'Куриная грудка без кожи, сырая',kcal:120,protein:22.5,fat:2.6,carbs:0,fdcId:171077},
+  turkey_raw:{name:'Филе индейки, сырое',kcal:114,protein:23.7,fat:1.5,carbs:0,fdcId:171098},
+  salmon_raw:{name:'Лосось атлантический фермерский, сырой',kcal:208,protein:20.4,fat:13.4,carbs:0,fdcId:175167},
+  cod_raw:{name:'Треска атлантическая, сырая',kcal:82,protein:17.8,fat:0.7,carbs:0,fdcId:171955},
+  egg_raw:{name:'Яйцо без скорлупы, сырое',kcal:143,protein:12.6,fat:9.5,carbs:0.7,fdcId:171287},
+  greek_yogurt:{name:'Греческий йогурт натуральный 0%',kcal:59,protein:10.2,fat:0.4,carbs:3.6,fdcId:170903},
+  cottage_cheese:{name:'Творог обычный, справочный состав',kcal:98,protein:11.1,fat:4.3,carbs:3.4,fdcId:172179},
+  milk_2pct:{name:'Молоко 2%',kcal:50,protein:3.3,fat:2,carbs:4.8,fdcId:171267},
+  banana:{name:'Банан без кожуры',kcal:89,protein:1.1,fat:0.3,carbs:22.8,fdcId:173944},
+  apple:{name:'Яблоко без сердцевины',kcal:52,protein:0.3,fat:0.2,carbs:13.8},
+  blueberries:{name:'Черника',kcal:57,protein:0.7,fat:0.3,carbs:14.5,fdcId:171711},
+  strawberry:{name:'Клубника',kcal:32,protein:0.7,fat:0.3,carbs:7.7},
+  broccoli:{name:'Брокколи',kcal:34,protein:2.8,fat:0.4,carbs:6.6,fdcId:170379},
+  tomato:{name:'Помидор',kcal:18,protein:0.9,fat:0.2,carbs:3.9},
+  cucumber:{name:'Огурец',kcal:15,protein:0.7,fat:0.1,carbs:3.6,fdcId:168409},
+  carrot:{name:'Морковь',kcal:41,protein:0.9,fat:0.2,carbs:9.6},
+  spinach:{name:'Шпинат',kcal:23,protein:2.9,fat:0.4,carbs:3.6},
+  cabbage:{name:'Капуста',kcal:25,protein:1.3,fat:0.1,carbs:5.8},
+  potato_raw:{name:'Картофель очищенный, сырой',kcal:77,protein:2.05,fat:0.1,carbs:17.5,fdcId:170026},
+  sweet_potato:{name:'Батат сырой',kcal:86,protein:1.6,fat:0.1,carbs:20.1},
+  avocado:{name:'Авокадо без косточки и кожуры',kcal:160,protein:2.0,fat:14.7,carbs:8.5,fdcId:171705},
+  almonds:{name:'Миндаль',kcal:579,protein:21.2,fat:49.9,carbs:21.6},
+  walnuts:{name:'Грецкие орехи',kcal:654,protein:15.2,fat:65.2,carbs:13.7,fdcId:170187},
+  olive_oil:{name:'Оливковое масло',kcal:884,protein:0,fat:100,carbs:0},
+  lentils_dry:{name:'Чечевица, сухая',kcal:352,protein:24.6,fat:1.1,carbs:63.1,fdcId:172420},
+  chickpeas_dry:{name:'Нут, сухой',kcal:378,protein:20.5,fat:6,carbs:62.9,fdcId:173756},
+  tofu:{name:'Тофу натуральный',kcal:83,protein:10.0,fat:4.8,carbs:1.9},
+  wholegrain_bread:{name:'Хлеб цельнозерновой',kcal:252,protein:12.45,fat:3.5,carbs:43.1,fdcId:172688},
+  cheddar:{name:'Сыр чеддер',kcal:403,protein:24.9,fat:33.1,carbs:1.3},
+  orange:{name:'Апельсин без кожуры',kcal:47,protein:0.9,fat:0.1,carbs:11.8},
+  peanut_butter:{name:'Арахисовая паста без добавок',kcal:588,protein:25.0,fat:50,carbs:20}
 });
 const MEAL_KEYS = ['breakfast','lunch','snack','dinner'];
 
@@ -235,14 +235,23 @@ function normalizeMealIngredients(raw) {
 function calculateDayNutrition(day) {
   let calories = 0;
   let protein = 0;
+  let fat = 0;
+  let carbs = 0;
   for (const key of MEAL_KEYS) {
     for (const item of day[key + 'Ingredients']) {
       const food = FOOD_CATALOG[item.foodId];
       calories += food.kcal * item.grams / 100;
       protein += food.protein * item.grams / 100;
+      fat += food.fat * item.grams / 100;
+      carbs += food.carbs * item.grams / 100;
     }
   }
-  return { calories: Math.round(calories), protein: Math.round(protein * 10) / 10 };
+  return {
+    calories: Math.round(calories),
+    protein: Math.round(protein * 10) / 10,
+    fat: Math.round(fat * 10) / 10,
+    carbs: Math.round(carbs * 10) / 10
+  };
 }
 
 function normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, targets) {
@@ -270,6 +279,8 @@ function normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, target
     day.nutrition = calculateDayNutrition(day);
     if (day.nutrition.calories < targets.calories * 0.8 || day.nutrition.calories > targets.calories * 1.2) return null;
     if (day.nutrition.protein < targets.protein * 0.8 || day.nutrition.protein > targets.protein * 1.2) return null;
+    if (targets.fat > 0 && (day.nutrition.fat < targets.fat * 0.7 || day.nutrition.fat > targets.fat * 1.3)) return null;
+    if (targets.carbs > 0 && (day.nutrition.carbs < targets.carbs * 0.7 || day.nutrition.carbs > targets.carbs * 1.3)) return null;
     week.push(day);
   }
   if (includesTraining) {
@@ -350,8 +361,8 @@ async function generateAiPlan(profile, planKey, env) {
     'Структура JSON: {"intro":"короткое персональное объяснение","week":[{"day":"День 1","trainingDay":true,"breakfast":"название блюда","breakfastIngredients":[["oats_dry",60]],"lunch":"название блюда","lunchIngredients":[["chicken_raw",120]],"snack":"название блюда","snackIngredients":[["greek_yogurt",150]],"dinner":"название блюда","dinnerIngredients":[["salmon_raw",120]],"workout":"план тренировки или восстановления"}],"tips":["практичный совет"]}. trainingDay — строго boolean. Для каждого приёма пищи обязательны ingredients-массивы.',
     'Каждый ingredients-массив содержит 1–6 пар [foodId, grams]. Используй ТОЛЬКО foodId из справочника ниже. grams — целое число съедобных граммов ДО приготовления: мясо, рыба, овощи и фрукты — сырые очищенные части; крупы, макароны и бобовые — сухой вес; яйца — без скорлупы. Не используй готовый вес. Масло и орехи учитывай, если добавляешь их в блюдо. Не добавляй в название блюда продукты, которых нет в его ingredients.',
     'Пиши краткое название блюда без граммов. Полный состав и вес будут показаны отдельно. shopping не возвращай: список покупок сервер рассчитает сам по всем ингредиентам.',
-    'Целевые ориентиры на каждый день: около ' + targets.calories + ' ккал и ' + targets.protein + ' г белка. Сервер пересчитает их по справочнику и отклонит день, если калории или белок отличаются более чем на 20%.',
-    'СПРАВОЧНИК ПРОДУКТОВ НА 100 г (ккал, белок г): ' + JSON.stringify(Object.entries(FOOD_CATALOG).map(([id,food])=>[id,food.name,food.kcal,food.protein])),
+    'Целевые ориентиры на каждый день: около ' + targets.calories + ' ккал, белок ' + targets.protein + ' г, жиры ' + targets.fat + ' г, углеводы ' + targets.carbs + ' г. Сервер независимо пересчитает калории и все три макронутриента по справочнику; калории и белок должны укладываться в ±20%, жиры и углеводы — в ±30%.',
+    'СПРАВОЧНИК ПРОДУКТОВ НА 100 г (ккал, белки г, жиры г, углеводы г): ' + JSON.stringify(Object.entries(FOOD_CATALOG).map(([id,food])=>[id,food.name,food.kcal,food.protein,food.fat,food.carbs])),
     includesTraining
       ? 'Распредели тренировки по блокам плана: ' + trainingSchedule.map((count, index) => (index + 1) + '-й блок (' + Math.min(7, menuDays - index * 7) + ' дней) — ровно ' + count + ' тренировочных дней').join('; ') + '. Для каждого дня обязательно укажи trainingDay: true только в день полноценной тренировки, в остальные дни trainingDay: false и отдых или лёгкое восстановление без силовой нагрузки. Соблюдай указанное количество тренировок в каждом блоке. Распредели нагрузку безопасно, не ставь тяжёлые тренировки на одни и те же группы мышц подряд. Учитывай выбранный формат (дом, зал или смешанный). Для каждой тренировки укажи упражнения, подходы, повторения и короткую разминку/заминку; для новичка выбирай умеренную нагрузку и простые варианты.'
       : 'Тариф включает питание. В workout указывай только лёгкую общую активность и восстановление, не составляй силовую программу.',
@@ -379,7 +390,9 @@ async function generateAiPlan(profile, planKey, env) {
   const shopping = buildShoppingList(week);
   const dailyAverage = {
     calories: Math.round(week.reduce((sum, day) => sum + day.nutrition.calories, 0) / week.length),
-    protein: Math.round(week.reduce((sum, day) => sum + day.nutrition.protein, 0) / week.length * 10) / 10
+    protein: Math.round(week.reduce((sum, day) => sum + day.nutrition.protein, 0) / week.length * 10) / 10,
+    fat: Math.round(week.reduce((sum, day) => sum + day.nutrition.fat, 0) / week.length * 10) / 10,
+    carbs: Math.round(week.reduce((sum, day) => sum + day.nutrition.carbs, 0) / week.length * 10) / 10
   };
   return {
     plan: planKey,
@@ -612,7 +625,7 @@ async function aiPlanDiagnostic(request, env) {
     plan: plan.plan,
     durationDays: plan.durationDays,
     menuDays: plan.menuDays,
-    targets: { calories: plan.calories, protein: plan.protein },
+    targets: { calories: plan.calories, protein: plan.protein, fat: plan.fat, carbs: plan.carbs },
     dailyAverage: plan.dailyAverage,
     days: plan.week.map(day => ({
       day: day.day,
