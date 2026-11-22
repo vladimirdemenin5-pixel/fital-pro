@@ -6,6 +6,9 @@ const workerSource = await readFile(new URL('../_worker.js', import.meta.url), '
 const appSource = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
 const htmlSource = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
 assert.ok(Object.entries(FOOD_CATALOG).length >= 30, 'food reference catalog must remain populated');
+assert.ok(workerSource.includes("const MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast'"), 'primary AI model must support Workers AI JSON Mode');
+assert.ok(workerSource.includes("const FALLBACK_MODEL = '@cf/meta/llama-3.1-8b-instruct'"), 'fallback AI model must support Workers AI JSON Mode');
+assert.ok(workerSource.includes('max_tokens: 6500') && !workerSource.includes('max_completion_tokens'), 'Workers AI requests must use the supported max_tokens parameter');
 assert.ok(Object.entries(FOOD_CATALOG).every(([id, food]) => Number.isFinite(food.kcal) && Number.isFinite(food.protein) && Number.isFinite(food.fat) && Number.isFinite(food.carbs)), 'every food must define calories, protein, fat and carbohydrates');
 
 const profile = {
