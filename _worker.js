@@ -421,7 +421,8 @@ async function checkout(request, env, forceTestMode = false) {
       durationDays: plan.durationDays
     }
   });
-  response.headers.set('Set-Cookie', `fitalpro_checkout_ref=${clientRef}; Path=/; Max-Age=86400; HttpOnly; Secure; SameSite=Lax`);
+  // Isolate authorization per order so a second checkout cannot overwrite the first.
+  response.headers.set('Set-Cookie', `fitalpro_checkout_${clientRef}=${clientRef}; Path=/; Max-Age=86400; HttpOnly; Secure; SameSite=Lax`);
   return response;
 }
 
@@ -531,7 +532,9 @@ async function paymentStatus(request, env) {
     return json({ error: 'Не указан номер заказа.' }, 400);
   }
   if (!order) return json({ status: 'pending' });
-  const checkoutCookie = (request.headers.get('Cookie') || '').match(/(?:^|;\s*)fitalpro_checkout_ref=([^;]+)/)?.[1] || '';
+  const checkoutCookieName = 'fitalpro_checkout_' + order.client_ref;
+  const checkoutCookies = (request.headers.get('Cookie') || '').split(';').map(item => item.trim());
+  const checkoutCookie = checkoutCookies.find(item => item.startsWith(checkoutCookieName + '='))?.slice(checkoutCookieName.length + 1) || '';
   if (checkoutCookie !== order.client_ref) return json({ status: 'pending' });
   // Release the token only after the webhook has saved both the profile and full plan.
   // This prevents a partially completed activation from opening an empty cabinet.
@@ -545,7 +548,7 @@ async function paymentStatus(request, env) {
       access_token: subscription.access_token,
       expires_at: subscription.expires_at
     });
-    response.headers.set('Set-Cookie', 'fitalpro_checkout_ref=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax');
+    response.headers.set('Set-Cookie', `${checkoutCookieName}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`);
     return response;
   }
   return json({ status: order.status === 'paid' ? 'processing' : 'pending', plan: order.plan });
