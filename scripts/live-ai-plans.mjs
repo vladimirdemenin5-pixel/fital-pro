@@ -6,7 +6,7 @@ if (!accountId || !apiToken) throw new Error('Cloudflare AI integration credenti
 
 const ai = {
   async run(model, options) {
-    const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${encodeURIComponent(model)}`;
+    const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`;
     const response = await fetch(url, {
       method: 'POST',
       headers: {
