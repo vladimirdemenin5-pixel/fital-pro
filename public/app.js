@@ -86,6 +86,7 @@ $('#intakeForm').addEventListener('submit', async function (event) {
       return '<div class="preview-meal"><small>' + meal[0] + '</small><strong>' + escapeHtml(meal[1]) + '</strong></div>';
     }).join('');
     $('#previewWorkout').textContent = day.workout;
+    renderFullPlan(checkoutData.preview.fullPlan, '#previewFullPlan');
     $('#previewDescription').textContent = selectedPlan === 'Питание'
       ? 'Персональное меню на 7 дней, список покупок и рекомендации.'
       : selectedPlan === 'Premium'
@@ -249,9 +250,10 @@ async function loadProfileEditor() {
   }
 }
 
-function renderFullPlan(plan) {
+function renderFullPlan(plan, targetSelector) {
+  const target = $(targetSelector || '#fullPlan');
   const days = Array.isArray(plan.week) ? plan.week : [];
-  $('#fullPlan').innerHTML = days.map(function (day) {
+  target.innerHTML = days.map(function (day) {
     return '<article class="day-card">' +
       '<h3>' + escapeHtml(day.day) + '</h3>' +
       '<p><strong>Завтрак</strong> · ' + escapeHtml(day.breakfast) + '</p>' +
@@ -262,12 +264,12 @@ function renderFullPlan(plan) {
       '</article>';
   }).join('');
   if (plan.shopping && plan.shopping.length) {
-    $('#fullPlan').insertAdjacentHTML('beforeend',
+    target.insertAdjacentHTML('beforeend',
       '<article class="day-card"><h3>Список покупок</h3><p>' +
       plan.shopping.map(escapeHtml).join('</p><p>') + '</p></article>');
   }
   if (plan.tips && plan.tips.length) {
-    $('#fullPlan').insertAdjacentHTML('beforeend',
+    target.insertAdjacentHTML('beforeend',
       '<article class="day-card"><h3>Рекомендации</h3><p>' +
       plan.tips.map(escapeHtml).join('</p><p>') + '</p></article>');
   }
