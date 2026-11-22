@@ -355,7 +355,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
     { role: 'system', content: 'Ты Fital Pro. Отвечай только валидным JSON без Markdown и пояснений.' },
     { role: 'user', content: prompt }
   ];
-  const models = [MODEL, '@cf/zai-org/glm-4.7-flash'];
+  const models = [MODEL, '@cf/zai-org/glm-4.7-flash', '@cf/meta/llama-3.3-70b-instruct-fp8-fast'];
   const diagnostics = [];
   // A structurally valid answer can still fail the server's ingredient-based
   // nutrition checks. Give the models one targeted correction pass before failing
