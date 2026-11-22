@@ -8,12 +8,12 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: fital-pro-production
-  cancel-in-progress: false
 
 jobs:
   deploy:
+    concurrency:
+      group: fital-pro-production
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 25
     name: Deploy Fital Pro
@@ -78,6 +78,9 @@ jobs:
 
   live-ai-plans:
     name: Live AI plan generation (7, 14, 30 days)
+    concurrency:
+      group: fital-pro-live-ai-plans
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     needs: deploy
     timeout-minutes: 35
