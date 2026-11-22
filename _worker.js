@@ -317,7 +317,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
     { role: 'user', content: prompt }
   ];
   const models = [MODEL, '@cf/zai-org/glm-4.7-flash'];
-  let lastError;
+  const diagnostics = [];
   for (const model of models) {
     try {
       const result = await env.AI.run(model, {
@@ -337,17 +337,21 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
           if (week) return text;
         } catch {}
       }
-      lastError = new Error('Модель вернула неполный или некорректный JSON: ' + model);
-      console.error('Fital Pro AI returned incomplete plan:', model, {
-        outputLength: text.length,
-        finishReason: result?.choices?.[0]?.finish_reason || result?.result?.choices?.[0]?.finish_reason || null
-      });
+      const finishReason = result?.choices?.[0]?.finish_reason || result?.result?.choices?.[0]?.finish_reason || null;
+      const resultKeys = result && typeof result === 'object' ? Object.keys(result).slice(0, 12).join(',') : typeof result;
+      const detail = !text
+        ? 'empty text; resultKeys=' + resultKeys
+        : 'invalid plan JSON; outputLength=' + text.length + '; finishReason=' + (finishReason || 'none');
+      diagnostics.push(model + ': ' + detail);
+      console.error('Fital Pro AI returned incomplete plan:', model, detail);
     } catch (error) {
-      lastError = error;
-      console.error('Fital Pro AI model failed:', model, error?.message || 'unknown error');
+      const detail = clean(error?.message, 180) || 'unknown model error';
+      diagnostics.push(model + ': request error: ' + detail);
+      console.error('Fital Pro AI model failed:', model, detail);
     }
   }
-  throw new Error('Сервис ИИ временно не вернул текстовый ответ. Повторите отправку анкеты через минуту.');
+  const diagnostic = new Error(diagnostics.join(' | ').slice(0, 600));
+  throw new Error('Сервис ИИ временно не вернул текстовый ответ. Повторите отправку анкеты через минуту.', { cause: diagnostic });
 }
 
 async function generateAiPlan(profile, planKey, env) {
@@ -945,8 +949,9 @@ async function aiDataFlowDiagnostic(request, env) {
     });
   } catch (error) {
     const detail = clean(error?.message, 240) || 'unknown error';
-    console.error('Fital Pro AI/D1 diagnostic failed:', stage, detail);
-    return json({ ok: false, stage, error: detail }, stage === 'ai-generation' ? 502 : 500);
+    const diagnostic = clean(error?.cause?.message, 600);
+    console.error('Fital Pro AI/D1 diagnostic failed:', stage, detail, diagnostic);
+    return json({ ok: false, stage, error: detail, diagnostic: diagnostic || undefined }, stage === 'ai-generation' ? 502 : 500);
   } finally {
     if (subscriptionCreated) {
       await env.DB.batch([
