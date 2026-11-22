@@ -25,7 +25,7 @@ function makeAi(menuDays, wrongLength = false, invalidMeal = false, invalidWorko
   return {
     async run(model, input) {
       const prompt = input?.messages?.[1]?.content || '';
-      const block = prompt.match(/БЛОК: дни (\\d+)–(\\d+) из (\\d+)/);
+      const block = prompt.match(/БЛОК: дни (\d+)–(\d+) из (\d+)/);
       const requestedDays = block ? Number(block[2]) - Number(block[1]) + 1 : menuDays;
       const count = wrongLength ? 3 : requestedDays;
       const week = Array.from({ length: count }, (_, index) => {
