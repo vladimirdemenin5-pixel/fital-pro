@@ -46,7 +46,7 @@ assert.ok(worker.includes("params.set('FailUrl2', failUrl.toString())"), 'Roboka
 assert.ok(worker.includes("params.set('FailUrl2Method', 'GET')"), 'Robokassa failed-payment return method must be explicit');
 assert.ok(worker.includes("successUrl.searchParams.set('ref', clientRef)"), 'successful return must carry the order reference for activation polling');
 assert.ok(worker.includes("successUrl.searchParams.set('payment', 'success')"), 'successful return must be distinguishable from a failed payment');
-assert.ok(worker.includes("successUrl2 + ':GET:' + failUrl2 + ':GET:' + password1"), 'SuccessUrl2 and FailUrl2 values and methods must be included in the Robokassa signature before Password #1');
+assert.ok(worker.includes('buildRobokassaPaymentSignature({'), 'checkout must use the tested Robokassa payment signature helper');
 assert.ok(!worker.includes("params.set('SuccessURL',"), 'legacy unrecognized success return parameter must not be sent');
 assert.ok(!worker.includes("params.set('FailURL',"), 'legacy unrecognized fail return parameter must not be sent');
 
