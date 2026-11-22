@@ -268,7 +268,15 @@ function renderMeal(day, label, key) {
 function renderFullPlan(plan, targetSelector) {
   const target = $(targetSelector || '#fullPlan');
   const days = Array.isArray(plan.week) ? plan.week : [];
-  target.innerHTML = days.map(function (day) {
+  const average = plan.dailyAverage || {};
+  const nutritionSummary = plan.dailyAverage
+    ? '<p class="nutrition-summary">Ориентир по анкете: ' +
+      Number(plan.calories || 0).toLocaleString('ru-RU') + ' ккал и ' +
+      Number(plan.protein || 0).toLocaleString('ru-RU') + ' г белка в день. Среднее меню по составу продуктов: ' +
+      Number(average.calories || 0).toLocaleString('ru-RU') + ' ккал и ' +
+      Number(average.protein || 0).toLocaleString('ru-RU') + ' г белка.</p>'
+    : '<p class="nutrition-summary">Эта программа создана до обновления расчёта по ингредиентам. Чтобы получить проверяемые порции, калории и список покупок, пересоберите план в анкете.</p>';
+  target.innerHTML = nutritionSummary + days.map(function (day) {
     const nutrition = day.nutrition || {};
     return '<article class="day-card">' +
       '<h3>' + escapeHtml(day.day) + '</h3>' +
@@ -276,17 +284,17 @@ function renderFullPlan(plan, targetSelector) {
       renderMeal(day, 'Обед', 'lunch') +
       renderMeal(day, 'Перекус', 'snack') +
       renderMeal(day, 'Ужин', 'dinner') +
-      '<p class="day-nutrition"><strong>Расчёт по продуктам:</strong> ' +
-      Number(nutrition.calories || 0).toLocaleString('ru-RU') + ' ккал · ' +
-      Number(nutrition.protein || 0).toLocaleString('ru-RU') + ' г белка</p>' +
+      (day.nutrition ? '<p class="day-nutrition"><strong>Расчёт по продуктам:</strong> ' +
+        Number(nutrition.calories).toLocaleString('ru-RU') + ' ккал · ' +
+        Number(nutrition.protein).toLocaleString('ru-RU') + ' г белка</p>' : '') +
       '<p class="day-workout"><strong>' + (day.trainingDay ? 'Тренировка' : 'Отдых и активность') + '</strong><br>' + escapeHtml(day.workout) + '</p>' +
       '</article>';
   }).join('');
   if (plan.shopping && plan.shopping.length) {
     target.insertAdjacentHTML('beforeend',
-      '<article class="day-card"><h3>Список покупок на весь срок</h3><p>' +
+      '<article class="day-card"><h3>' + (plan.nutritionSource ? 'Список покупок на весь срок' : 'Список покупок') + '</h3><p>' +
       plan.shopping.map(escapeHtml).join('</p><p>') + '</p>' +
-      '<small>Количество рассчитано суммированием ингредиентов всех дней; крупы и бобовые указаны в сухом весе.</small></article>');
+      (plan.nutritionSource ? '<small>Количество рассчитано суммированием ингредиентов всех дней. Мясо, рыба, овощи и фрукты — сырые съедобные части; крупы и бобовые — сухой вес.</small>' : '') + '</article>');
   }
   if (plan.tips && plan.tips.length) {
     target.insertAdjacentHTML('beforeend',
