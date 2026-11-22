@@ -88,10 +88,10 @@ $('#intakeForm').addEventListener('submit', async function (event) {
     $('#previewWorkout').textContent = day.workout;
     renderFullPlan(checkoutData.preview.fullPlan, '#previewFullPlan');
     $('#previewDescription').textContent = selectedPlan === 'Питание'
-      ? 'Персональное меню на 7 дней, список покупок и рекомендации.'
+      ? 'Меню на 7 дней, список покупок и сохранение программы в личном кабинете.'
       : selectedPlan === 'Premium'
-        ? 'Персональное меню и тренировки на 14 дней, все возможности PRO, еженедельный ИИ-разбор и доступ на 30 дней.'
-        : 'Персональное меню и программа тренировок на 14 дней, список покупок и ИИ-консультант.';
+        ? 'Меню и тренировки на 14 дней, доступ на 30 дней и еженедельный ИИ-разбор.'
+        : 'Меню и тренировки на 14 дней, доступ к ИИ-консультанту и дневнику прогресса.';
     $('#paymentButton').textContent = 'Оплатить ' + prices[selectedPlan] + ' ↗';
     $('#planPreview').classList.remove('is-hidden');
     $('#planPreview').scrollIntoView({ behavior: 'smooth', block: 'start' });
