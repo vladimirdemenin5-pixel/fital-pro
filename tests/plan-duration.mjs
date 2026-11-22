@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { generateAiPlan, runAiTextWithFallback, aiPlanDiagnostic, FOOD_CATALOG } from '../_worker.js';
+import { generateAiPlan, runAiTextWithFallback, aiPlanDiagnostic, aiDataFlowDiagnostic, FOOD_CATALOG } from '../_worker.js';
 import { readFile } from 'node:fs/promises';
 
 const workerSource = await readFile(new URL('../_worker.js', import.meta.url), 'utf8');
@@ -219,3 +219,22 @@ assert.ok(workerSource.includes('aiPlanDiagnostic, generateAiPlan'), 'diagnostic
 assert.ok((await readFile(new URL('../public/ai-diagnostic.html', import.meta.url), 'utf8')).includes('noindex,nofollow,noarchive'));
 
 console.log('PASS: protected no-write AI diagnostic endpoint');
+
+const flowDiagnosticDenied = await aiDataFlowDiagnostic(new Request('https://fitalpro.test/api/ai-data-flow-diagnostic', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'X-Fital-Test-Key': 'wrong-key' },
+  body: JSON.stringify({ plan: 'Питание' })
+}), {
+  ROBOKASSA_TEST_ACCESS_KEY: 'test-secret',
+  AI: makeAi(7),
+  DB: noDatabaseAccess
+});
+assert.equal(flowDiagnosticDenied.status, 404, 'D1 and cabinet integration diagnostic must reject an incorrect test key');
+assert.ok(workerSource.includes("url.pathname === '/api/ai-data-flow-diagnostic'"), 'protected D1 and cabinet diagnostic route must be registered');
+assert.ok(workerSource.includes('await saveMemberPlan(env, accessToken, profile, plan)'), 'integration diagnostic must save the generated plan and profile to D1');
+assert.ok(workerSource.includes("personalizedPlan(new Request('https://fitalpro.internal/api/plan'"), 'integration diagnostic must read the saved plan through the personal-cabinet API');
+assert.ok(workerSource.includes("profileApi(new Request('https://fitalpro.internal/api/profile'"), 'integration diagnostic must read the saved profile through the personal-cabinet API');
+assert.ok(workerSource.includes("DELETE FROM weekly_plans WHERE access_token=?"), 'temporary diagnostic plans must be cleaned up after verification');
+assert.ok(workerSource.includes("DELETE FROM subscriptions WHERE access_token=?"), 'temporary diagnostic access must be cleaned up after verification');
+console.log('PASS: protected AI → D1 → personal-cabinet diagnostic and cleanup');
+
