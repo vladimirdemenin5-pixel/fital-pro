@@ -89,7 +89,7 @@ $('#intakeForm').addEventListener('submit', async function (event) {
     $('#previewDescription').textContent = selectedPlan === 'Питание'
       ? 'Меню на 7 дней, список покупок и сохранение программы в личном кабинете.'
       : selectedPlan === 'Premium'
-        ? 'Меню и тренировки на 14 дней, доступ на 30 дней и еженедельный ИИ-разбор.'
+        ? 'Меню и тренировки на 30 дней, доступ на 30 дней и еженедельный ИИ-разбор.'
         : 'Меню и тренировки на 14 дней, доступ к ИИ-консультанту и дневнику прогресса.';
     $('#paymentButton').textContent = 'Оплатить ' + prices[selectedPlan] + ' ↗';
     $('#planPreview').classList.remove('is-hidden');

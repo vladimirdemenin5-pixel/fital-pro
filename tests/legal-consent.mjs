@@ -85,7 +85,8 @@ assert.ok(worker.includes("INSERT INTO pending_orders (client_ref,plan,amount,cu
 assert.ok(worker.includes("await saveMemberPlan(env, accessToken, profile, plan)"));
 assert.ok(worker.includes("SELECT plan_json FROM weekly_plans WHERE access_token=?"));
 
-assert.ok(worker.includes('trainingCounts.every(count => count === profile.days)'), 'each seven-day block must contain the selected weekly training frequency');
+assert.ok(worker.includes('expectedTrainingDaysInBlock(menuDays, index, profile.days)'), 'training frequency must be validated proportionally for a partial final block');
+assert.ok(worker.includes('trainingSchedule.map((count, index)'), 'the AI prompt must specify the training count for every plan block');
 assert.ok(worker.includes('week.length === menuDays'), 'AI generation must validate the tariff menu duration');
 assert.ok(worker.includes('function extractAiText(result)'));
 assert.ok(worker.includes("result?.choices?.[0]?.message?.content"));
@@ -96,7 +97,7 @@ assert.ok(worker.includes('correctTrainingCount'));
 assert.ok(worker.includes('shoppingComplete'), 'AI plan generation must not accept a plan without a shopping list');
 
 assert.ok(worker.includes("Не удалось пересобрать план. Сохранённая программа не изменена."));
-assert.ok(worker.includes('Сумма trainingDay=true должна быть ровно'));
+assert.ok(worker.includes('Соблюдай указанное количество тренировок в каждом блоке'));
 assert.ok(app.includes("day.trainingDay ? 'Тренировка' : 'Отдых и активность'"));
 const chatStart = worker.indexOf('async function chat(request, env) {');
 const leadStart = worker.indexOf('async function lead(request, env) {', chatStart);
