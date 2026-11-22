@@ -214,4 +214,26 @@ retryPayload = await retryResponse.json();
 assert.equal(retryPayload.status, 'active');
 assert.ok(retryPayload.access_token);
 
+
+// Two simultaneous deliveries of the same notification must converge on the
+// same unique payment/subscription rather than issuing two access tokens.
+const concurrentEnv = { ...env, DB: new MockD1() };
+concurrentEnv.DB.orders.set(42, { ...order });
+const concurrentResults = await Promise.all([
+  robokassaWebhook(callback(), concurrentEnv),
+  robokassaWebhook(callback(), concurrentEnv)
+]);
+assert.deepEqual(concurrentResults.map(item => item.status), [200, 200]);
+assert.equal(concurrentEnv.DB.payments.size, 1);
+assert.equal(concurrentEnv.DB.subscriptions.size, 1);
+const concurrentTokens = [...concurrentEnv.DB.subscriptions.values()].map(item => item.access_token);
+assert.equal(new Set(concurrentTokens).size, 1);
+const concurrentStatus = await paymentStatus(new Request(
+  'https://fitalpro.test/api/payment-status?ref=' + order.client_ref,
+  { headers: { Cookie: 'fitalpro_checkout_ref=' + order.client_ref } }
+), concurrentEnv);
+const concurrentPayload = await concurrentStatus.json();
+assert.equal(concurrentPayload.status, 'active');
+assert.equal(concurrentPayload.access_token, concurrentTokens[0]);
+
 console.log('PASS: Robokassa webhook idempotency, validation, retry and access-gating tests');
