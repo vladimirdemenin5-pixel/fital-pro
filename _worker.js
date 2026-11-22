@@ -269,7 +269,7 @@ function normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, target
     if (!day.workout || (includesTraining && day.trainingDay && !hasWorkoutPrescription(day.workout))) return null;
     day.nutrition = calculateDayNutrition(day);
     if (day.nutrition.calories < targets.calories * 0.8 || day.nutrition.calories > targets.calories * 1.2) return null;
-    if (day.nutrition.protein < targets.protein * 0.7 || day.nutrition.protein > targets.protein * 1.3) return null;
+    if (day.nutrition.protein < targets.protein * 0.8 || day.nutrition.protein > targets.protein * 1.2) return null;
     week.push(day);
   }
   if (includesTraining) {
@@ -285,7 +285,7 @@ function buildShoppingList(week) {
     totals[item.foodId] = (totals[item.foodId] || 0) + item.grams;
   }
   return Object.entries(totals).map(([id,grams]) => {
-    const amount = grams >= 1000 ? (Math.round(grams/100)/10).toLocaleString('ru-RU') + ' кг' : grams + ' г';
+    const amount = grams >= 1000 ? Number((grams / 1000).toFixed(2)).toLocaleString('ru-RU') + ' кг' : grams + ' г';
     return FOOD_CATALOG[id].name + ' — ' + amount;
   });
 }
@@ -350,7 +350,7 @@ async function generateAiPlan(profile, planKey, env) {
     'Структура JSON: {"intro":"короткое персональное объяснение","week":[{"day":"День 1","trainingDay":true,"breakfast":"название блюда","breakfastIngredients":[["oats_dry",60]],"lunch":"название блюда","lunchIngredients":[["chicken_raw",120]],"snack":"название блюда","snackIngredients":[["greek_yogurt",150]],"dinner":"название блюда","dinnerIngredients":[["salmon_raw",120]],"workout":"план тренировки или восстановления"}],"tips":["практичный совет"]}. trainingDay — строго boolean. Для каждого приёма пищи обязательны ingredients-массивы.',
     'Каждый ingredients-массив содержит 1–6 пар [foodId, grams]. Используй ТОЛЬКО foodId из справочника ниже. grams — целое число съедобных граммов ДО приготовления: мясо, рыба, овощи и фрукты — сырые очищенные части; крупы, макароны и бобовые — сухой вес; яйца — без скорлупы. Не используй готовый вес. Масло и орехи учитывай, если добавляешь их в блюдо. Не добавляй в название блюда продукты, которых нет в его ingredients.',
     'Пиши краткое название блюда без граммов. Полный состав и вес будут показаны отдельно. shopping не возвращай: список покупок сервер рассчитает сам по всем ингредиентам.',
-    'Целевые ориентиры на каждый день: около ' + targets.calories + ' ккал и ' + targets.protein + ' г белка. Сервер пересчитает их по справочнику и отклонит день, если калории отличаются более чем на 20%, а белок — более чем на 30%.',
+    'Целевые ориентиры на каждый день: около ' + targets.calories + ' ккал и ' + targets.protein + ' г белка. Сервер пересчитает их по справочнику и отклонит день, если калории или белок отличаются более чем на 20%.',
     'СПРАВОЧНИК ПРОДУКТОВ НА 100 г (ккал, белок г): ' + JSON.stringify(Object.entries(FOOD_CATALOG).map(([id,food])=>[id,food.name,food.kcal,food.protein])),
     includesTraining
       ? 'Распредели тренировки по блокам плана: ' + trainingSchedule.map((count, index) => (index + 1) + '-й блок (' + Math.min(7, menuDays - index * 7) + ' дней) — ровно ' + count + ' тренировочных дней').join('; ') + '. Для каждого дня обязательно укажи trainingDay: true только в день полноценной тренировки, в остальные дни trainingDay: false и отдых или лёгкое восстановление без силовой нагрузки. Соблюдай указанное количество тренировок в каждом блоке. Распредели нагрузку безопасно, не ставь тяжёлые тренировки на одни и те же группы мышц подряд. Учитывай выбранный формат (дом, зал или смешанный). Для каждой тренировки укажи упражнения, подходы, повторения и короткую разминку/заминку; для новичка выбирай умеренную нагрузку и простые варианты.'
