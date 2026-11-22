@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { generateAiPlan, runAiTextWithFallback } from '../_worker.js';
+import { generateAiPlan, runAiTextWithFallback, aiPlanDiagnostic } from '../_worker.js';
 import { readFile } from 'node:fs/promises';
 
 const workerSource = await readFile(new URL('../_worker.js', import.meta.url), 'utf8');
@@ -157,3 +157,38 @@ assert.ok(checkoutSource.includes('JSON.stringify(plan)'), 'the complete generat
 assert.ok(!appSource.includes('checkoutData.preview.fullPlan'), 'the browser must not render the full paid plan before payment');
 assert.ok(!htmlSource.includes('id="previewFullPlan"'), 'the pre-payment page must not contain a full-plan container');
 assert.ok(htmlSource.includes('после подтверждения оплаты'), 'the page must explain that full access follows payment');
+
+
+const diagnosticDenied = await aiPlanDiagnostic(new Request('https://fitalpro.test/api/ai-diagnostic', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'X-Fital-Test-Key': 'wrong-key' },
+  body: JSON.stringify({ plan: 'Питание', profile })
+}), { ROBOKASSA_TEST_ACCESS_KEY: 'test-secret', AI: makeAi(7) });
+assert.equal(diagnosticDenied.status, 404, 'diagnostic route must reject an incorrect test key');
+
+const noDatabaseAccess = new Proxy({}, {
+  get() { throw new Error('diagnostic route must not access D1'); }
+});
+const diagnosticResponse = await aiPlanDiagnostic(new Request('https://fitalpro.test/api/ai-diagnostic', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'X-Fital-Test-Key': 'test-secret' },
+  body: JSON.stringify({ plan: 'Питание', profile })
+}), {
+  ROBOKASSA_TEST_ACCESS_KEY: 'test-secret',
+  AI: makeAi(7),
+  DB: noDatabaseAccess
+});
+assert.equal(diagnosticResponse.status, 200, 'authorized diagnostic must generate and validate a plan');
+const diagnosticData = await diagnosticResponse.json();
+assert.equal(diagnosticData.ok, true);
+assert.equal(diagnosticData.days.length, 7);
+assert.ok(diagnosticData.days[0].meals.breakfast.ingredients.length > 0);
+assert.ok(diagnosticData.days[0].calculatedNutrition.calories > 0);
+assert.ok(diagnosticData.shopping.length > 0);
+assert.ok(workerSource.includes("url.pathname === '/api/ai-diagnostic'"), 'diagnostic route must be registered');
+assert.ok(workerSource.includes('async function aiPlanDiagnostic(request, env)'), 'diagnostic route handler must exist');
+assert.ok(workerSource.includes('diagnostic path deliberately does not call checkout, rateLimit, or any D1 write'));
+assert.ok(workerSource.includes('aiPlanDiagnostic, generateAiPlan'), 'diagnostic handler must be testable');
+assert.ok((await readFile(new URL('../public/ai-diagnostic.html', import.meta.url), 'utf8')).includes('noindex,nofollow,noarchive'));
+
+console.log('PASS: protected no-write AI diagnostic endpoint');
