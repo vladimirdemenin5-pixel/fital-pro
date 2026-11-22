@@ -215,7 +215,7 @@ assert.ok(diagnosticData.shopping.length > 0);
 assert.ok(workerSource.includes("url.pathname === '/api/ai-diagnostic'"), 'diagnostic route must be registered');
 assert.ok(workerSource.includes('async function aiPlanDiagnostic(request, env)'), 'diagnostic route handler must exist');
 assert.ok(workerSource.includes('diagnostic path deliberately does not call checkout, rateLimit, or any D1 write'));
-assert.ok(workerSource.includes('aiPlanDiagnostic, generateAiPlan'), 'diagnostic handler must be testable');
+assert.ok(workerSource.includes('aiPlanDiagnostic, aiDataFlowDiagnostic, generateAiPlan'), 'diagnostic handler must be testable');
 assert.ok((await readFile(new URL('../public/ai-diagnostic.html', import.meta.url), 'utf8')).includes('noindex,nofollow,noarchive'));
 
 console.log('PASS: protected no-write AI diagnostic endpoint');
