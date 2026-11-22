@@ -33,12 +33,16 @@ function makeAi(menuDays, wrongLength = false, invalidMeal = false, invalidWorko
           day: 'День ' + (index + 1),
           trainingDay,
           breakfast: 'Овсяная каша с бананом',
+          breakfastRecipe: 'Свари хлопья на молоке до мягкости и добавь нарезанный банан.',
           breakfastIngredients: invalidMeal ? [] : (tiny ? [['oats_dry', 5]] : [['oats_dry', 80], ['milk_2pct', 200], ['banana', 120]]),
           lunch: 'Курица с рисом и брокколи',
+          lunchRecipe: 'Отвари рис, запеки курицу и приготовь брокколи на пару.',
           lunchIngredients: tiny ? [['chicken_raw', 5]] : [['chicken_raw', 100], ['rice_dry', 85], ['broccoli', 100]],
           snack: 'Йогурт с яблоком и миндалём',
+          snackRecipe: 'Нарежь яблоко и подай с йогуртом и миндалём.',
           snackIngredients: tiny ? [['greek_yogurt', 5]] : [['greek_yogurt', 150], ['apple', 150], ['almonds', 15]],
           dinner: 'Лосось с картофелем и овощами',
+          dinnerRecipe: 'Запеки лосось с картофелем, подай с овощами.',
           dinnerIngredients: tiny ? [['salmon_raw', 5]] : [['salmon_raw', 100], ['potato_raw', 200], ['olive_oil', 28], ['tomato', 100], ['avocado', 50]],
           workout: trainingDay ? (invalidWorkout ? 'Разминка, приседания и тяга' : 'Разминка, приседания 3×10, тяга 3×10, заминка') : 'Прогулка и восстановление'
         };
@@ -78,6 +82,19 @@ const premiumTrainingCounts = Array.from({ length: 5 }, (_, index) =>
 );
 assert.deepEqual(premiumTrainingCounts, [3, 3, 3, 3, 1], 'Premium training schedule must cover all 30 days, including the final two-day block');
 const nutritionPlan = await generateAiPlan(profile, 'Питание', { AI: makeAi(7) });
+await assert.rejects(
+  () => generateAiPlan(profile, 'Питание', { AI: {
+    async run() {
+      const result = makeAi(7);
+      const response = await result.run();
+      const parsed = JSON.parse(response.response);
+      parsed.week[0].breakfastRecipe = '';
+      return { response: JSON.stringify(parsed) };
+    }
+  } }),
+  /временно не вернул текстовый ответ/,
+  'plans without practical cooking instructions must be rejected'
+);
 assert.equal(nutritionPlan.week.length, 7);
 assert.equal(nutritionPlan.menuDays, 7);
 assert.equal(nutritionPlan.durationDays, 7);
@@ -188,6 +205,7 @@ const diagnosticData = await diagnosticResponse.json();
 assert.equal(diagnosticData.ok, true);
 assert.equal(diagnosticData.days.length, 7);
 assert.ok(diagnosticData.days[0].meals.breakfast.ingredients.length > 0);
+assert.ok(diagnosticData.days[0].meals.breakfast.recipe.length >= 15, 'diagnostic must expose practical cooking instructions');
 assert.ok(diagnosticData.days[0].calculatedNutrition.calories > 0);
 assert.ok(diagnosticData.days[0].calculatedNutrition.protein > 0);
 assert.ok(diagnosticData.days[0].calculatedNutrition.fat > 0);
