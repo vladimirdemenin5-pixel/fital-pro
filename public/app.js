@@ -91,7 +91,9 @@ $('#intakeForm').addEventListener('submit', async function (event) {
     const actual = day.nutrition || {};
     $('#previewDayNutrition').textContent = 'Первый день по составу продуктов: ' +
       Number(actual.calories || 0).toLocaleString('ru-RU') + ' ккал · ' +
-      Number(actual.protein || 0).toLocaleString('ru-RU') + ' г белка.';
+      Number(actual.protein || 0).toLocaleString('ru-RU') + ' г белка · ' +
+      Number(actual.fat || 0).toLocaleString('ru-RU') + ' г жиров · ' +
+      Number(actual.carbs || 0).toLocaleString('ru-RU') + ' г углеводов.';
     $('#previewWorkout').textContent = day.workout;
     $('#previewDescription').textContent = selectedPlan === 'Питание'
       ? 'Меню на 7 дней, список покупок и сохранение программы в личном кабинете.'
@@ -269,12 +271,17 @@ function renderFullPlan(plan, targetSelector) {
   const target = $(targetSelector || '#fullPlan');
   const days = Array.isArray(plan.week) ? plan.week : [];
   const average = plan.dailyAverage || {};
+  const hasFullMacros = Number.isFinite(Number(average.fat)) && Number.isFinite(Number(average.carbs)) && Number.isFinite(Number(plan.fat)) && Number.isFinite(Number(plan.carbs));
   const nutritionSummary = plan.dailyAverage
     ? '<p class="nutrition-summary">Ориентир по анкете: ' +
-      Number(plan.calories || 0).toLocaleString('ru-RU') + ' ккал и ' +
-      Number(plan.protein || 0).toLocaleString('ru-RU') + ' г белка в день. Среднее меню по составу продуктов: ' +
-      Number(average.calories || 0).toLocaleString('ru-RU') + ' ккал и ' +
-      Number(average.protein || 0).toLocaleString('ru-RU') + ' г белка.</p>'
+      Number(plan.calories || 0).toLocaleString('ru-RU') + ' ккал · белки ' +
+      Number(plan.protein || 0).toLocaleString('ru-RU') + ' г' +
+      (hasFullMacros ? ' · жиры ' + Number(plan.fat).toLocaleString('ru-RU') + ' г · углеводы ' + Number(plan.carbs).toLocaleString('ru-RU') + ' г' : '') +
+      ' в день. Среднее меню по составу продуктов: ' +
+      Number(average.calories || 0).toLocaleString('ru-RU') + ' ккал · белки ' +
+      Number(average.protein || 0).toLocaleString('ru-RU') + ' г' +
+      (hasFullMacros ? ' · жиры ' + Number(average.fat).toLocaleString('ru-RU') + ' г · углеводы ' + Number(average.carbs).toLocaleString('ru-RU') + ' г' : ' · жиры и углеводы не рассчитаны в сохранённой старой версии') +
+      '.</p>'
     : '<p class="nutrition-summary">Эта программа создана до обновления расчёта по ингредиентам. Чтобы получить проверяемые порции, калории и список покупок, пересоберите план в анкете.</p>';
   target.innerHTML = nutritionSummary + days.map(function (day) {
     const nutrition = day.nutrition || {};
@@ -286,7 +293,9 @@ function renderFullPlan(plan, targetSelector) {
       renderMeal(day, 'Ужин', 'dinner') +
       (day.nutrition ? '<p class="day-nutrition"><strong>Расчёт по продуктам:</strong> ' +
         Number(nutrition.calories).toLocaleString('ru-RU') + ' ккал · ' +
-        Number(nutrition.protein).toLocaleString('ru-RU') + ' г белка</p>' : '') +
+        Number(nutrition.protein).toLocaleString('ru-RU') + ' г белка' +
+        (Number.isFinite(Number(nutrition.fat)) && Number.isFinite(Number(nutrition.carbs)) ? ' · ' + Number(nutrition.fat).toLocaleString('ru-RU') + ' г жиров · ' + Number(nutrition.carbs).toLocaleString('ru-RU') + ' г углеводов' : ' · жиры и углеводы не рассчитаны в старой версии') +
+        '</p>' : '') +
       '<p class="day-workout"><strong>' + (day.trainingDay ? 'Тренировка' : 'Отдых и активность') + '</strong><br>' + escapeHtml(day.workout) + '</p>' +
       '</article>';
   }).join('');
