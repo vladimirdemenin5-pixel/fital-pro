@@ -51,6 +51,13 @@ assert.equal(proPlan.week.length, 14, 'PRO must contain 14 complete menu days');
 assert.equal(proPlan.menuDays, 14);
 assert.equal(proPlan.week[0].day, 'День 1');
 assert.equal(proPlan.week[13].day, 'День 14');
+assert.deepEqual(proPlan.week[0].nutrition, { calories: 1935, protein: 95 });
+assert.equal(proPlan.dailyAverage.calories, 1935);
+assert.equal(proPlan.dailyAverage.protein, 95);
+assert.ok(proPlan.shopping.includes('Овсяные хлопья, сухие — 1,1 кг'));
+assert.ok(proPlan.shopping.includes('Молоко 2% — 2,8 кг'));
+assert.ok(!proPlan.shopping.includes('Продукты на весь период'));
+assert.ok(proPlan.nutritionSource.includes('USDA FoodData Central'));
 assert.equal(proPlan.week.slice(0, 7).filter(day => day.trainingDay).length, 3);
 assert.equal(proPlan.week.slice(7, 14).filter(day => day.trainingDay).length, 3);
 
@@ -90,6 +97,11 @@ await assert.rejects(
   /временно не вернул текстовый ответ/,
   'training days without sets or repetitions must be rejected'
 );
+await assert.rejects(
+  () => generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, false, false, true) }),
+  /временно не вернул текстовый ответ/,
+  'days with implausibly low calculated calories and protein must be rejected'
+);
 
 const modelCalls = [];
 const fallbackText = await runAiTextWithFallback({
@@ -123,7 +135,7 @@ const validatedFallback = await runAiTextWithFallback({
 assert.ok(validatedFallback.includes('Готово'));
 assert.equal(invalidOutputCalls.length, 2, 'fallback must also run when the primary model returns malformed output');
 
-console.log('PASS: 7/14/30-day plans, meal portions, workout prescriptions and AI fallback');
+console.log('PASS: 7/14/30-day plans, USDA-based nutrition totals, shopping aggregation, workout prescriptions and AI fallback');
 assert.ok(workerSource.includes("'Premium': { amount: '3990.00', label: 'Fital Pro Premium — меню и тренировки, 30 дней', days: 30, menuDays: 30 }"), 'Premium must configure 30 menu days');
 assert.ok(appSource.includes('Меню и тренировки на 30 дней, доступ на 30 дней'), 'Premium checkout description must promise 30 days');
 assert.ok(htmlSource.includes('тренировочная программа на все 30 дней'), 'Premium tariff must advertise a 30-day training program');
