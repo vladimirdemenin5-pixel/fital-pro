@@ -85,7 +85,7 @@ assert.ok(worker.includes("INSERT INTO pending_orders (client_ref,plan,amount,cu
 assert.ok(worker.includes("await saveMemberPlan(env, accessToken, profile, plan)"));
 assert.ok(worker.includes("SELECT plan_json FROM weekly_plans WHERE access_token=?"));
 
-assert.ok(worker.includes('expectedTrainingDaysInBlock(menuDays, index, profile.days)'), 'training frequency must be validated proportionally for a partial final block');
+assert.ok(worker.includes('expectedTrainingDaysInBlock(menuDays,index,profile.days)'), 'training frequency must be validated proportionally for a partial final block');
 assert.ok(worker.includes('trainingSchedule.map((count, index)'), 'the AI prompt must specify the training count for every plan block');
 assert.ok(worker.includes('week.length === menuDays'), 'AI generation must validate the tariff menu duration');
 assert.ok(worker.includes('function extractAiText(result)'));
