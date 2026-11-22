@@ -23,8 +23,11 @@ const profile = {
 
 function makeAi(menuDays, wrongLength = false, invalidMeal = false, invalidWorkout = false, invalidNutrition = false) {
   return {
-    async run() {
-      const count = wrongLength ? 3 : menuDays;
+    async run(model, input) {
+      const prompt = input?.messages?.[1]?.content || '';
+      const block = prompt.match(/БЛОК: дни (\\d+)–(\\d+) из (\\d+)/);
+      const requestedDays = block ? Number(block[2]) - Number(block[1]) + 1 : menuDays;
+      const count = wrongLength ? 3 : requestedDays;
       const week = Array.from({ length: count }, (_, index) => {
         const dayInWeek = index % 7;
         const trainingDay = dayInWeek === 0 || dayInWeek === 2 || dayInWeek === 4;
@@ -107,7 +110,7 @@ await assert.rejects(
   'PRO must reject an AI response containing only seven days'
 );
 await assert.rejects(
-  () => generateAiPlan(profile, 'Premium', { AI: makeAi(3) }),
+  () => generateAiPlan(profile, 'Premium', { AI: makeAi(30, true) }),
   /временно не вернул текстовый ответ/,
   'Premium must reject a 14-day response and require all 30 days'
 );
