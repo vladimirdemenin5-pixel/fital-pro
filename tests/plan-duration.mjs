@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
 import { generateAiPlan } from '../_worker.js';
+import { readFile } from 'node:fs/promises';
+
+const workerSource = await readFile(new URL('../_worker.js', import.meta.url), 'utf8');
+const appSource = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
+const htmlSource = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
 
 const profile = {
   name: 'Тестовый клиент',
@@ -57,3 +62,7 @@ await assert.rejects(
 );
 
 console.log('PASS: 7-day Nutrition and 14-day PRO/Premium menu generation');
+
+assert.ok(workerSource.includes('fullPlan: plan'), 'checkout response must include the complete generated plan');
+assert.ok(appSource.includes("renderFullPlan(checkoutData.preview.fullPlan, '#previewFullPlan')"), 'the complete plan must be rendered before payment');
+assert.ok(htmlSource.includes('id="previewFullPlan"'), 'the pre-payment preview must contain a full-plan container');
