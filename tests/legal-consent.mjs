@@ -8,6 +8,7 @@ const worker = read('_worker.js');
 const schema = read('migrations/0001_init.sql');
 const premiumSchema = read('migrations/0002_premium_reviews.sql');
 const offer = read('public/oferta.html');
+const robokassaTest = read('public/robokassa-test.html');
 
 for (const name of ['pd_consent', 'offer_accepted']) {
   assert.match(html, new RegExp('name="' + name + '"[^>]*required'));
@@ -21,6 +22,8 @@ for (const page of ['oferta.html', 'privacy.html', 'delivery-refund.html', 'requ
 }
 assert.ok(html.includes('href="/oferta.html"'));
 assert.ok(html.includes('href="/privacy.html"'));
+assert.match(robokassaTest, /id="age" type="number" min="18" max="90"/,
+  'the Robokassa test form must match the server-side adult-only age limit');
 assert.ok(worker.includes('pd_consent_at'));
 assert.ok(worker.includes('pd_policy_version'));
 assert.ok(worker.includes('offer_accepted_at'));

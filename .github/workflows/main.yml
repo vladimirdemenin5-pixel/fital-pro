@@ -58,7 +58,7 @@ jobs:
             if (missing.length) {
               throw new Error("Missing required Cloudflare Worker secrets: " + missing.join(", "));
             }
-            console.log("PASS: all three required Robokassa secret bindings are present; secret values were not read or printed");
+            console.log("PASS: all six required production and test secret bindings are present; secret values were not read or printed");
           '
 
       - name: Deploy Worker and assets
