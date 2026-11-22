@@ -70,7 +70,7 @@ assert.ok(app.includes("$('#progressTool').classList.toggle('is-hidden', !advanc
 assert.ok(app.includes("$('#chatTool').classList.toggle('is-hidden', !advancedFeatures)"));
 assert.ok(html.includes('id="progressTool"'));
 assert.ok(html.includes('id="chatTool"'));
-assert.ok(worker.includes('trainingDay: includesTraining && day?.trainingDay === true'));
+assert.ok(worker.includes('trainingDay: includesTraining && source.trainingDay'), 'training-day flag must be normalized from the validated AI response');
 assert.ok(worker.includes("max_completion_tokens: 6500"));
 assert.ok(worker.includes("response_format: { type: 'json_object' }"));
 assert.ok(worker.includes("chat_template_kwargs: { enable_thinking: false }"));
