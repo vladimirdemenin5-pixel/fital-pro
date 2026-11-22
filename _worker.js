@@ -163,8 +163,8 @@ function hasWorkoutPrescription(value) {
 }
 
 async function runAiTextWithFallback(env, options, purpose, validate = () => true) {
-  // Keep the fast models first; use the larger instruction model only when both return invalid nutrition.
-  const models = [MODEL, '@cf/zai-org/glm-4.7-flash', '@cf/meta/llama-3.3-70b-instruct-fp8-fast'];
+  // Prefer the low-latency Flash model for chat; keep the stronger models as fallbacks.
+  const models = ['@cf/zai-org/glm-4.7-flash', MODEL, '@cf/meta/llama-3.3-70b-instruct-fp8-fast'];
   for (const model of models) {
     try {
       const result = await env.AI.run(model, options, { rejectIfBusy: true });
