@@ -842,7 +842,7 @@ async function verifyGitHubActionsOidc(request) {
         claims.ref !== 'refs/heads/main' ||
         claims.workflow_ref !== workflowRef ||
         claims.event_name !== 'push' ||
-        claims.sub !== 'repo:' + repository + ':ref:refs/heads/main' ||
+        !['repo:' + repository + ':ref:refs/heads/main', 'repo:vladimirdemenin5-pixel@324070911/fital-pro@1354815283:ref:refs/heads/main'].includes(claims.sub) ||
         !Number.isFinite(claims.exp) || claims.exp <= now ||
         !Number.isFinite(claims.iat) || claims.iat > now + 60 || now - claims.iat > 600 ||
         (Number.isFinite(claims.nbf) && claims.nbf > now + 60)) return false;

@@ -28,6 +28,8 @@ const plans = [
 for (const item of plans) {
   const started = Date.now();
   const oidcToken = await getOidcToken();
+  const oidcClaims = JSON.parse(Buffer.from(oidcToken.split('.')[1], 'base64url').toString('utf8'));
+  console.log('OIDC identity:', JSON.stringify({ aud: oidcClaims.aud, sub: oidcClaims.sub, repository: oidcClaims.repository, ref: oidcClaims.ref, workflow_ref: oidcClaims.workflow_ref, event_name: oidcClaims.event_name }));
   console.log(`LIVE FLOW: starting ${item.key} (${item.days} days)`);
   let response;
   let result = {};
