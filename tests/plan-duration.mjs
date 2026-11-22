@@ -137,6 +137,8 @@ assert.equal(invalidOutputCalls.length, 2, 'fallback must also run when the prim
 
 console.log('PASS: 7/14/30-day plans, USDA-based nutrition totals, shopping aggregation, workout prescriptions and AI fallback');
 assert.ok(workerSource.includes("'Premium': { amount: '3990.00', label: 'Fital Pro Premium — меню и тренировки, 30 дней', days: 30, menuDays: 30 }"), 'Premium must configure 30 menu days');
+assert.ok(workerSource.includes('profile.age < 18'), 'adult nutrition formula must not be used for minors');
+assert.ok(htmlSource.includes('min="18"'), 'both questionnaire forms must require adult age');
 assert.ok(appSource.includes('Меню и тренировки на 30 дней, доступ на 30 дней'), 'Premium checkout description must promise 30 days');
 assert.ok(htmlSource.includes('тренировочная программа на все 30 дней'), 'Premium tariff must advertise a 30-day training program');
 
