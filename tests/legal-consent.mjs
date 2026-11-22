@@ -96,7 +96,7 @@ assert.ok(worker.includes("result?.choices?.[0]?.message?.content"));
 assert.ok(worker.includes("messages,"));
 assert.ok(worker.includes("'@cf/zai-org/glm-4.7-flash'"));
 assert.ok(worker.includes('runPlanModel(env, prompt, profile, planKey, chunkDays)'));
-assert.ok(worker.includes('normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, nutritionTargets(profile))'), 'the server must validate structured ingredients and calculated daily nutrition');
+assert.ok(worker.includes('normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, targets)'), 'the server must validate structured ingredients and calculated daily nutrition');
 assert.ok(worker.includes('counts.every((count,index)=>count===expectedTrainingDaysInBlock(menuDays,index,profile.days))'), 'training schedule must be checked by the server');
 assert.ok(worker.includes('function buildShoppingList(week)'), 'shopping quantities must be derived from exact ingredients in the saved plan');
 assert.ok(worker.includes('calculateDayNutrition(day)'), 'daily calories and protein must be calculated from ingredient weights');
