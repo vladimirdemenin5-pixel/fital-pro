@@ -255,6 +255,71 @@ function calculateDayNutrition(day) {
   };
 }
 
+function nutritionWithinTargets(nutrition, targets) {
+  return nutrition.calories >= targets.calories * 0.8 && nutrition.calories <= targets.calories * 1.2 &&
+    nutrition.protein >= targets.protein * 0.8 && nutrition.protein <= targets.protein * 1.2 &&
+    (targets.fat <= 0 || (nutrition.fat >= targets.fat * 0.7 && nutrition.fat <= targets.fat * 1.3)) &&
+    (targets.carbs <= 0 || (nutrition.carbs >= targets.carbs * 0.7 && nutrition.carbs <= targets.carbs * 1.3));
+}
+
+// Make small, bounded corrections to existing ingredient portions. Food choices,
+// meal names and recipes remain unchanged; the server still rejects an infeasible day.
+function rebalanceDayNutrition(day, targets) {
+  const items = MEAL_KEYS.flatMap(key => day[key + 'Ingredients']);
+  const original = items.map(item => item.grams);
+  const bounds = original.map(grams => ({
+    min: Math.max(5, Math.floor((grams * 0.5) / 5) * 5),
+    max: Math.min(500, Math.ceil((grams * 1.5) / 5) * 5)
+  }));
+  const score = () => {
+    const n = calculateDayNutrition(day);
+    const distance = (value, target, tolerance) => {
+      const low = target * (1 - tolerance);
+      const high = target * (1 + tolerance);
+      return value < low ? (low - value) / (target * tolerance) :
+        value > high ? (value - high) / (target * tolerance) : 0;
+    };
+    let result = distance(n.calories, targets.calories, 0.2) ** 2 +
+      distance(n.protein, targets.protein, 0.2) ** 2 +
+      distance(n.fat, targets.fat, 0.3) ** 2 +
+      distance(n.carbs, targets.carbs, 0.3) ** 2;
+    for (let i = 0; i < items.length; i++) {
+      const delta = (items[i].grams - original[i]) / Math.max(20, original[i]);
+      result += 0.002 * delta * delta;
+    }
+    return result;
+  };
+
+  day.nutrition = calculateDayNutrition(day);
+  if (nutritionWithinTargets(day.nutrition, targets)) return true;
+  for (let iteration = 0; iteration < 160; iteration++) {
+    let bestScore = score();
+    let bestItem = -1;
+    let bestGrams = 0;
+    for (let i = 0; i < items.length; i++) {
+      for (const step of [-5, 5]) {
+        const candidate = items[i].grams + step;
+        if (candidate < bounds[i].min || candidate > bounds[i].max) continue;
+        const previous = items[i].grams;
+        items[i].grams = candidate;
+        const candidateScore = score();
+        items[i].grams = previous;
+        if (candidateScore < bestScore - 1e-9) {
+          bestScore = candidateScore;
+          bestItem = i;
+          bestGrams = candidate;
+        }
+      }
+    }
+    if (bestItem < 0) break;
+    items[bestItem].grams = bestGrams;
+    day.nutrition = calculateDayNutrition(day);
+    if (nutritionWithinTargets(day.nutrition, targets)) return true;
+  }
+  day.nutrition = calculateDayNutrition(day);
+  return nutritionWithinTargets(day.nutrition, targets);
+}
+
 function normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, targets) {
   if (!Array.isArray(parsed.week) || parsed.week.length !== menuDays) return null;
   const includesTraining = planKey !== 'Питание';
@@ -282,10 +347,7 @@ function normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, target
     if (MEAL_KEYS.some(key => !day[key] || !day[key + 'Ingredients'] || day[key + 'Recipe'].length < 15)) return null;
     if (!day.workout || (includesTraining && day.trainingDay && !hasWorkoutPrescription(day.workout))) return null;
     day.nutrition = calculateDayNutrition(day);
-    if (day.nutrition.calories < targets.calories * 0.8 || day.nutrition.calories > targets.calories * 1.2) return null;
-    if (day.nutrition.protein < targets.protein * 0.8 || day.nutrition.protein > targets.protein * 1.2) return null;
-    if (targets.fat > 0 && (day.nutrition.fat < targets.fat * 0.7 || day.nutrition.fat > targets.fat * 1.3)) return null;
-    if (targets.carbs > 0 && (day.nutrition.carbs < targets.carbs * 0.7 || day.nutrition.carbs > targets.carbs * 1.3)) return null;
+    if (!nutritionWithinTargets(day.nutrition, targets) && !rebalanceDayNutrition(day, targets)) return null;
     week.push(day);
   }
   if (includesTraining) {
