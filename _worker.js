@@ -167,7 +167,7 @@ async function runAiTextWithFallback(env, options, purpose, validate = () => tru
   const models = [MODEL, '@cf/zai-org/glm-4.7-flash', '@cf/meta/llama-3.3-70b-instruct-fp8-fast'];
   for (const model of models) {
     try {
-      const result = await env.AI.run(model, options);
+      const result = await env.AI.run(model, options, { rejectIfBusy: true });
       const text = extractAiText(result);
       if (text && validate(text)) return text;
       console.error('Fital Pro AI returned an empty or invalid response:', purpose, model);
@@ -439,7 +439,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
           temperature: 0.2,
           response_format: { type: 'json_object' },
           chat_template_kwargs: { enable_thinking: false }
-        });
+        }, { rejectIfBusy: true });
         const text = extractAiText(result);
         const normalized = text.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
         const match = normalized.match(/\{[\s\S]*\}/);
