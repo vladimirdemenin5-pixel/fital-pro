@@ -141,7 +141,7 @@ const nutritionRetryAi = {
 };
 const recoveredNutritionPlan = await generateAiPlan(profile, 'Питание', { AI: nutritionRetryAi });
 assert.equal(recoveredNutritionPlan.week.length, 7, 'a corrected second-pass AI response must produce a complete plan');
-assert.equal(nutritionRetryCalls, 3, 'the server must retry after both models return nutritionally invalid plans');
+assert.equal(nutritionRetryCalls, 3, 'the stronger third model must recover after both fast models return nutritionally invalid plans');
 
 const modelCalls = [];
 const fallbackText = await runAiTextWithFallback({
