@@ -38,8 +38,12 @@ assert.ok(worker.includes('INNER JOIN weekly_plans w ON w.access_token=s.access_
 assert.ok(worker.includes('s.expires_at>?)'));
 assert.ok(worker.includes("'ROBOKASSA_TEST_PASSWORD' + number"));
 assert.ok(worker.includes("env.ROBOKASSA_IS_TEST === '1'"));
-assert.ok(worker.includes('const password1 = robokassaPassword(env, 1)'));
-assert.ok(worker.includes('const password2 = robokassaPassword(env, 2)'));
+assert.ok(worker.includes('const password1 = robokassaPassword(env, 1, testMode)'));
+assert.ok(worker.includes('ROBOKASSA_TEST_ACCESS_KEY'));
+assert.ok(worker.includes("url.pathname === '/api/checkout-test'"));
+assert.ok(worker.includes('is_test INTEGER NOT NULL DEFAULT 0'));
+assert.ok(worker.includes('const password2 = robokassaPassword(env, 2, testMode)'));
+assert.ok(worker.includes("const paymentId = 'robokassa-' + (testMode ? 'test-' : '') + invId"));
 assert.ok(worker.includes("params.set('SuccessUrl2', successUrl.toString())"), 'Robokassa success return must use the documented SuccessUrl2 parameter');
 assert.ok(worker.includes("params.set('SuccessUrl2Method', 'GET')"), 'Robokassa success return method must be explicit');
 assert.ok(worker.includes("params.set('FailUrl2', failUrl.toString())"), 'Robokassa failed-payment return must use the documented FailUrl2 parameter');
