@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { generateAiPlan } from '../_worker.js';
+import { generateAiPlan, runAiTextWithFallback } from '../_worker.js';
 import { readFile } from 'node:fs/promises';
 
 const workerSource = await readFile(new URL('../_worker.js', import.meta.url), 'utf8');
@@ -19,7 +19,7 @@ const profile = {
   preferences: 'Без ограничений'
 };
 
-function makeAi(menuDays, wrongLength = false) {
+function makeAi(menuDays, wrongLength = false, invalidMeal = false, invalidWorkout = false) {
   return {
     async run() {
       const count = wrongLength ? 7 : menuDays;
@@ -29,11 +29,11 @@ function makeAi(menuDays, wrongLength = false) {
         return {
           day: 'День ' + (index + 1),
           trainingDay,
-          breakfast: 'Овсянка 200 г и йогурт 150 г',
+          breakfast: invalidMeal ? 'Овсянка с ягодами и йогуртом' : 'Овсянка 200 г и йогурт 150 г',
           lunch: 'Курица 150 г, рис 100 г и овощи 200 г',
           snack: 'Творог 150 г и яблоко',
           dinner: 'Рыба 150 г и овощи 200 г',
-          workout: trainingDay ? 'Разминка, приседания 3×10, тяга 3×10, заминка' : 'Прогулка и восстановление'
+          workout: trainingDay ? (invalidWorkout ? 'Разминка, приседания и тяга' : 'Разминка, приседания 3×10, тяга 3×10, заминка') : 'Прогулка и восстановление'
         };
       });
       return { response: JSON.stringify({ intro: 'План создан по тестовой анкете.', week, shopping: ['Продукты на весь период'], tips: ['Пейте воду по жажде.'] }) };
@@ -75,7 +75,31 @@ await assert.rejects(
   'Premium must reject a 14-day response and require all 30 days'
 );
 
-console.log('PASS: 7-day Nutrition, 14-day PRO and 30-day Premium menu and training generation');
+await assert.rejects(
+  () => generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, true, false) }),
+  /временно не вернул текстовый ответ/,
+  'plans without explicit meal portions must be rejected'
+);
+await assert.rejects(
+  () => generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, false, true) }),
+  /временно не вернул текстовый ответ/,
+  'training days without sets or repetitions must be rejected'
+);
+
+const modelCalls = [];
+const fallbackText = await runAiTextWithFallback({
+  AI: {
+    async run(model) {
+      modelCalls.push(model);
+      if (modelCalls.length === 1) throw new Error('primary model unavailable');
+      return { response: 'Ответ резервной модели' };
+    }
+  }
+}, { messages: [] }, 'test');
+assert.equal(fallbackText, 'Ответ резервной модели');
+assert.equal(modelCalls.length, 2, 'fallback model must be tried after the primary model fails');
+
+console.log('PASS: 7/14/30-day plans, meal portions, workout prescriptions and AI fallback');
 assert.ok(workerSource.includes("'Premium': { amount: '3990.00', label: 'Fital Pro Premium — меню и тренировки, 30 дней', days: 30, menuDays: 30 }"), 'Premium must configure 30 menu days');
 assert.ok(appSource.includes('Меню и тренировки на 30 дней, доступ на 30 дней'), 'Premium checkout description must promise 30 days');
 assert.ok(htmlSource.includes('тренировочная программа на все 30 дней'), 'Premium tariff must advertise a 30-day training program');
