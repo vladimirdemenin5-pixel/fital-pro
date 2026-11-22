@@ -131,6 +131,18 @@ await assert.rejects(
   'days with implausibly low calculated calories and protein must be rejected'
 );
 
+let nutritionRetryCalls = 0;
+const nutritionRetryAi = {
+  async run(model, input) {
+    nutritionRetryCalls++;
+    const fixture = nutritionRetryCalls <= 2 ? makeAi(7, false, false, false, true) : makeAi(7);
+    return fixture.run(model, input);
+  }
+};
+const recoveredNutritionPlan = await generateAiPlan(profile, 'Питание', { AI: nutritionRetryAi });
+assert.equal(recoveredNutritionPlan.week.length, 7, 'a corrected second-pass AI response must produce a complete plan');
+assert.equal(nutritionRetryCalls, 3, 'the server must retry after both models return nutritionally invalid plans');
+
 const modelCalls = [];
 const fallbackText = await runAiTextWithFallback({
   AI: {
