@@ -813,7 +813,7 @@ async function aiDataFlowDiagnostic(request, env) {
   const planKey = clean(body?.plan, 40);
   if (!PLANS[planKey]) return json({ error: 'Выберите корректный тариф.' }, 400);
 
-  // Only synthetic data is used. The route is protected by the existing test secret.
+  // Only synthetic data is used. The route is protected by the temporary CI key.
   const profile = profileFrom({
     name: 'Fital Pro automated test',
     sex: 'female',
@@ -826,20 +826,25 @@ async function aiDataFlowDiagnostic(request, env) {
     days: 3,
     preferences: 'Обычное питание, без аллергий. Тестовые данные.'
   });
-  const plan = await generateAiPlan(profile, planKey, env);
   const suffix = crypto.randomUUID().replaceAll('-', '');
   const accessToken = 'test_' + suffix;
   const now = new Date().toISOString();
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  let stage = 'ai-generation';
   let subscriptionCreated = false;
 
   try {
+    const plan = await generateAiPlan(profile, planKey, env);
+    stage = 'd1-test-subscription';
+    subscriptionCreated = true;
     await env.DB.prepare(
       'INSERT INTO subscriptions (id,payment_id,client_ref,plan,status,access_token,customer_contact,created_at,updated_at,expires_at) VALUES (?,?,?,?,?,?,?,?,?,?)'
     ).bind(crypto.randomUUID(), 'ai-flow-test-' + suffix, 'ai-flow-test-' + suffix, planKey, 'active', accessToken, 'automated-test', now, now, expiresAt).run();
-    subscriptionCreated = true;
+
+    stage = 'd1-save-profile-and-plan';
     await saveMemberPlan(env, accessToken, profile, plan);
 
+    stage = 'cabinet-api-read';
     const authHeaders = { Authorization: 'Bearer ' + accessToken };
     const [planResponse, profileResponse, memberResponse] = await Promise.all([
       personalizedPlan(new Request('https://fitalpro.internal/api/plan', { headers: authHeaders }), env),
@@ -868,6 +873,10 @@ async function aiDataFlowDiagnostic(request, env) {
       memberAccessRead: true,
       dailyAverage: savedPlan.plan.dailyAverage
     });
+  } catch (error) {
+    const detail = clean(error?.message, 240) || 'unknown error';
+    console.error('Fital Pro AI/D1 diagnostic failed:', stage, detail);
+    return json({ ok: false, stage, error: detail }, stage === 'ai-generation' ? 502 : 500);
   } finally {
     if (subscriptionCreated) {
       await env.DB.batch([
