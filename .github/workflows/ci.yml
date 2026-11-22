@@ -3,6 +3,8 @@ name: Fital Pro pull request checks
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [reliability-ai-fallback-plan-validation]
   workflow_dispatch:
 
 permissions:
