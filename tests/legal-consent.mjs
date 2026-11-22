@@ -87,7 +87,7 @@ assert.ok(worker.includes("SELECT plan_json FROM weekly_plans WHERE access_token
 
 assert.ok(worker.includes('expectedTrainingDaysInBlock(menuDays,index,profile.days)'), 'training frequency must be validated proportionally for a partial final block');
 assert.ok(worker.includes('trainingSchedule.map((count, index)'), 'the AI prompt must specify the training count for every plan block');
-assert.ok(worker.includes('week.length === menuDays'), 'AI generation must validate the tariff menu duration');
+assert.ok(worker.includes('parsed.week.length !== menuDays'), 'AI generation must validate the tariff menu duration');
 assert.ok(worker.includes('function extractAiText(result)'));
 assert.ok(worker.includes("result?.choices?.[0]?.message?.content"));
 assert.ok(worker.includes("messages,"));
