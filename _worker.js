@@ -417,7 +417,9 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
     { role: 'system', content: 'Ты Fital Pro. Отвечай только валидным JSON без Markdown и пояснений.' },
     { role: 'user', content: prompt }
   ];
-  const models = [MODEL, '@cf/zai-org/glm-4.7-flash', '@cf/meta/llama-3.3-70b-instruct-fp8-fast'];
+  // Start with the low-latency Flash model. Gemma 26B first could keep a full seven-day
+  // plan request open beyond the four-minute live-check/client timeout.
+  const models = ['@cf/zai-org/glm-4.7-flash', MODEL, '@cf/meta/llama-3.3-70b-instruct-fp8-fast'];
   const diagnostics = [];
   // A structurally valid answer can still fail the server's ingredient-based
   // nutrition checks. Give the models one targeted correction pass before failing
