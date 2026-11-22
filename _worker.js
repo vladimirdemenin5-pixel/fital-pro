@@ -385,7 +385,7 @@ async function generateAiPlan(profile, planKey, env) {
   }
   const week = normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, targets);
   if (!week) {
-    throw new Error('ИИ не смог составить меню с проверяемыми порциями и подходящими суточными калориями и белком. Попробуйте сформировать план ещё раз.');
+    throw new Error('ИИ не смог составить меню с проверяемыми порциями и подходящими суточными калориями, белками, жирами и углеводами. Попробуйте сформировать план ещё раз.');
   }
   const shopping = buildShoppingList(week);
   const dailyAverage = {
@@ -1043,4 +1043,4 @@ export default {
   }
 };
 
-export { buildRobokassaPaymentSignature, robokassaResultSignature, verifyRobokassaResultSignature, robokassaWebhook, paymentStatus, testCheckout, aiPlanDiagnostic, generateAiPlan, runAiTextWithFallback };
+export { buildRobokassaPaymentSignature, robokassaResultSignature, verifyRobokassaResultSignature, robokassaWebhook, paymentStatus, testCheckout, aiPlanDiagnostic, generateAiPlan, runAiTextWithFallback, FOOD_CATALOG };
