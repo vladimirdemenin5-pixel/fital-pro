@@ -81,10 +81,17 @@ $('#intakeForm').addEventListener('submit', async function (event) {
     $('#previewProtein').textContent = String(checkoutData.preview.protein);
     $('#previewDayTitle').textContent = checkoutData.preview.firstDay.day;
     const day = checkoutData.preview.firstDay;
-    const mealLabels = [['Завтрак', day.breakfast], ['Обед', day.lunch], ['Перекус', day.snack], ['Ужин', day.dinner]];
+    const mealLabels = [['Завтрак', 'breakfast'], ['Обед', 'lunch'], ['Перекус', 'snack'], ['Ужин', 'dinner']];
     $('#previewMeals').innerHTML = mealLabels.map(function (meal) {
-      return '<div class="preview-meal"><small>' + meal[0] + '</small><strong>' + escapeHtml(meal[1]) + '</strong></div>';
+      const ingredients = Array.isArray(day[meal[1] + 'Ingredients']) ? day[meal[1] + 'Ingredients'] : [];
+      const composition = ingredients.map(item => escapeHtml(item.name) + ' — ' + Number(item.grams).toLocaleString('ru-RU') + ' г').join(' · ');
+      return '<div class="preview-meal"><small>' + meal[0] + '</small><strong>' + escapeHtml(day[meal[1]]) + '</strong>' +
+        (composition ? '<small>Состав: ' + composition + '</small>' : '') + '</div>';
     }).join('');
+    const actual = day.nutrition || {};
+    $('#previewDayNutrition').textContent = 'Первый день по составу продуктов: ' +
+      Number(actual.calories || 0).toLocaleString('ru-RU') + ' ккал · ' +
+      Number(actual.protein || 0).toLocaleString('ru-RU') + ' г белка.';
     $('#previewWorkout').textContent = day.workout;
     $('#previewDescription').textContent = selectedPlan === 'Питание'
       ? 'Меню на 7 дней, список покупок и сохранение программы в личном кабинете.'
@@ -249,29 +256,53 @@ async function loadProfileEditor() {
   }
 }
 
+function renderMeal(day, label, key) {
+  const ingredients = Array.isArray(day[key + 'Ingredients']) ? day[key + 'Ingredients'] : [];
+  const composition = ingredients.map(item =>
+    escapeHtml(item.name) + ' — ' + Number(item.grams).toLocaleString('ru-RU') + ' г'
+  ).join(' · ');
+  return '<p><strong>' + label + '</strong> · ' + escapeHtml(day[key]) +
+    (composition ? '<br><small>Состав, вес до приготовления: ' + composition + '</small>' : '') + '</p>';
+}
+
 function renderFullPlan(plan, targetSelector) {
   const target = $(targetSelector || '#fullPlan');
   const days = Array.isArray(plan.week) ? plan.week : [];
-  target.innerHTML = days.map(function (day) {
+  const average = plan.dailyAverage || {};
+  const nutritionSummary = plan.dailyAverage
+    ? '<p class="nutrition-summary">Ориентир по анкете: ' +
+      Number(plan.calories || 0).toLocaleString('ru-RU') + ' ккал и ' +
+      Number(plan.protein || 0).toLocaleString('ru-RU') + ' г белка в день. Среднее меню по составу продуктов: ' +
+      Number(average.calories || 0).toLocaleString('ru-RU') + ' ккал и ' +
+      Number(average.protein || 0).toLocaleString('ru-RU') + ' г белка.</p>'
+    : '<p class="nutrition-summary">Эта программа создана до обновления расчёта по ингредиентам. Чтобы получить проверяемые порции, калории и список покупок, пересоберите план в анкете.</p>';
+  target.innerHTML = nutritionSummary + days.map(function (day) {
+    const nutrition = day.nutrition || {};
     return '<article class="day-card">' +
       '<h3>' + escapeHtml(day.day) + '</h3>' +
-      '<p><strong>Завтрак</strong> · ' + escapeHtml(day.breakfast) + '</p>' +
-      '<p><strong>Обед</strong> · ' + escapeHtml(day.lunch) + '</p>' +
-      '<p><strong>Перекус</strong> · ' + escapeHtml(day.snack) + '</p>' +
-      '<p><strong>Ужин</strong> · ' + escapeHtml(day.dinner) + '</p>' +
+      renderMeal(day, 'Завтрак', 'breakfast') +
+      renderMeal(day, 'Обед', 'lunch') +
+      renderMeal(day, 'Перекус', 'snack') +
+      renderMeal(day, 'Ужин', 'dinner') +
+      (day.nutrition ? '<p class="day-nutrition"><strong>Расчёт по продуктам:</strong> ' +
+        Number(nutrition.calories).toLocaleString('ru-RU') + ' ккал · ' +
+        Number(nutrition.protein).toLocaleString('ru-RU') + ' г белка</p>' : '') +
       '<p class="day-workout"><strong>' + (day.trainingDay ? 'Тренировка' : 'Отдых и активность') + '</strong><br>' + escapeHtml(day.workout) + '</p>' +
       '</article>';
   }).join('');
   if (plan.shopping && plan.shopping.length) {
     target.insertAdjacentHTML('beforeend',
-      '<article class="day-card"><h3>Список покупок</h3><p>' +
-      plan.shopping.map(escapeHtml).join('</p><p>') + '</p></article>');
+      '<article class="day-card"><h3>' + (plan.nutritionSource ? 'Список покупок на весь срок' : 'Список покупок') + '</h3><p>' +
+      plan.shopping.map(escapeHtml).join('</p><p>') + '</p>' +
+      (plan.nutritionSource ? '<small>Количество рассчитано суммированием ингредиентов всех дней. Мясо, рыба, овощи и фрукты — сырые съедобные части; крупы и бобовые — сухой вес.</small>' : '') + '</article>');
   }
   if (plan.tips && plan.tips.length) {
     target.insertAdjacentHTML('beforeend',
       '<article class="day-card"><h3>Рекомендации</h3><p>' +
       plan.tips.map(escapeHtml).join('</p><p>') + '</p></article>');
   }
+  if (plan.nutritionSource) target.insertAdjacentHTML('beforeend',
+    '<p class="nutrition-source">' + escapeHtml(plan.nutritionSource) + '</p>');
 }
 
 async function loadAccount() {

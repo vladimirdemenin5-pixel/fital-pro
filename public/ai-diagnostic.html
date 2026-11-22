@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <title>Fital Pro — диагностика генерации AI</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;padding:24px;background:#f5f6f8;color:#20242a;font:16px/1.5 system-ui,sans-serif}
+    main{max-width:760px;margin:0 auto;background:#fff;padding:24px;border-radius:16px;box-shadow:0 8px 32px #17203312}
+    h1{font-size:24px;margin:0 0 8px}p{color:#59616d}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+    label{display:block;font-size:14px;font-weight:600;margin:10px 0 4px}input,select{width:100%;padding:11px;border:1px solid #cbd1d9;border-radius:8px;font:inherit;background:#fff}
+    button{margin-top:18px;padding:12px 18px;border:0;border-radius:9px;background:#1c5d49;color:#fff;font:inherit;font-weight:700}
+    button:disabled{opacity:.6}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#111827;color:#e5e7eb;padding:16px;border-radius:10px;max-height:65vh;overflow:auto}
+    .notice{padding:12px;background:#fff7e6;border-radius:8px;color:#654b16;font-size:14px}
+    @media(max-width:560px){body{padding:12px}.grid{grid-template-columns:1fr}main{padding:18px}}
+  </style>
+</head>
+<body>
+<main>
+  <h1>Диагностика генерации Fital Pro AI</h1>
+  <p>Проверка вызывает настоящую Workers AI модель и серверный расчёт ингредиентов. Оплата, заказ и записи в D1 не создаются.</p>
+  <div class="notice">Ключ доступа вводится только в этом поле и отправляется заголовком на этот же Worker. Не отправляйте ключ в чат и не сохраняйте его в браузере.</div>
+  <form id="diagnosticForm">
+    <label for="testKey">Тестовый ключ доступа</label>
+    <input id="testKey" type="password" autocomplete="off" required>
+    <div class="grid">
+      <div><label for="plan">Тариф для проверки</label><select id="plan"><option value="Питание">Питание — 7 дней</option><option value="PRO" selected>PRO — 14 дней</option><option value="Premium">Premium — 30 дней</option></select></div>
+      <div><label for="name">Имя тестового профиля</label><input id="name" value="Тест Fital Pro" required></div>
+      <div><label for="sex">Пол</label><select id="sex"><option value="female">Женский</option><option value="male">Мужской</option></select></div>
+      <div><label for="age">Возраст</label><input id="age" type="number" min="18" max="90" value="30" required></div>
+      <div><label for="height">Рост, см</label><input id="height" type="number" min="120" max="230" value="170" required></div>
+      <div><label for="weight">Вес, кг</label><input id="weight" type="number" min="35" max="250" value="70" required></div>
+      <div><label for="activity">Активность</label><select id="activity"><option value="low">Низкая</option><option value="medium" selected>Средняя</option><option value="high">Высокая</option></select></div>
+      <div><label for="goal">Цель</label><select id="goal"><option value="loss">Снижение веса</option><option value="maintenance" selected>Поддержание</option><option value="gain">Набор массы</option></select></div>
+      <div><label for="training">Формат тренировок</label><select id="training"><option value="gym">Зал</option><option value="mixed" selected>Смешанный</option><option value="home">Дома</option></select></div>
+      <div><label for="days">Тренировок в неделю</label><input id="days" type="number" min="2" max="7" value="3" required></div>
+    </div>
+    <label for="preferences">Предпочтения и ограничения</label>
+    <input id="preferences" value="Без ограничений">
+    <button id="runButton" type="submit">Запустить реальную генерацию</button>
+  </form>
+  <h2>Результат</h2>
+  <pre id="result">Ожидается запуск.</pre>
+</main>
+<script>
+(function(){
+  const form=document.getElementById('diagnosticForm');
+  const button=document.getElementById('runButton');
+  const output=document.getElementById('result');
+  form.addEventListener('submit',async function(event){
+    event.preventDefault();
+    button.disabled=true;
+    output.textContent='Запрос отправлен. Генерация может занять некоторое время…';
+    const value=id=>document.getElementById(id).value;
+    const body={
+      plan:value('plan'),
+      profile:{
+        name:value('name'),sex:value('sex'),age:Number(value('age')),
+        height:Number(value('height')),weight:Number(value('weight')),
+        activity:value('activity'),goal:value('goal'),training:value('training'),
+        days:Number(value('days')),preferences:value('preferences')
+      }
+    };
+    try{
+      const response=await fetch('/api/ai-diagnostic',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','X-Fital-Test-Key':value('testKey')},
+        body:JSON.stringify(body),
+        cache:'no-store'
+      });
+      const data=await response.json();
+      output.textContent=JSON.stringify(data,null,2);
+      if(!response.ok) output.textContent='HTTP '+response.status+'\n'+output.textContent;
+    }catch(error){
+      output.textContent='Ошибка запроса: '+String(error&&error.message||error);
+    }finally{
+      button.disabled=false;
+    }
+  });
+})();
+</script>
+</body>
+</html>

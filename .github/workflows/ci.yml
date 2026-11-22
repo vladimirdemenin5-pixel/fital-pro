@@ -1,0 +1,31 @@
+name: Fital Pro pull request checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [reliability-ai-fallback-plan-validation]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fital-pro-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install
+      - name: Run regression tests and Cloudflare dry-run
+        run: npm run dry-run
