@@ -1,6 +1,6 @@
 const endpoint = process.env.FITALPRO_WORKER_URL || 'https://red-waterfall-2af8.vladimirdemenin5.workers.dev';
-const testKey = process.env.ROBOKASSA_TEST_ACCESS_KEY;
-if (!testKey) throw new Error('ROBOKASSA_TEST_ACCESS_KEY is not configured for the live integration test.');
+const testKey = process.env.FITALPRO_CI_TEST_KEY;
+if (!testKey) throw new Error('Temporary Fital Pro CI diagnostic key was not created.');
 
 const plans = [
   { key: 'Питание', days: 7 },
