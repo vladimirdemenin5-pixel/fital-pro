@@ -154,6 +154,29 @@ function extractAiText(result) {
   return '';
 }
 
+function hasMealPortion(value) {
+  return /\\d+(?:[.,]\\d+)?\\s*(?:г|гр|кг|мл|л|шт|яиц|яйца|яйцо|кусоч(?:ек|ка|ков)?)(?=\\s|$|[),.;])/i.test(String(value || ''));
+}
+
+function hasWorkoutPrescription(value) {
+  return /\\d+\\s*(?:[×xх]\\s*\\d+|подход(?:а|ов)?|повтор(?:а|ений)?)/i.test(String(value || ''));
+}
+
+async function runAiTextWithFallback(env, options, purpose) {
+  const models = [MODEL, '@cf/zai-org/glm-4.7-flash'];
+  for (const model of models) {
+    try {
+      const result = await env.AI.run(model, options);
+      const text = extractAiText(result);
+      if (text) return text;
+      console.error('Fital Pro AI returned an empty response:', purpose, model);
+    } catch (error) {
+      console.error('Fital Pro AI model failed:', purpose, model, error?.message || 'unknown error');
+    }
+  }
+  throw new Error('ИИ временно недоступен. Попробуйте ещё раз через минуту.');
+}
+
 function expectedTrainingDaysInBlock(menuDays, weekIndex, weeklyTarget) {
   const daysInBlock = Math.min(7, Math.max(0, menuDays - weekIndex * 7));
   if (!daysInBlock) return 0;
@@ -184,7 +207,11 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
           const parsed = JSON.parse(match[0]);
           const week = Array.isArray(parsed.week) ? parsed.week : [];
           const complete = week.length === menuDays && week.every(day =>
-            day?.breakfast && day?.lunch && day?.snack && day?.dinner && day?.workout
+            day?.breakfast && hasMealPortion(day.breakfast) &&
+            day?.lunch && hasMealPortion(day.lunch) &&
+            day?.snack && hasMealPortion(day.snack) &&
+            day?.dinner && hasMealPortion(day.dinner) &&
+            day?.workout && (planKey === 'Питание' || day?.trainingDay !== true || hasWorkoutPrescription(day.workout))
           );
           const trainingCounts = Array.from({ length: Math.ceil(menuDays / 7) }, (_, weekIndex) =>
             week.slice(weekIndex * 7, (weekIndex + 1) * 7).filter(day => day?.trainingDay === true).length
@@ -266,8 +293,14 @@ async function generateAiPlan(profile, planKey, env) {
     }
   }
   for (const day of week) {
-    if (!day.breakfast || !day.lunch || !day.snack || !day.dinner || !day.workout) {
-      throw new Error('План неполный. Попробуйте отправить анкету ещё раз.');
+    if (!day.breakfast || !hasMealPortion(day.breakfast) ||
+        !day.lunch || !hasMealPortion(day.lunch) ||
+        !day.snack || !hasMealPortion(day.snack) ||
+        !day.dinner || !hasMealPortion(day.dinner)) {
+      throw new Error('В меню не указаны порции одного или нескольких блюд. Попробуйте сформировать план ещё раз.');
+    }
+    if (!day.workout || (includesTraining && day.trainingDay && !hasWorkoutPrescription(day.workout))) {
+      throw new Error('В тренировочном плане не указаны подходы и повторения. Попробуйте сформировать план ещё раз.');
     }
   }
   return {
@@ -671,7 +704,7 @@ async function premiumReviewApi(request, env) {
   const progressRows = await env.DB.prepare('SELECT date,weight,completed_meal,completed_workout FROM progress WHERE access_token=? AND date>=? AND date<=? ORDER BY date ASC LIMIT 8').bind(sub.access_token, periodStart, now.toISOString().slice(0, 10)).all();
   const progress = progressRows.results || [];
   if (progress.length < 2) return json({ error: 'Для еженедельного разбора добавьте минимум две записи в дневник за эту неделю: вес, питание и тренировки.' }, 400);
-  if (!(await rateLimit(request, env, 'premium-review', 2, 3600000))) return json({ error: 'Лимит запросов на разбор временно исчерпан. Попробуйте позже.' }, 429);
+  if (!(await memberRateLimit(env, sub.access_token, 'premium-review', 2, 3600000))) return json({ error: 'Лимит запросов на разбор временно исчерпан. Попробуйте позже.' }, 429);
   if (!env.AI) return json({ error: 'ИИ пока не подключён.' }, 503);
 
   const [profileRow, planRow] = await Promise.all([
@@ -701,9 +734,9 @@ async function premiumReviewApi(request, env) {
     'ДНЕВНИК И СВОДКА: ' + JSON.stringify({ progress, stats })
   ].join('\n');
 
-  let result;
+  let raw;
   try {
-    result = await env.AI.run(MODEL, {
+    raw = await runAiTextWithFallback(env, {
       messages: [
         { role: 'system', content: 'Ты Fital Pro Premium. Верни только корректный JSON без Markdown.' },
         { role: 'user', content: prompt }
@@ -712,13 +745,10 @@ async function premiumReviewApi(request, env) {
       temperature: 0.2,
       response_format: { type: 'json_object' },
       chat_template_kwargs: { enable_thinking: false }
-    });
-  } catch (error) {
-    console.error('Fital Pro Premium review AI failed:', error && error.message);
+    }, 'premium-review');
+  } catch {
     return json({ error: 'Не удалось подготовить разбор. Попробуйте позже.' }, 502);
   }
-
-  const raw = extractAiText(result);
   const match = raw.match(/\{[\s\S]*\}/);
   let parsed = null;
   try { if (match) parsed = JSON.parse(match[0]); } catch {}
@@ -745,7 +775,7 @@ async function chat(request, env) {
   const sub = await getSubscription(request, env);
   if (!sub) return json({ error: 'ИИ-консультант доступен при активной подписке.' }, 403);
   if (!['PRO', 'Premium'].includes(sub.plan)) return json({ error: 'ИИ-консультант доступен на тарифах PRO и Premium.' }, 403);
-  if (!(await rateLimit(request, env, 'chat', 20, 60000))) {
+  if (!(await memberRateLimit(env, sub.access_token, 'chat', 20, 60000))) {
     return json({ error: 'Слишком много вопросов. Попробуйте через минуту.' }, 429);
   }
   const body = await request.json();
@@ -774,9 +804,9 @@ async function chat(request, env) {
     'Сохранённый план клиента (JSON): ' + plan,
     'Вопрос клиента: ' + message
   ].join('\n');
-  let result;
+  let reply;
   try {
-    result = await env.AI.run(MODEL, {
+    reply = await runAiTextWithFallback(env, {
       messages: [
         { role: 'system', content: 'Ты Fital AI — консультант сервиса Fital Pro. Отвечай только по-русски.' },
         { role: 'user', content: prompt }
@@ -784,12 +814,10 @@ async function chat(request, env) {
       max_completion_tokens: 900,
       temperature: 0.4,
       chat_template_kwargs: { enable_thinking: false }
-    });
-  } catch (error) {
-    console.error('Fital AI chat failed:', error?.message || 'unknown error');
+    }, 'chat');
+  } catch {
     return json({ error: 'ИИ-консультант временно недоступен. Попробуйте позже.' }, 502);
   }
-  const reply = extractAiText(result);
   if (!reply) return json({ error: 'ИИ не вернул ответ. Попробуйте ещё раз.' }, 502);
   return json({ reply });
 }
@@ -857,4 +885,4 @@ export default {
   }
 };
 
-export { buildRobokassaPaymentSignature, robokassaResultSignature, verifyRobokassaResultSignature, robokassaWebhook, paymentStatus, testCheckout, generateAiPlan };
+export { buildRobokassaPaymentSignature, robokassaResultSignature, verifyRobokassaResultSignature, robokassaWebhook, paymentStatus, testCheckout, generateAiPlan, runAiTextWithFallback };
