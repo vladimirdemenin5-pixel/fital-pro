@@ -87,10 +87,10 @@ $('#intakeForm').addEventListener('submit', async function (event) {
     }).join('');
     $('#previewWorkout').textContent = day.workout;
     $('#previewDescription').textContent = selectedPlan === 'Питание'
-      ? 'Полное меню на неделю, список покупок и рекомендации на 7 дней.'
+      ? 'Персональное меню на 7 дней, список покупок и рекомендации.'
       : selectedPlan === 'Premium'
-        ? 'Все возможности PRO, еженедельный ИИ-разбор прогресса и персональные ориентиры на 30 дней.'
-        : 'Полное меню, программа активности и доступ к ИИ-консультанту на ' + checkoutData.preview.durationDays + ' дней.';
+        ? 'Персональное меню и тренировки на 14 дней, все возможности PRO, еженедельный ИИ-разбор и доступ на 30 дней.'
+        : 'Персональное меню и программа тренировок на 14 дней, список покупок и ИИ-консультант.';
     $('#paymentButton').textContent = 'Оплатить ' + prices[selectedPlan] + ' ↗';
     $('#planPreview').classList.remove('is-hidden');
     $('#planPreview').scrollIntoView({ behavior: 'smooth', block: 'start' });
