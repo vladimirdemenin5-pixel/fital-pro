@@ -90,7 +90,24 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install
-      - name: Verify live AI generation, D1 storage, and personal-cabinet access
+      - name: Create temporary CI diagnostic key in the existing Worker
         env:
-          ROBOKASSA_TEST_ACCESS_KEY: ${{ secrets.ROBOKASSA_TEST_ACCESS_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          key="$(openssl rand -hex 32)"
+          echo "::add-mask::$key"
+          printf 'FITALPRO_CI_TEST_KEY=%s\n' "$key" >> "$GITHUB_ENV"
+          printf '%s' "$key" | npx wrangler secret put FITALPRO_CI_TEST_KEY --name red-waterfall-2af8
+          echo "FITALPRO_CI_SECRET_CREATED=true" >> "$GITHUB_ENV"
+
+      - name: Verify live AI generation, D1 storage, and personal-cabinet access
         run: node scripts/live-ai-plans.mjs
+
+      - name: Remove temporary CI diagnostic key
+        if: always() && env.FITALPRO_CI_SECRET_CREATED == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler secret delete FITALPRO_CI_TEST_KEY --name red-waterfall-2af8 --force
