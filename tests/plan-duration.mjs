@@ -21,7 +21,7 @@ const profile = {
   preferences: 'Без ограничений'
 };
 
-function makeAi(menuDays, wrongLength = false, invalidMeal = false, invalidWorkout = false, invalidNutrition = false) {
+function makeAi(menuDays, wrongLength = false, invalidMeal = false, invalidWorkout = false, invalidNutrition = false, portionScale = 1) {
   return {
     async run(model, input) {
       const prompt = input?.messages?.[1]?.content || '';
@@ -32,21 +32,22 @@ function makeAi(menuDays, wrongLength = false, invalidMeal = false, invalidWorko
         const dayInWeek = index % 7;
         const trainingDay = dayInWeek === 0 || dayInWeek === 2 || dayInWeek === 4;
         const tiny = invalidNutrition;
+        const portion = grams => Math.max(5, Math.round(grams * portionScale));
         return {
           day: 'День ' + (index + 1),
           trainingDay,
           breakfast: 'Овсяная каша с бананом',
           breakfastRecipe: 'Свари хлопья на молоке до мягкости и добавь нарезанный банан.',
-          breakfastIngredients: invalidMeal ? [] : (tiny ? [['oats_dry', 5]] : [['oats_dry', 80], ['milk_2pct', 200], ['banana', 120]]),
+          breakfastIngredients: invalidMeal ? [] : (tiny ? [['oats_dry', 5]] : [['oats_dry', portion(80)], ['milk_2pct', portion(200)], ['banana', portion(120)]]),
           lunch: 'Курица с рисом и брокколи',
           lunchRecipe: 'Отвари рис, запеки курицу и приготовь брокколи на пару.',
-          lunchIngredients: tiny ? [['chicken_raw', 5]] : [['chicken_raw', 100], ['rice_dry', 85], ['broccoli', 100]],
+          lunchIngredients: tiny ? [['chicken_raw', 5]] : [['chicken_raw', portion(100)], ['rice_dry', portion(85)], ['broccoli', portion(100)]],
           snack: 'Йогурт с яблоком и миндалём',
           snackRecipe: 'Нарежь яблоко и подай с йогуртом и миндалём.',
-          snackIngredients: tiny ? [['greek_yogurt', 5]] : [['greek_yogurt', 150], ['apple', 150], ['almonds', 15]],
+          snackIngredients: tiny ? [['greek_yogurt', 5]] : [['greek_yogurt', portion(150)], ['apple', portion(150)], ['almonds', portion(15)]],
           dinner: 'Лосось с картофелем и овощами',
           dinnerRecipe: 'Запеки лосось с картофелем, подай с овощами.',
-          dinnerIngredients: tiny ? [['salmon_raw', 5]] : [['salmon_raw', 100], ['potato_raw', 200], ['olive_oil', 28], ['tomato', 100], ['avocado', 50]],
+          dinnerIngredients: tiny ? [['salmon_raw', 5]] : [['salmon_raw', portion(100)], ['potato_raw', portion(200)], ['olive_oil', portion(28)], ['tomato', portion(100)], ['avocado', portion(50)]],
           workout: trainingDay ? (invalidWorkout ? 'Разминка, приседания и тяга' : 'Разминка, приседания 3×10, тяга 3×10, заминка') : 'Прогулка и восстановление'
         };
       });
@@ -87,6 +88,18 @@ const premiumTrainingCounts = Array.from({ length: 5 }, (_, index) =>
 );
 assert.deepEqual(premiumTrainingCounts, [3, 3, 3, 3, 1], 'Premium training schedule must cover all 30 days, including the final two-day block');
 const nutritionPlan = await generateAiPlan(profile, 'Питание', { AI: makeAi(7) });
+const correctedPortionPlan = await generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, false, false, false, 0.7) });
+assert.equal(correctedPortionPlan.week.length, 14, 'server-side portion correction must recover a plan with initially undersized portions');
+assert.ok(correctedPortionPlan.week.every(day =>
+  day.nutrition.calories >= correctedPortionPlan.calories * 0.8 &&
+  day.nutrition.calories <= correctedPortionPlan.calories * 1.2 &&
+  day.nutrition.protein >= correctedPortionPlan.protein * 0.8 &&
+  day.nutrition.protein <= correctedPortionPlan.protein * 1.2 &&
+  day.nutrition.fat >= correctedPortionPlan.fat * 0.7 &&
+  day.nutrition.fat <= correctedPortionPlan.fat * 1.3 &&
+  day.nutrition.carbs >= correctedPortionPlan.carbs * 0.7 &&
+  day.nutrition.carbs <= correctedPortionPlan.carbs * 1.3
+), 'server-corrected days must still satisfy strict calorie and macro ranges');
 await assert.rejects(
   () => generateAiPlan(profile, 'Питание', { AI: {
     async run() {
