@@ -99,6 +99,25 @@ const fallbackText = await runAiTextWithFallback({
 assert.equal(fallbackText, 'Ответ резервной модели');
 assert.equal(modelCalls.length, 2, 'fallback model must be tried after the primary model fails');
 
+const invalidOutputCalls = [];
+const validatedFallback = await runAiTextWithFallback({
+  AI: {
+    async run(model) {
+      invalidOutputCalls.push(model);
+      return { response: invalidOutputCalls.length === 1 ? 'not valid JSON' : '{"summary":"Готово","recommendations":["Шаг 1","Шаг 2"]}' };
+    }
+  }
+}, { messages: [] }, 'test-validation', text => {
+  try {
+    const parsed = JSON.parse(text);
+    return !!parsed.summary && Array.isArray(parsed.recommendations) && parsed.recommendations.length >= 2;
+  } catch {
+    return false;
+  }
+});
+assert.ok(validatedFallback.includes('Готово'));
+assert.equal(invalidOutputCalls.length, 2, 'fallback must also run when the primary model returns malformed output');
+
 console.log('PASS: 7/14/30-day plans, meal portions, workout prescriptions and AI fallback');
 assert.ok(workerSource.includes("'Premium': { amount: '3990.00', label: 'Fital Pro Premium — меню и тренировки, 30 дней', days: 30, menuDays: 30 }"), 'Premium must configure 30 menu days');
 assert.ok(appSource.includes('Меню и тренировки на 30 дней, доступ на 30 дней'), 'Premium checkout description must promise 30 days');
