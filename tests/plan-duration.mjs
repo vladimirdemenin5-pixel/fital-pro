@@ -41,15 +41,24 @@ function makeAi(menuDays, wrongLength = false) {
   };
 }
 
-for (const planKey of ['PRO', 'Premium']) {
-  const plan = await generateAiPlan(profile, planKey, { AI: makeAi(14) });
-  assert.equal(plan.week.length, 14, planKey + ' must contain 14 complete menu days');
-  assert.equal(plan.menuDays, 14);
-  assert.equal(plan.week[0].day, 'День 1');
-  assert.equal(plan.week[13].day, 'День 14');
-  assert.equal(plan.week.slice(0, 7).filter(day => day.trainingDay).length, 3);
-  assert.equal(plan.week.slice(7, 14).filter(day => day.trainingDay).length, 3);
-}
+const proPlan = await generateAiPlan(profile, 'PRO', { AI: makeAi(14) });
+assert.equal(proPlan.week.length, 14, 'PRO must contain 14 complete menu days');
+assert.equal(proPlan.menuDays, 14);
+assert.equal(proPlan.week[0].day, 'День 1');
+assert.equal(proPlan.week[13].day, 'День 14');
+assert.equal(proPlan.week.slice(0, 7).filter(day => day.trainingDay).length, 3);
+assert.equal(proPlan.week.slice(7, 14).filter(day => day.trainingDay).length, 3);
+
+const premiumPlan = await generateAiPlan(profile, 'Premium', { AI: makeAi(30) });
+assert.equal(premiumPlan.week.length, 30, 'Premium must contain 30 complete menu days');
+assert.equal(premiumPlan.menuDays, 30);
+assert.equal(premiumPlan.durationDays, 30);
+assert.equal(premiumPlan.week[0].day, 'День 1');
+assert.equal(premiumPlan.week[29].day, 'День 30');
+const premiumTrainingCounts = Array.from({ length: 5 }, (_, index) =>
+  premiumPlan.week.slice(index * 7, Math.min((index + 1) * 7, 30)).filter(day => day.trainingDay).length
+);
+assert.deepEqual(premiumTrainingCounts, [3, 3, 3, 3, 1], 'Premium training schedule must cover all 30 days, including the final two-day block');
 const nutritionPlan = await generateAiPlan(profile, 'Питание', { AI: makeAi(7) });
 assert.equal(nutritionPlan.week.length, 7);
 assert.equal(nutritionPlan.menuDays, 7);
@@ -60,8 +69,16 @@ await assert.rejects(
   /временно не вернул текстовый ответ/,
   'PRO must reject an AI response containing only seven days'
 );
+await assert.rejects(
+  () => generateAiPlan(profile, 'Premium', { AI: makeAi(14) }),
+  /временно не вернул текстовый ответ/,
+  'Premium must reject a 14-day response and require all 30 days'
+);
 
-console.log('PASS: 7-day Nutrition and 14-day PRO/Premium menu generation');
+console.log('PASS: 7-day Nutrition, 14-day PRO and 30-day Premium menu and training generation');
+assert.ok(workerSource.includes("'Premium': { amount: '3990.00', label: 'Fital Pro Premium — меню и тренировки, 30 дней', days: 30, menuDays: 30 }"), 'Premium must configure 30 menu days');
+assert.ok(appSource.includes('Меню и тренировки на 30 дней, доступ на 30 дней'), 'Premium checkout description must promise 30 days');
+assert.ok(htmlSource.includes('тренировочная программа на все 30 дней'), 'Premium tariff must advertise a 30-day training program');
 
 const checkoutStart = workerSource.indexOf('async function checkout(');
 const checkoutEnd = workerSource.indexOf('\nasync function ', checkoutStart + 1);
