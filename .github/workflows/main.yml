@@ -90,7 +90,7 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install
-      - name: Generate all plans using the real Cloudflare Workers AI models
+      - name: Verify live AI generation, D1 storage, and personal-cabinet access
         env:
           ROBOKASSA_TEST_ACCESS_KEY: ${{ secrets.ROBOKASSA_TEST_ACCESS_KEY }}
         run: node scripts/live-ai-plans.mjs
