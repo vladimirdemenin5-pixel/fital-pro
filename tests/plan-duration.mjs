@@ -78,6 +78,7 @@ assert.ok(workerSource.includes('rejectIfBusy: true'), 'Workers AI must skip a b
 assert.equal((workerSource.match(/const models = \['@cf\/zai-org\/glm-4\.7-flash', MODEL, '@cf\/meta\/llama-3\.3-70b-instruct-fp8-fast'\];/g) || []).length, 2, 'both chat and plan generation must try the low-latency Flash model first');
 assert.ok(workerSource.includes('max_completion_tokens: 6500') && !workerSource.includes('max_tokens: 6500'), 'Workers AI output must use its supported max_completion_tokens parameter');
 assert.ok(workerSource.includes('reasoning_effort: null'), 'reasoning must be explicitly disabled for deterministic structured meal-plan generation');
+assert.ok(workerSource.includes('const aiOptions = {') && workerSource.includes('env.AI.run(model, aiOptions, { rejectIfBusy: true })'), 'the AI chat fallback must also disable reasoning before inference');
 assert.ok(workerSource.includes('week должен содержать РОВНО'), 'the model prompt must explicitly require the exact block length');
 assert.equal(proPlan.week.slice(0, 7).filter(day => day.trainingDay).length, 3);
 assert.equal(proPlan.week.slice(7, 14).filter(day => day.trainingDay).length, 3);
