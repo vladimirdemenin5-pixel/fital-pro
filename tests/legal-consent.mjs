@@ -74,9 +74,9 @@ assert.ok(app.includes("$('#chatTool').classList.toggle('is-hidden', !advancedFe
 assert.ok(html.includes('id="progressTool"'));
 assert.ok(html.includes('id="chatTool"'));
 assert.ok(worker.includes('trainingDay: includesTraining && source.trainingDay'), 'training-day flag must be normalized from the validated AI response');
-assert.ok(worker.includes("max_completion_tokens: 6500"));
+assert.ok(worker.includes("max_tokens: 6500"));
 assert.ok(worker.includes("response_format: { type: 'json_object' }"));
-assert.ok(worker.includes("chat_template_kwargs: { enable_thinking: false }"));
+assert.ok(!worker.includes("chat_template_kwargs: { enable_thinking: false }"));
 assert.ok(!worker.includes("max_tokens: 4500"));
 assert.ok(worker.includes("'Питание': { amount: '990.00'"));
 assert.ok(worker.includes("'PRO': { amount: '1990.00'"));
@@ -94,7 +94,7 @@ assert.ok(worker.includes('parsed.week.length !== menuDays'), 'AI generation mus
 assert.ok(worker.includes('function extractAiText(result)'));
 assert.ok(worker.includes("result?.choices?.[0]?.message?.content"));
 assert.ok(worker.includes("messages,"));
-assert.ok(worker.includes("'@cf/zai-org/glm-4.7-flash'"));
+assert.ok(worker.includes("const FALLBACK_MODEL = '@cf/meta/llama-3.1-8b-instruct';"));
 assert.ok(worker.includes('runPlanModel(env, prompt, profile, planKey, chunkDays)'));
 assert.ok(worker.includes('normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, nutritionTargets(profile))'), 'the server must validate structured ingredients and calculated daily nutrition');
 assert.ok(worker.includes('counts.every((count,index)=>count===expectedTrainingDaysInBlock(menuDays,index,profile.days))'), 'training schedule must be checked by the server');
