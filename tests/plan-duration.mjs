@@ -75,6 +75,7 @@ assert.ok(workerSource.includes('fdcId:173904'), 'oats reference must retain its
 assert.ok(workerSource.includes('for (let offset = 0; offset < totalDays; offset += 7)'), 'long plans must be generated and validated in seven-day blocks');
 assert.ok(workerSource.includes("const models = ['@cf/zai-org/glm-4.7-flash', MODEL, '@cf/meta/llama-3.3-70b-instruct-fp8-fast'];"), 'the low-latency Flash model must be tried before slower plan-generation fallbacks');
 assert.ok(workerSource.includes('rejectIfBusy: true'), 'Workers AI must skip a busy model queue and fall back instead of waiting until the request times out');
+assert.ok(workerSource.includes('const AI_MODEL_TIMEOUT_MS = 45000;') && workerSource.includes('signal: AbortSignal.timeout(AI_MODEL_TIMEOUT_MS)'), 'each plan-model inference must have a cancellable timeout so a stalled model cannot block fallbacks');
 assert.equal((workerSource.match(/const models = \['@cf\/zai-org\/glm-4\.7-flash', MODEL, '@cf\/meta\/llama-3\.3-70b-instruct-fp8-fast'\];/g) || []).length, 2, 'both chat and plan generation must try the low-latency Flash model first');
 assert.ok(workerSource.includes('max_completion_tokens: 6500') && !workerSource.includes('max_tokens: 6500'), 'Workers AI output must use its supported max_completion_tokens parameter');
 assert.ok(workerSource.includes('reasoning_effort: null'), 'reasoning must be explicitly disabled for deterministic structured meal-plan generation');
@@ -94,6 +95,21 @@ const premiumTrainingCounts = Array.from({ length: 5 }, (_, index) =>
 );
 assert.deepEqual(premiumTrainingCounts, [3, 3, 3, 3, 1], 'Premium training schedule must cover all 30 days, including the final two-day block');
 const nutritionPlan = await generateAiPlan(profile, 'Питание', { AI: makeAi(7) });
+const timeoutFallbackModels = [];
+const timeoutRecoveredPlan = await generateAiPlan(profile, 'Питание', { AI: {
+  async run(model, input, options) {
+    timeoutFallbackModels.push(model);
+    assert.ok(options?.signal instanceof AbortSignal, 'each Workers AI plan call must receive an abort signal');
+    if (timeoutFallbackModels.length === 1) {
+      const error = new Error('simulated model timeout');
+      error.name = 'TimeoutError';
+      throw error;
+    }
+    return makeAi(7).run(model, input);
+  }
+} });
+assert.equal(timeoutRecoveredPlan.week.length, 7, 'a timed-out first model must fall back to the next available model');
+assert.equal(timeoutFallbackModels[1], '@cf/google/gemma-4-26b-a4b-it', 'Gemma must be attempted after the first model times out');
 const correctedPortionPlan = await generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, false, false, false, 0.7) });
 assert.equal(correctedPortionPlan.week.length, 14, 'server-side portion correction must recover a plan with initially undersized portions');
 assert.ok(correctedPortionPlan.week.every(day =>
