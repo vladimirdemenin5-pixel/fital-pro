@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 const MODEL = '@cf/google/gemma-4-26b-a4b-it';
+const AI_MODEL_TIMEOUT_MS = 45000;
 const PLANS = {
   'Питание': { amount: '990.00', label: 'Fital Pro — Питание, 7 дней', days: 7, menuDays: 7 },
   'PRO': { amount: '1990.00', label: 'Fital Pro PRO — питание + тренировки, 14 дней', days: 14, menuDays: 14 },
@@ -422,21 +423,24 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
     { role: 'system', content: 'Ты Fital Pro. Отвечай только валидным JSON без Markdown и пояснений.' },
     { role: 'user', content: prompt }
   ];
-  // Start with the low-latency Flash model. Gemma 26B first could keep a full seven-day
-  // plan request open beyond the four-minute live-check/client timeout.
   const models = ['@cf/zai-org/glm-4.7-flash', MODEL, '@cf/meta/llama-3.3-70b-instruct-fp8-fast'];
   const diagnostics = [];
-  // A structurally valid answer can still fail the server's ingredient-based
-  // nutrition checks. Give the models one targeted correction pass before failing
-  // the checkout, instead of repeating the same generic prompt only once.
-  for (let attempt = 0; attempt < 2; attempt++) {
+  let correctionModel = null;
+
+  // Bound each inference. A stalled model must not block every fallback
+  // until the browser or CI client gives up on the entire plan request.
+  for ( (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt === 1 && !correctionModel) break;
     const currentMessages = attempt === 0
       ? messages
       : [...messages, {
           role: 'user',
           content: 'ПРЕДЫДУЩИЙ JSON ОТКЛОНЁН СЕРВЕРНОЙ ПРОВЕРКОЙ. Исправь рацион, сохранив все обязательные поля и точное число дней. Пересчитай граммовки каждого ингредиента по справочнику, отдельно для каждого дня. Ошибки предыдущих вариантов: ' + diagnostics.slice(-2).join(' | ') + '. Не объясняй ошибки: верни заново только полный исправленный JSON. Не ослабляй ограничения калорий и БЖУ.'
         }];
-    for (const model of models) {
+    const attemptModels = attempt === 0 ? models : [correctionModel];
+
+    for (const model of attemptModels) {
+      const modelStartedAt = Date.now();
       try {
         const result = await env.AI.run(model, {
           messages: currentMessages,
@@ -445,7 +449,10 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
           temperature: 0.2,
           response_format: { type: 'json_object' },
           chat_template_kwargs: { enable_thinking: false }
-        }, { rejectIfBusy: true });
+        }, {
+          rejectIfBusy: true,
+          signal: AbortSignal.timeout(AI_MODEL_TIMEOUT_MS)
+        });
         const text = extractAiText(result);
         const normalized = text.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
         const match = normalized.match(/\{[\s\S]*\}/);
@@ -461,21 +468,22 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
             if (week) return text;
             const reason = diagnosePlanWeekFailure(parsed, profile, planKey, menuDays, nutritionTargets(profile));
             diagnostics.push(model + ': json-parsed-but-rejected; ' + reason + '; outputLength=' + text.length);
+            correctionModel = model;
           } catch (error) {
             diagnostics.push(model + ': json-parse-error=' + clean(error?.message, 140) + '; outputLength=' + text.length);
           }
         }
         const finishReason = result?.choices?.[0]?.finish_reason || result?.result?.choices?.[0]?.finish_reason || null;
-        console.error('Fital Pro AI plan rejected:', model, 'attempt=' + (attempt + 1), diagnostics[diagnostics.length - 1], 'finishReason=' + (finishReason || 'none'));
+        console.error('Fital Pro AI plan rejected:', model, 'attempt=' + (attempt + 1), diagnostics[diagnostics.length - 1], 'finishReason=' + (finishReason || 'none'), 'elapsedMs=' + (Date.now() - modelStartedAt));
       } catch (error) {
         const detail = clean(error?.message, 180) || 'unknown model error';
         diagnostics.push(model + ': request-error=' + detail);
-        console.error('Fital Pro AI model failed:', model, 'attempt=' + (attempt + 1), detail);
+        console.error('Fital Pro AI model failed:', model, 'attempt=' + (attempt + 1), detail, 'elapsedMs=' + (Date.now() - modelStartedAt));
       }
     }
   }
   const diagnostic = new Error(diagnostics.join(' | ').slice(0, 600));
-  throw new Error('Сервис ИИ временно не вернул текстовый ответ. Повторите отправку анкеты через минуту.', { cause: diagnostic });
+  throw new Error('Сервис ИИ временно не вернул проверенный план. Повторите отправку анкеты через минуту.', { cause: diagnostic });
 }
 
 async function generateAiPlan(profile, planKey, env) {
