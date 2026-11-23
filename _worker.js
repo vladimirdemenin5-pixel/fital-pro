@@ -550,6 +550,7 @@ function normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, target
       workout: clean(source.workout, 400)
     };
     if (MEAL_KEYS.some(key => !day[key] || !day[key + 'Ingredients'] || day[key + 'Recipe'].length < 15)) return null;
+    if (MEAL_KEYS.some(key => day[key + 'Ingredients'].some(item => !foodAllowedByPreferences(item.foodId, profile)))) return null;
     if (!day.workout || (includesTraining && day.trainingDay && !hasWorkoutPrescription(day.workout))) return null;
     day.nutrition = calculateDayNutrition(day);
     if (!nutritionWithinTargets(day.nutrition, targets) && !rebalanceDayNutrition(day, targets, profile)) return null;
@@ -593,6 +594,10 @@ function diagnosePlanWeekFailure(parsed, profile, planKey, menuDays, targets) {
         ingredientsValid = false;
       } else {
         day[key + 'Ingredients'] = normalizeMealIngredients(rawIngredients);
+        if (day[key + 'Ingredients'].some(item => !foodAllowedByPreferences(item.foodId, profile))) {
+          issues.push(dayLabel + '-' + key + '-client-food-preference-violation');
+          ingredientsValid = false;
+        }
       }
     }
 
@@ -1646,4 +1651,4 @@ export default {
   }
 };
 
-export { buildRobokassaPaymentSignature, robokassaResultSignature, verifyRobokassaResultSignature, robokassaWebhook, paymentStatus, testCheckout, aiPlanDiagnostic, aiDataFlowDiagnostic, generateAiPlan, runAiTextWithFallback, runAiInferenceWithTimeout, FOOD_CATALOG, buildPlanResponseSchema, diagnosePlanWeekFailure };
+export { buildRobokassaPaymentSignature, robokassaResultSignature, verifyRobokassaResultSignature, robokassaWebhook, paymentStatus, testCheckout, aiPlanDiagnostic, aiDataFlowDiagnostic, generateAiPlan, runAiTextWithFallback, runAiInferenceWithTimeout, FOOD_CATALOG, buildPlanResponseSchema, diagnosePlanWeekFailure, rebalanceDayNutrition, foodAllowedByPreferences };
