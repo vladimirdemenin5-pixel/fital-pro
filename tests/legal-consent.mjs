@@ -103,23 +103,24 @@ assert.ok(worker.includes("INSERT INTO pending_orders (client_ref,plan,amount,cu
 assert.ok(worker.includes("await saveMemberPlan(env, accessToken, profile, plan)"));
 assert.ok(worker.includes("SELECT plan_json FROM weekly_plans WHERE access_token=?"));
 
-assert.ok(worker.includes('expectedTrainingDaysInBlock(menuDays,index,profile.days)'), 'training frequency must be validated proportionally for a partial final block');
-assert.ok(worker.includes('trainingSchedule.map((count, index)'), 'the AI prompt must specify the training count for every plan block');
+assert.ok(worker.includes('function isScheduledTrainingDay(absoluteDay, weeklyTarget)'), 'training cadence must be calculated consistently across all plan chunks');
+assert.ok(worker.includes(".filter(day => isScheduledTrainingDay(day, profile.days))"), 'each chunk prompt must receive its exact scheduled training day numbers');
+assert.ok(worker.includes("'тренировочные дни: ' + (trainingDays.length ? trainingDays.join(', ') : 'нет')"), 'the AI prompt must specify exact training dates for each block');
 assert.ok(worker.includes('parsed.week.length !== menuDays'), 'AI generation must validate the tariff menu duration');
 assert.ok(worker.includes('function extractAiText(result)'));
 assert.ok(worker.includes("result?.choices?.[0]?.message?.content"));
 assert.ok(worker.includes("messages,"));
 assert.ok(worker.includes("'@cf/zai-org/glm-4.7-flash'"));
 assert.ok(worker.includes('runPlanModel(env, prompt, profile, planKey, chunkDays)'));
-assert.ok(worker.includes('normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, nutritionTargets(profile))'), 'the server must validate structured ingredients and calculated daily nutrition');
-assert.ok(worker.includes('counts.every((count,index)=>count===expectedTrainingDaysInBlock(menuDays,index,profile.days))'), 'training schedule must be checked by the server');
+assert.ok(worker.includes('normalizeAndValidatePlanWeek(parsed, profile, planKey, chunkDays, targets, offset + 1)'), 'the server must validate every chunk using its absolute start day and calculated nutrition targets');
+assert.ok(worker.includes('day.trainingDay === isScheduledTrainingDay(startDay + index, profile.days)'), 'training schedule must be checked by the server across chunk boundaries');
 assert.ok(worker.includes('function buildShoppingList(week)'), 'shopping quantities must be derived from exact ingredients in the saved plan');
 assert.ok(worker.includes('calculateDayNutrition(day)'), 'daily calories and protein must be calculated from ingredient weights');
 assert.ok(worker.includes('targets.protein * 0.8') && worker.includes('targets.protein * 1.2'), 'daily protein must stay within validated tolerance');
 assert.ok(worker.includes('profile.age < 18'), 'adult nutrition calculations must reject minors');
 
 assert.ok(worker.includes("Не удалось пересобрать план. Сохранённая программа не изменена."));
-assert.ok(worker.includes('Соблюдай указанное количество тренировок в каждом блоке'));
+assert.ok(worker.includes('тренировочные дни: ') && worker.includes('trainingDays.join'), 'the model prompt must enforce the server-calculated training cadence');
 assert.ok(app.includes("day.trainingDay ? 'Тренировка' : 'Отдых и активность'"));
 const chatStart = worker.indexOf('async function chat(request, env) {');
 const leadStart = worker.indexOf('async function lead(request, env) {', chatStart);
