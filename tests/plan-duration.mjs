@@ -152,12 +152,33 @@ assert.equal(proPlan.week.length, 14, 'PRO must contain 14 complete menu days');
 assert.equal(proPlan.menuDays, 14);
 assert.equal(proPlan.week[0].day, 'День 1');
 assert.equal(proPlan.week[13].day, 'День 14');
-assert.deepEqual(proPlan.week[0].nutrition, { calories: 1943, protein: 98.1, fat: 71, carbs: 237.1 });
-assert.equal(proPlan.dailyAverage.calories, 1943);
+assert.deepEqual(proPlan.week[0].nutrition, { calories: 1872, protein: 98.1, fat: 63, carbs: 237.1 });
+assert.equal(proPlan.dailyAverage.calories, 1872);
 assert.equal(proPlan.dailyAverage.protein, 98.1);
-assert.equal(proPlan.dailyAverage.fat, 71);
+assert.equal(proPlan.dailyAverage.fat, 63);
 assert.equal(proPlan.dailyAverage.carbs, 237.1);
+assert.ok(proPlan.week.every(day => day.dinnerIngredients.find(item => item.foodId === 'olive_oil')?.grams === 20),
+  'server normalization must enforce the 20g olive-oil portion ceiling');
 assert.ok(proPlan.fat > 0 && proPlan.carbs > 0, 'daily fat and carbohydrate targets must be calculated');
+
+const oversizedIngredientPlan = await generateAiPlan(profile, 'Питание', { AI: {
+  async run(model, input) {
+    const result = await makeAi(7).run(model, input);
+    const parsed = JSON.parse(result.response);
+    for (const day of parsed.week) {
+      day.dinnerIngredients.find(item => item.foodId === 'olive_oil').grams = 501;
+    }
+    return { response: JSON.stringify(parsed) };
+  }
+} });
+assert.ok(oversizedIngredientPlan.week.every(day => {
+  const oil = day.dinnerIngredients.find(item => item.foodId === 'olive_oil');
+  return oil?.grams === 20 &&
+    day.nutrition.calories >= oversizedIngredientPlan.calories * 0.8 &&
+    day.nutrition.calories <= oversizedIngredientPlan.calories * 1.2 &&
+    day.nutrition.fat >= oversizedIngredientPlan.fat * 0.7 &&
+    day.nutrition.fat <= oversizedIngredientPlan.fat * 1.3;
+}), 'out-of-range AI ingredient grams must be clamped to the product-specific limit and the resulting full day must still pass strict nutrition validation');
 
 const wrongModelTrainingFlagsPlan = await generateAiPlan(profile, 'PRO', { AI: {
   async run(model, input) {
@@ -261,6 +282,10 @@ assert.equal(qwenModelInput.reasoning_effort, 'low', 'Qwen reasoning must be bou
 assert.equal(qwenModelInput.response_format, undefined, 'do not send unsupported Cloudflare JSON Mode parameters to Qwen');
 const qwenPrompt = qwenModelInput.messages[1].content;
 assert.ok(qwenPrompt.includes('"name":"Клиент"') && !qwenPrompt.includes('Тестовый клиент'), 'all Cloudflare AI models must receive an anonymized client name');
+assert.ok(qwenPrompt.includes('белки') && qwenPrompt.includes('жиры') && qwenPrompt.includes('углеводы'),
+  'the model must receive separate per-meal macro targets, not only a daily calorie target');
+assert.ok(qwenPrompt.includes('2–4 объекта') && qwenPrompt.includes('20 г'),
+  'the model must leave safe correction capacity and receive product-specific portion limits');
 let gptModelInput = null;
 const gptRepairAttemptsByStart = new Map();
 const gptRepairPlan = await generateAiPlan(profile, 'Питание', { AI: {
