@@ -284,7 +284,7 @@ const qwenPrompt = qwenModelInput.messages[1].content;
 assert.ok(qwenPrompt.includes('"name":"Клиент"') && !qwenPrompt.includes('Тестовый клиент'), 'all Cloudflare AI models must receive an anonymized client name');
 assert.ok(qwenPrompt.includes('белки') && qwenPrompt.includes('жиры') && qwenPrompt.includes('углеводы'),
   'the model must receive separate per-meal macro targets, not only a daily calorie target');
-assert.ok(qwenPrompt.includes('2–4 объекта') && qwenPrompt.includes('20 г'),
+assert.ok(qwenPrompt.includes('2–4 объекта') && qwenPrompt.includes('"olive_oil":20'),
   'the model must leave safe correction capacity and receive product-specific portion limits');
 let gptModelInput = null;
 const gptRepairAttemptsByStart = new Map();
