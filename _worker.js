@@ -844,15 +844,9 @@ async function generateAiPlan(profile, planKey, env) {
   let intro = '';
   const tips = [];
 
-  // Generate at most two days per model call. Short blocks reduce inference latency
-  // for Qwen 3.8 and keep structured JSON output manageable for fallback models.
-  // Generate two independent two-day chunks concurrently while retaining full
-  // per-chunk nutrition and workout-prescription validation.
-  for (let batchOffset = 0; batchOffset < totalDays; batchOffset += 8) {
-    const batch = await Promise.all([0, 2, 4, 6]
-      .filter(delta => batchOffset + delta < totalDays)
-      .map(async delta => {
-    const offset = batchOffset + delta;
+  // Generate one validated two-day block at a time. If a block fails,
+  // later blocks are never started and cannot consume additional AI quota.
+  for (let offset = 0; offset < totalDays; offset += 2) {
     const chunkDays = Math.min(2, totalDays - offset);
     const mealCalorieTargets = [
       ['завтрак', 0.25],
@@ -910,20 +904,13 @@ async function generateAiPlan(profile, planKey, env) {
     if (!week) {
       throw new Error('ИИ не смог составить блок с проверяемыми порциями и подходящими суточными калориями и БЖУ.');
     }
-    return {
-      offset,
-      week,
-      intro: clean(parsed.intro, 700),
-      tips: Array.isArray(parsed.tips) ? parsed.tips.map(item => clean(item, 220)).filter(Boolean) : []
-    };
-      }));
-    for (const chunk of batch.sort((a, b) => a.offset - b.offset)) {
-      chunk.week.forEach((day, index) => {
-        day.day = 'День ' + (chunk.offset + index + 1);
-        fullWeek.push(day);
-      });
-      if (!intro) intro = chunk.intro;
-      tips.push(...chunk.tips);
+    week.forEach((day, index) => {
+      day.day = 'День ' + (offset + index + 1);
+      fullWeek.push(day);
+    });
+    if (!intro) intro = clean(parsed.intro, 700);
+    if (Array.isArray(parsed.tips)) {
+      tips.push(...parsed.tips.map(item => clean(item, 220)).filter(Boolean));
     }
   }
 
