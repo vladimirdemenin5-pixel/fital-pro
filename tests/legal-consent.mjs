@@ -104,7 +104,7 @@ assert.ok(worker.includes("await saveMemberPlan(env, accessToken, profile, plan)
 assert.ok(worker.includes("SELECT plan_json FROM weekly_plans WHERE access_token=?"));
 
 assert.ok(worker.includes('function isScheduledTrainingDay(absoluteDay, weeklyTarget)'), 'training cadence must be calculated consistently across all plan chunks');
-assert.ok(worker.includes(".filter(day => isScheduledTrainingDay(day, profile.days))"), 'each chunk prompt must receive its exact scheduled training day numbers');
+assert.ok(worker.includes('isScheduledTrainingDay(absoluteDay, profile.days)'), 'each chunk prompt must receive its exact server-calculated daily schedule');
 assert.ok(worker.includes('РАСПИСАНИЕ ЗАДАНО СЕРВЕРОМ И НЕ ПОДЛЕЖИТ ИЗМЕНЕНИЮ'), 'the AI prompt must clearly state that the server owns the workout schedule');
 assert.ok(worker.includes("return 'День ' + absoluteDay + ': trainingDay='"), 'the AI prompt must list the exact server-calculated training or recovery status for every day');
 assert.ok(worker.includes('parsed.week.length !== menuDays'), 'AI generation must validate the tariff menu duration');
@@ -121,7 +121,7 @@ assert.ok(worker.includes('targets.protein * 0.8') && worker.includes('targets.p
 assert.ok(worker.includes('profile.age < 18'), 'adult nutrition calculations must reject minors');
 
 assert.ok(worker.includes("Не удалось пересобрать план. Сохранённая программа не изменена."));
-assert.ok(worker.includes('тренировочные дни: ') && worker.includes('trainingDays.join'), 'the model prompt must enforce the server-calculated training cadence');
+assert.ok(worker.includes('РАСПИСАНИЕ ЗАДАНО СЕРВЕРОМ И НЕ ПОДЛЕЖИТ ИЗМЕНЕНИЮ') && worker.includes("return 'День ' + absoluteDay + ': trainingDay='"), 'the model prompt must enforce the server-calculated training cadence for every day');
 assert.ok(app.includes("day.trainingDay ? 'Тренировка' : 'Отдых и активность'"));
 const chatStart = worker.indexOf('async function chat(request, env) {');
 const leadStart = worker.indexOf('async function lead(request, env) {', chatStart);
