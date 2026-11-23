@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { generateAiPlan, runAiTextWithFallback, runAiInferenceWithTimeout, aiPlanDiagnostic, aiDataFlowDiagnostic, FOOD_CATALOG, buildPlanResponseSchema, diagnosePlanWeekFailure } from '../_worker.js';
+import { generateAiPlan, runAiTextWithFallback, runAiInferenceWithTimeout, aiPlanDiagnostic, aiDataFlowDiagnostic, FOOD_CATALOG, buildPlanResponseSchema, diagnosePlanWeekFailure, rebalanceDayNutrition, foodAllowedByPreferences } from '../_worker.js';
 import { readFile } from 'node:fs/promises';
 
 const workerSource = await readFile(new URL('../_worker.js', import.meta.url), 'utf8');
@@ -56,6 +56,35 @@ function makeAi(menuDays, wrongLength = false, invalidMeal = false, invalidWorko
   };
 }
 
+const macroCorrectionDay = {
+  day: 'День 1',
+  trainingDay: false,
+  breakfast: 'Омлет',
+  breakfastRecipe: 'Приготовь продукты до готовности и подай вместе.',
+  breakfastIngredients: [{ foodId: 'chicken_raw', name: FOOD_CATALOG.chicken_raw.name, grams: 200 }],
+  lunch: 'Индейка',
+  lunchRecipe: 'Приготовь продукты до готовности и подай вместе.',
+  lunchIngredients: [{ foodId: 'turkey_raw', name: FOOD_CATALOG.turkey_raw.name, grams: 200 }],
+  snack: 'Йогурт',
+  snackRecipe: 'Приготовь продукты до готовности и подай вместе.',
+  snackIngredients: [{ foodId: 'greek_yogurt', name: FOOD_CATALOG.greek_yogurt.name, grams: 200 }],
+  dinner: 'Треска',
+  dinnerRecipe: 'Приготовь продукты до готовности и подай вместе.',
+  dinnerIngredients: [{ foodId: 'cod_raw', name: FOOD_CATALOG.cod_raw.name, grams: 200 }]
+};
+const macroCorrectionSucceeded = rebalanceDayNutrition(macroCorrectionDay, {
+  calories: 2000, protein: 100, fat: 65, carbs: 250
+}, profile);
+assert.equal(macroCorrectionSucceeded, true, 'server correction must change the food composition when portion-only tuning cannot balance protein, fat and carbohydrates');
+assert.ok(macroCorrectionDay.nutrition.calories >= 1600 && macroCorrectionDay.nutrition.calories <= 2400);
+assert.ok(macroCorrectionDay.nutrition.protein >= 80 && macroCorrectionDay.nutrition.protein <= 120);
+assert.ok(macroCorrectionDay.nutrition.fat >= 45.5 && macroCorrectionDay.nutrition.fat <= 84.5);
+assert.ok(macroCorrectionDay.nutrition.carbs >= 175 && macroCorrectionDay.nutrition.carbs <= 325);
+assert.ok(macroCorrectionDay.breakfastRecipe.length >= 15 || macroCorrectionDay.lunchRecipe.length >= 15);
+assert.equal(foodAllowedByPreferences('greek_yogurt', { preferences: 'Без молочных продуктов' }), false, 'replacement candidates must respect dairy restrictions');
+assert.equal(foodAllowedByPreferences('chicken_raw', { preferences: 'Вегетарианство' }), false, 'replacement candidates must respect vegetarian restrictions');
+assert.equal(foodAllowedByPreferences('rice_dry', { preferences: 'Без глютена' }), true, 'gluten-free restrictions must keep safe catalog alternatives available');
+
 const timeoutSignalCapture = { signal: null };
 await assert.rejects(
   () => runAiInferenceWithTimeout({
@@ -88,7 +117,7 @@ assert.ok(!proPlan.shopping.includes('Продукты на весь перио�
 assert.ok(proPlan.nutritionSource.includes('USDA FoodData Central'));
 assert.ok(workerSource.includes('fdcId:173904'), 'oats reference must retain its USDA food record identifier');
 assert.ok(workerSource.includes('for (let offset = 0; offset < totalDays; offset += 7)'), 'long plans must be generated and validated in seven-day blocks');
-assert.ok(workerSource.includes('MAX_MEAL_INGREDIENT_GRAMS') && workerSource.includes('min: 5,') && workerSource.includes('const maxIterations = 120;') && workerSource.includes('const nutrientTargets = [targets.calories, targets.protein, targets.fat, targets.carbs];') && workerSource.includes('const nutrientDerivatives = totals.map(') && workerSource.includes('let learningRate = 1000;'), 'portion correction must use bounded food-specific projected optimization without relaxing nutrition ranges');
+assert.ok(workerSource.includes('MAX_MEAL_INGREDIENT_GRAMS') && workerSource.includes('min:5,max:') && workerSource.includes('for(let iteration=0;iteration<120;iteration++)') && workerSource.includes('const nutrientTargets = [targets.calories, targets.protein, targets.fat, targets.carbs];') && workerSource.includes('const derivatives=values.map(') && workerSource.includes('let learningRate=1000;') && workerSource.includes('const allowedFoods = Object.keys(FOOD_CATALOG).filter(id => foodAllowedByPreferences(id, profile));'), 'portion and food-choice correction must use bounded catalog search without relaxing nutrition ranges');
 assert.ok(workerSource.includes('const validationDiagnostics = [];') && workerSource.includes('validationDiagnostics.slice(-3)'), 'AI correction retry must retain actual validation failures instead of timeout noise');
 assert.ok(workerSource.includes("const models = ['@cf/zai-org/glm-4.7-flash', '@cf/meta/llama-3.1-8b-instruct-fast', MODEL];"), 'plan generation must use GLM Flash, fast Llama, then Gemma fallback');
 assert.ok(workerSource.includes('rejectIfBusy: true'), 'Workers AI must skip a busy model queue and fall back instead of waiting until the request times out');
