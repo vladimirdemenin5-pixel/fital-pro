@@ -757,8 +757,8 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
     { role: 'system', content: 'Ты Fital Pro. Отвечай только валидным JSON без Markdown и пояснений.' },
     { role: 'user', content: prompt }
   ];
-  // Cloudflare Qwen 3.8 is primary; OpenAI GPT-OSS 120B is the first structured-output fallback.
-  const models = ['@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-120b', '@cf/zai-org/glm-4.7-flash', MODEL];
+  // Cloudflare Qwen 3.8 is primary; GPT-OSS 120B is the first fallback and lower-latency 20B is the corrective alternative.
+  const models = ['@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b', '@cf/zai-org/glm-4.7-flash', MODEL];
   const diagnostics = [];
   const rejectionDiagnostics = [];
 
@@ -774,7 +774,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
       : messages;
     try {
       const isQwen = model === '@cf/qwen/qwen3.8-27b';
-      const isGptOss = model === '@cf/openai/gpt-oss-120b';
+      const isGptOss = model === '@cf/openai/gpt-oss-120b' || model === '@cf/openai/gpt-oss-20b';
       const modelInput = {
         messages: currentMessages,
         temperature: 0.2,
