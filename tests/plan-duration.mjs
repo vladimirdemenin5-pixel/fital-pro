@@ -386,19 +386,28 @@ await assert.rejects(
 );
 
 let nutritionRetryCalls = 0;
-const nutritionRetryModels = [];
+const nutritionRetryModelsByBlock = new Map();
 const nutritionRetryAi = {
   async run(model, input) {
     nutritionRetryCalls++;
-    nutritionRetryModels.push(model);
-    const fixture = nutritionRetryCalls <= 2 ? makeAi(7, false, false, false, true) : makeAi(7);
+    const prompt = Array.isArray(input?.messages)
+      ? input.messages.map(message => typeof message?.content === 'string' ? message.content : '').join('\n')
+      : '';
+    const startDay = Number(prompt.match(/БЛОК: дни ([0-9]+)[–-]/)?.[1] || 0);
+    const models = nutritionRetryModelsByBlock.get(startDay) || [];
+    models.push(model);
+    nutritionRetryModelsByBlock.set(startDay, models);
+    const firstBlockNeedsTwoRetries = startDay === 1 && models.length <= 2;
+    const fixture = firstBlockNeedsTwoRetries ? makeAi(7, false, false, false, true) : makeAi(7);
     return fixture.run(model, input);
   }
 };
 const recoveredNutritionPlan = await generateAiPlan(profile, 'Питание', { AI: nutritionRetryAi });
 assert.equal(recoveredNutritionPlan.week.length, 7, 'a corrected fallback-model response must produce a complete plan');
-assert.equal(nutritionRetryCalls, 3, 'the plan generator must reach the third fallback after two invalid fast-model responses');
-assert.equal(nutritionRetryModels[2], '@cf/zai-org/glm-4.7-flash', 'the third attempt must use the configured GLM fallback after Qwen 3.8 and GPT-OSS');
+assert.equal(nutritionRetryCalls, 5, 'two concurrent three-day blocks and the final one-day block must keep independent model attempts');
+assert.deepEqual(nutritionRetryModelsByBlock.get(1), ['@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/zai-org/glm-4.7-flash'], 'one invalid block must advance through Qwen, GPT-OSS and GLM before recovering');
+assert.deepEqual(nutritionRetryModelsByBlock.get(4), ['@cf/qwen/qwen3.8-27b'], 'the other concurrent block must not inherit the first block\'s fallback state');
+assert.deepEqual(nutritionRetryModelsByBlock.get(7), ['@cf/qwen/qwen3.8-27b'], 'the final one-day block must also start with its own Qwen request');
 
 const modelCalls = [];
 const fallbackText = await runAiTextWithFallback({
