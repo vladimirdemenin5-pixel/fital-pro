@@ -781,7 +781,7 @@ async function runQwen4PlanInference(env, messages) {
         messages: messages.map(message => {
           if (message.role !== 'user') return { role: message.role, content: String(message.content || '') };
           // The client's name is not needed for nutrition generation; anonymize it before the external API call.
-          const content = String(message.content || '').replace(/ДАННЫЕ КЛИЕНТА:\\s*(\\{[^\\n]*\\})/, (_match, rawProfile) => {
+          const content = String(message.content || '').replace(/ДАННЫЕ КЛИЕНТА:\s*(\{[^\n]*\})/, (_match, rawProfile) => {
             try {
               const anonymizedProfile = JSON.parse(rawProfile);
               anonymizedProfile.name = 'Клиент';
