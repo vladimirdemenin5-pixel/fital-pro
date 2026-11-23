@@ -93,7 +93,7 @@ assert.ok(macroCorrectionDay.nutrition.fat >= 40.6 && macroCorrectionDay.nutriti
 assert.ok(macroCorrectionDay.nutrition.carbs >= 157.5 && macroCorrectionDay.nutrition.carbs <= 292.5);
 const correctedMacroFoodIds = ['breakfast','lunch','snack','dinner'].flatMap(key => macroCorrectionDay[key + 'Ingredients'].map(item => item.foodId));
 assert.notDeepEqual(correctedMacroFoodIds, originalMacroFoodIds, 'the correction must actually replace products from the catalog');
-assert.ok(['breakfast','lunch','snack','dinner'].some(key => macroCorrectionDay[key + 'Recipe'].length >= 20 && macroCorrectionDay[key + 'Recipe'].includes('приготов')), 'the recipe must be synchronized with changed ingredients');
+assert.ok(['breakfast','lunch','snack','dinner'].some(key => macroCorrectionDay[key + 'Recipe'].length >= 20 && macroCorrectionDay[key + 'Recipe'].toLowerCase().includes('приготов')), 'the recipe must be synchronized with changed ingredients');
 for (const key of ['breakfast','lunch','snack','dinner']) {
   assert.ok(macroCorrectionDay[key+'Ingredients'].every(item => foodFitsMeal(item.foodId, key)), key + ' correction must keep every ingredient compatible with its meal');
   assert.ok(macroCorrectionDay[key+'Ingredients'].every(item => foodAllowedByPreferences(item.foodId, profile)), key + ' correction must preserve client food restrictions');
