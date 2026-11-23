@@ -591,7 +591,7 @@ function rebalanceDayNutrition(day, targets, profile) {
   }
   return true;
 }
-function normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, targets) {
+function normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, targets, startDay = 1) {
   if (!Array.isArray(parsed.week) || parsed.week.length !== menuDays) return null;
   const includesTraining = planKey !== 'Питание';
   const week = [];
@@ -622,15 +622,14 @@ function normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, target
     if (!nutritionWithinTargets(day.nutrition, targets) && !rebalanceDayNutrition(day, targets, profile)) return null;
     week.push(day);
   }
-  if (includesTraining) {
-    const counts = Array.from({length:Math.ceil(menuDays/7)},(_,i)=>week.slice(i*7,(i+1)*7).filter(day=>day.trainingDay).length);
-    if (!counts.every((count,index)=>count===expectedTrainingDaysInBlock(menuDays,index,profile.days))) return null;
-  }
+  if (includesTraining && !week.every((day, index) =>
+    day.trainingDay === isScheduledTrainingDay(startDay + index, profile.days)
+  )) return null;
   return week;
 }
 
 
-function diagnosePlanWeekFailure(parsed, profile, planKey, menuDays, targets) {
+function diagnosePlanWeekFailure(parsed, profile, planKey, menuDays, targets, startDay = 1) {
   if (!Array.isArray(parsed?.week)) return 'week-not-array';
   if (parsed.week.length !== menuDays) return 'week-length-' + parsed.week.length + '-expected-' + menuDays;
   const includesTraining = planKey !== 'Питание';
@@ -644,6 +643,9 @@ function diagnosePlanWeekFailure(parsed, profile, planKey, menuDays, targets) {
       issues.push(dayLabel + '-trainingDay-not-boolean');
     } else {
       trainingFlags.push(source.trainingDay);
+      if (includesTraining && source.trainingDay !== isScheduledTrainingDay(startDay + index, profile.days)) {
+        issues.push(dayLabel + '-training-schedule-mismatch');
+      }
     }
 
     const day = {};
@@ -696,18 +698,7 @@ function diagnosePlanWeekFailure(parsed, profile, planKey, menuDays, targets) {
     }
   }
 
-  if (includesTraining && trainingFlags.length === menuDays) {
-    const counts = Array.from({ length: Math.ceil(menuDays / 7) }, (_, index) =>
-      trainingFlags.slice(index * 7, (index + 1) * 7).filter(Boolean).length
-    );
-    const invalidBlock = counts.findIndex((count, index) =>
-      count !== expectedTrainingDaysInBlock(menuDays, index, profile.days)
-    );
-    if (invalidBlock >= 0) {
-      issues.push('training-block-' + (invalidBlock + 1) + '-count-' + counts[invalidBlock] +
-        '-expected-' + expectedTrainingDaysInBlock(menuDays, invalidBlock, profile.days));
-    }
-  }
+  
 
   return issues.length ? issues.slice(0, 32).join(' | ') : 'plan-validation-failed-without-specific-rule';
 }
@@ -723,10 +714,10 @@ function buildShoppingList(week) {
   });
 }
 
-function expectedTrainingDaysInBlock(menuDays, weekIndex, weeklyTarget) {
-  const daysInBlock = Math.min(7, Math.max(0, menuDays - weekIndex * 7));
-  if (!daysInBlock) return 0;
-  return Math.min(daysInBlock, Math.max(1, Math.round(weeklyTarget * daysInBlock / 7)));
+function isScheduledTrainingDay(absoluteDay, weeklyTarget) {
+  const dayInWeek = (absoluteDay - 1) % 7;
+  const sessions = Math.max(0, Math.min(7, Math.round(Number(weeklyTarget) || 0)));
+  return Math.floor((dayInWeek + 1) * sessions / 7) > Math.floor(dayInWeek * sessions / 7);
 }
 
 async function runAiInferenceWithTimeout(env, model, inputs, timeoutMs = AI_MODEL_TIMEOUT_MS) {
@@ -750,7 +741,7 @@ async function runAiInferenceWithTimeout(env, model, inputs, timeoutMs = AI_MODE
   }
 }
 
-async function runPlanModel(env, prompt, profile, planKey, menuDays) {
+async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 1) {
   const messages = [
     { role: 'system', content: 'Ты Fital Pro. Отвечай только валидным JSON без Markdown и пояснений.' },
     { role: 'user', content: prompt }
@@ -807,9 +798,9 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
           const parsed = JSON.parse(match[0]);
           // Re-run the complete server validation for every model response:
           // meal titles, recipes, catalog IDs, gram ranges, preferences, calories and all macros.
-          const week = normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, nutritionTargets(profile));
+          const week = normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, nutritionTargets(profile), startDay);
           if (week) return text;
-          const reason = diagnosePlanWeekFailure(parsed, profile, planKey, menuDays, nutritionTargets(profile));
+          const reason = diagnosePlanWeekFailure(parsed, profile, planKey, menuDays, nutritionTargets(profile), startDay);
           const detail = model + ': json-parsed-but-rejected; ' + reason;
           diagnostics.push(detail + '; outputLength=' + text.length);
           rejectionDiagnostics.push(detail);
@@ -843,9 +834,8 @@ async function generateAiPlan(profile, planKey, env) {
   // and keep structured JSON output manageable for Qwen and GPT-OSS fallbacks.
   for (let offset = 0; offset < totalDays; offset += 3) {
     const chunkDays = Math.min(3, totalDays - offset);
-    const trainingSchedule = Array.from({ length: Math.ceil(chunkDays / 7) }, (_, weekIndex) =>
-      expectedTrainingDaysInBlock(chunkDays, weekIndex, profile.days)
-    );
+    const trainingDays = Array.from({ length: chunkDays }, (_, index) => offset + index + 1)
+      .filter(day => isScheduledTrainingDay(day, profile.days));
     const mealCalorieTargets = [
       ['завтрак', 0.25],
       ['обед', 0.30],
@@ -867,7 +857,7 @@ async function generateAiPlan(profile, planKey, env) {
       'Перед выдачей проверь каждый день отдельно: сложи калории и БЖУ всех ингредиентов по справочнику. Не возвращай день, если калории, белок, жиры или углеводы выходят за указанные допуски.',
       'СПРАВОЧНИК ПРОДУКТОВ НА 100 г (ккал, белки г, жиры г, углеводы г): ' + JSON.stringify(Object.entries(FOOD_CATALOG).map(([id,food])=>[id,food.name,food.kcal,food.protein,food.fat,food.carbs])),
       includesTraining
-        ? 'Распредели тренировки в этом блоке: ' + trainingSchedule.map((count, index) => (index + 1) + '-й блок — ровно ' + count + ' тренировочных дней').join('; ') + '. Для каждого дня обязательно укажи trainingDay: true только в день полноценной тренировки, в остальные дни trainingDay: false и отдых или лёгкое восстановление без силовой нагрузки. Соблюдай указанное количество тренировок в каждом блоке. Распредели нагрузку безопасно, не ставь тяжёлые тренировки на одни и те же группы мышц подряд. Учитывай выбранный формат (дом, зал или смешанный). Для каждой тренировки укажи упражнения, подходы, повторения и короткую разминку/заминку; для новичка выбирай умеренную нагрузку и простые варианты.'
+        ? 'Распредели тренировки в этом блоке: ' + 'тренировочные дни: ' + (trainingDays.length ? trainingDays.join(', ') : 'нет') + '. Для каждого дня обязательно укажи trainingDay: true только в день полноценной тренировки, в остальные дни trainingDay: false и отдых или лёгкое восстановление без силовой нагрузки. Соблюдай указанное количество тренировок в каждом блоке. Распредели нагрузку безопасно, не ставь тяжёлые тренировки на одни и те же группы мышц подряд. Учитывай выбранный формат (дом, зал или смешанный). Для каждой тренировки укажи упражнения, подходы, повторения и короткую разминку/заминку; для новичка выбирай умеренную нагрузку и простые варианты.'
         : 'Тариф включает питание. В workout указывай только лёгкую общую активность и восстановление, не составляй силовую программу.',
       'Учитывай пищевые предпочтения, ограничения и аллергии. Не включай продукты, которые клиент указал как нежелательные или аллергенные. Если подходящего продукта нет в справочнике, подбери ближайшую безопасную альтернативу только из справочника.',
       'Рацион должен быть из доступных продуктов, с простыми блюдами и без экстремальных ограничений.',
@@ -877,7 +867,7 @@ async function generateAiPlan(profile, planKey, env) {
       'БЛОК: дни ' + (offset + 1) + '–' + (offset + chunkDays) + ' из ' + totalDays + '.'
     ].join('\n');
 
-    const raw = await runPlanModel(env, prompt, profile, planKey, chunkDays);
+    const raw = await runPlanModel(env, prompt, profile, planKey, chunkDays, offset + 1);
     const normalized = raw.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
     const match = normalized.match(/\{[\s\S]*\}/);
     if (!match) throw new Error('ИИ вернул ответ без структуры плана. Повторите отправку анкеты.');
@@ -887,7 +877,7 @@ async function generateAiPlan(profile, planKey, env) {
     } catch {
       throw new Error('ИИ вернул план в неверном формате. Попробуйте ещё раз.');
     }
-    const week = normalizeAndValidatePlanWeek(parsed, profile, planKey, chunkDays, targets);
+    const week = normalizeAndValidatePlanWeek(parsed, profile, planKey, chunkDays, targets, offset + 1);
     if (!week) {
       throw new Error('ИИ не смог составить блок с проверяемыми порциями и подходящими суточными калориями и БЖУ.');
     }
