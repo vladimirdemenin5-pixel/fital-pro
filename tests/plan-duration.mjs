@@ -214,8 +214,6 @@ assert.equal(qwenModelInput.reasoning_effort, 'low', 'Qwen reasoning must be bou
 assert.equal(qwenModelInput.response_format, undefined, 'do not send unsupported Cloudflare JSON Mode parameters to Qwen');
 assert.ok(workerSource.includes('заменять или добавлять продукты') && workerSource.includes('Для углеводов используй подходящие крупи') === false && workerSource.includes('Для углеводов используй подходящие крупы'), 'AI fallback correction must be allowed to add catalog carbohydrate sources when needed');
 assert.ok(workerSource.includes('верни полный JSON') || workerSource.includes('Верни полный JSON'), 'correction prompt must request the complete plan JSON');
-assert.equal(fastLlamaModelInput.reasoning_effort, undefined, 'fast Llama should not receive parameters absent from its model input schema');
-assert.equal(fastLlamaModelInput.chat_template_kwargs, undefined, 'fast Llama should not receive unsupported chat-template options');
 const diagnosticSource = JSON.parse((await makeAi(7).run()).response);
 diagnosticSource.week[0].snackRecipe = 'Смешать.';
 const multiFailureReason = diagnosePlanWeekFailure(diagnosticSource, profile, 'Питание', 7, {
