@@ -345,14 +345,11 @@ const MAX_MEAL_INGREDIENT_GRAMS = Object.freeze({
 function rebalanceDayNutrition(day, targets) {
   const items = MEAL_KEYS.flatMap(key => day[key + 'Ingredients']);
   const original = items.map(item => item.grams);
-  // AI portions are starting estimates, not hard limits. Allow enough room
-  // to fix under-sized and over-sized meals while retaining sensible per-food caps.
+  // AI portions are starting estimates, not hard limits. Use independent
+  // food-specific bounds so a too-small AI portion does not cap its correction.
   const bounds = items.map(item => ({
-    min: Math.max(5, Math.floor(item.grams * 0.25)),
-    max: Math.max(item.grams, Math.min(
-      MAX_MEAL_INGREDIENT_GRAMS[item.foodId] || 250,
-      Math.max(80, Math.ceil(item.grams * 3))
-    ))
+    min: 5,
+    max: MAX_MEAL_INGREDIENT_GRAMS[item.foodId] || 250
   }));
   const score = () => {
     const n = calculateDayNutrition(day);
@@ -402,8 +399,44 @@ function rebalanceDayNutrition(day, targets) {
         }
       }
 
-      if (bestItem < 0) break;
-      items[bestItem].grams = bestGrams;
+      if (bestItem >= 0) {
+        items[bestItem].grams = bestGrams;
+        day.nutrition = calculateDayNutrition(day);
+        if (nutritionWithinTargets(day.nutrition, targets)) return true;
+        continue;
+      }
+
+      // One-at-a-time changes can get trapped when correcting excess protein
+      // requires simultaneously adding a carbohydrate source. Try bounded
+      // two-food moves only after no single-food move improves the score.
+      let bestPair = null;
+      bestScore = score();
+      for (let i = 0; i < items.length; i++) {
+        for (let j = i + 1; j < items.length; j++) {
+          for (const directionI of [-1, 1]) {
+            const gramsI = items[i].grams + directionI * stepSize;
+            if (gramsI < bounds[i].min || gramsI > bounds[i].max) continue;
+            for (const directionJ of [-1, 1]) {
+              const gramsJ = items[j].grams + directionJ * stepSize;
+              if (gramsJ < bounds[j].min || gramsJ > bounds[j].max) continue;
+              const previousI = items[i].grams;
+              const previousJ = items[j].grams;
+              items[i].grams = gramsI;
+              items[j].grams = gramsJ;
+              const candidateScore = score();
+              items[i].grams = previousI;
+              items[j].grams = previousJ;
+              if (candidateScore < bestScore - 1e-9) {
+                bestScore = candidateScore;
+                bestPair = { i, gramsI, j, gramsJ };
+              }
+            }
+          }
+        }
+      }
+      if (!bestPair) break;
+      items[bestPair.i].grams = bestPair.gramsI;
+      items[bestPair.j].grams = bestPair.gramsJ;
       day.nutrition = calculateDayNutrition(day);
       if (nutritionWithinTargets(day.nutrition, targets)) return true;
     }

@@ -88,7 +88,7 @@ assert.ok(!proPlan.shopping.includes('Продукты на весь перио�
 assert.ok(proPlan.nutritionSource.includes('USDA FoodData Central'));
 assert.ok(workerSource.includes('fdcId:173904'), 'oats reference must retain its USDA food record identifier');
 assert.ok(workerSource.includes('for (let offset = 0; offset < totalDays; offset += 7)'), 'long plans must be generated and validated in seven-day blocks');
-assert.ok(workerSource.includes('const stepSizes = [40, 10, 2, 1];') && workerSource.includes('for (let iteration = 0; iteration < 100; iteration++)') && workerSource.includes('MAX_MEAL_INGREDIENT_GRAMS') && workerSource.includes('for (const direction of [-1, 1])'), 'portion correction must make bounded, food-specific large-to-small adjustments without relaxing nutrition ranges');
+assert.ok(workerSource.includes('const stepSizes = [40, 10, 2, 1];') && workerSource.includes('for (let iteration = 0; iteration < 100; iteration++)') && workerSource.includes('MAX_MEAL_INGREDIENT_GRAMS') && workerSource.includes('min: 5,') && workerSource.includes('let bestPair = null;') && workerSource.includes('for (const direction of [-1, 1])'), 'portion correction must use independent food-specific limits and bounded paired moves without relaxing nutrition ranges');
 assert.ok(workerSource.includes('const validationDiagnostics = [];') && workerSource.includes('validationDiagnostics.slice(-3)'), 'AI correction retry must retain actual validation failures instead of timeout noise');
 assert.ok(workerSource.includes("const models = ['@cf/zai-org/glm-4.7-flash', '@cf/meta/llama-3.1-8b-instruct-fast', MODEL];"), 'plan generation must use GLM Flash, fast Llama, then Gemma fallback');
 assert.ok(workerSource.includes('rejectIfBusy: true'), 'Workers AI must skip a busy model queue and fall back instead of waiting until the request times out');
@@ -158,6 +158,35 @@ assert.equal(fastLlamaModelInput.chat_template_kwargs, undefined, 'fast Llama sh
 const correctedPortionPlan = await generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, false, false, false, 0.7) });
 const severelyUnderPortionedPlan = await generateAiPlan(profile, 'Питание', { AI: makeAi(7, false, false, false, false, 0.4) });
 const severelyOverProteinPlan = await generateAiPlan(profile, 'Питание', { AI: makeAi(7, false, false, false, false, 1.4) });
+const mixedMacroRecovery = await generateAiPlan(profile, 'Питание', { AI: {
+  async run() {
+    const response = await makeAi(7).run();
+    const parsed = JSON.parse(response.response);
+    for (const day of parsed.week) {
+      const setPortion = (meal, foodId, grams) => {
+        const ingredient = day[meal + 'Ingredients'].find(item => item.foodId === foodId);
+        if (ingredient) ingredient.grams = grams;
+      };
+      setPortion('breakfast', 'oats_dry', 15);
+      setPortion('breakfast', 'banana', 20);
+      setPortion('lunch', 'chicken_raw', 220);
+      setPortion('lunch', 'rice_dry', 15);
+      setPortion('snack', 'greek_yogurt', 250);
+      setPortion('snack', 'apple', 20);
+      setPortion('snack', 'almonds', 30);
+      setPortion('dinner', 'salmon_raw', 180);
+      setPortion('dinner', 'potato_raw', 20);
+    }
+    return { response: JSON.stringify(parsed) };
+  }
+} });
+assert.equal(mixedMacroRecovery.week.length, 7, 'mixed protein excess and carbohydrate deficit must be recovered by paired portion correction');
+for (const day of mixedMacroRecovery.week) {
+  assert.ok(day.nutrition.calories >= mixedMacroRecovery.calories * 0.8 && day.nutrition.calories <= mixedMacroRecovery.calories * 1.2);
+  assert.ok(day.nutrition.protein >= mixedMacroRecovery.protein * 0.8 && day.nutrition.protein <= mixedMacroRecovery.protein * 1.2);
+  assert.ok(day.nutrition.fat >= mixedMacroRecovery.fat * 0.7 && day.nutrition.fat <= mixedMacroRecovery.fat * 1.3);
+  assert.ok(day.nutrition.carbs >= mixedMacroRecovery.carbs * 0.7 && day.nutrition.carbs <= mixedMacroRecovery.carbs * 1.3);
+}
 for (const [label, plan] of [['under-portioned', severelyUnderPortionedPlan], ['over-portioned', severelyOverProteinPlan]]) {
   assert.equal(plan.week.length, 7, label + ' AI output must be recoverable when bounded correction can produce a valid menu');
   assert.ok(plan.week.every(day =>
