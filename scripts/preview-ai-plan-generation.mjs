@@ -32,10 +32,10 @@ if (!oidcRequestUrl || !oidcRequestToken) {
 const expectedClaims = {
   aud: 'fitalpro-ai-data-flow',
   repository: 'vladimirdemenin5-pixel/fital-pro',
-  ref: 'refs/pull/47/merge',
-  workflow_ref: 'vladimirdemenin5-pixel/fital-pro/.github/workflows/preview-ai-generation.yml@refs/pull/47/merge',
+  ref: 'refs/pull/53/merge',
+  workflow_ref: 'vladimirdemenin5-pixel/fital-pro/.github/workflows/pull-request-checks.yml@refs/pull/53/merge',
   event_name: 'pull_request',
-  head_ref: 'fix/ai-plan-generation-three-day-chunks',
+  head_ref: 'design/tilda-inspired-bold-redesign',
   base_ref: 'main',
   sub: [
     'repo:vladimirdemenin5-pixel/fital-pro:pull_request',
