@@ -22,6 +22,9 @@ for (const page of ['oferta.html', 'privacy.html', 'delivery-refund.html', 'requ
 }
 assert.ok(html.includes('href="/oferta.html"'));
 assert.ok(html.includes('href="/privacy.html"'));
+assert.ok(html.includes('включая Cloudflare и QwenCloud'), 'the questionnaire must disclose external AI providers before consent');
+assert.ok(read('public/privacy.html').includes('QwenCloud (сервис моделей Qwen компании Alibaba)'), 'the privacy policy must identify the QwenCloud provider');
+assert.ok(read('public/privacy.html').includes('Frankfurt Global'), 'the privacy policy must disclose that global inference may run outside the EU');
 assert.match(robokassaTest, /id="age" type="number" min="18" max="90"/,
   'the Robokassa test form must match the server-side adult-only age limit');
 assert.ok(worker.includes('pd_consent_at'));
