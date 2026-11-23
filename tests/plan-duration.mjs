@@ -29,12 +29,10 @@ function makeAi(menuDays, wrongLength = false, invalidMeal = false, invalidWorko
       const requestedDays = block ? Number(block[2]) - Number(block[1]) + 1 : menuDays;
       const count = wrongLength ? Math.max(0, requestedDays - 1) : requestedDays;
       const week = Array.from({ length: count }, (_, index) => {
-        const dayInWeek = index % 7;
-        const scheduledTrainingMatch = prompt.match(/ровно (\d+) тренировочных дней/);
-        const scheduledTrainingDays = scheduledTrainingMatch ? Number(scheduledTrainingMatch[1]) : null;
-        const trainingDay = scheduledTrainingDays === null
-          ? (dayInWeek === 0 || dayInWeek === 2 || dayInWeek === 4)
-          : index < scheduledTrainingDays;
+        const chunkStartMatch = prompt.match(/от День (\d+)/);
+        const chunkStartDay = chunkStartMatch ? Number(chunkStartMatch[1]) : 1;
+        const dayInWeek = (chunkStartDay - 1 + index) % 7;
+        const trainingDay = dayInWeek === 0 || dayInWeek === 2 || dayInWeek === 4;
         const tiny = invalidNutrition;
         const portion = grams => Math.max(5, Math.round(grams * portionScale));
         return {
