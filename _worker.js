@@ -1675,7 +1675,9 @@ async function aiDataFlowDiagnostic(request, env) {
   if (!secretAuthorized && !oidcAuthorized) {
     return json({ error: 'Диагностический доступ не настроен или ключ неверен.' }, 404);
   }
-  if (!env.DB || (!env.AI && !clean(env.GROQ_API_KEY, 300))) return json({ error: 'Для проверки необходимы подключения D1 и генеративного AI-провайдера.' }, 503);
+  if (!env.DB || (!env.AI && !clean(env.GROQ_API_KEY, 300))) {
+    return json({ error: 'Для проверки необходимы подключения D1 и генеративного AI-провайдера.' }, 503);
+  }
 
   let body;
   try { body = await request.json(); }
@@ -1683,7 +1685,6 @@ async function aiDataFlowDiagnostic(request, env) {
   const planKey = clean(body?.plan, 40);
   if (!PLANS[planKey]) return json({ error: 'Выберите корректный тариф.' }, 400);
 
-  // Only synthetic data is used. The route is protected by the temporary CI key.
   const profile = profileFrom({
     name: 'Fital Pro automated test',
     sex: 'female',
@@ -1694,35 +1695,124 @@ async function aiDataFlowDiagnostic(request, env) {
     goal: 'maintenance',
     training: 'home',
     days: 3,
-    preferences: 'Обычное питание, без аллергий. Тестовые данные.'
+    preferences: 'Обычное питание, без аллергий. Синтетические тестовые данные.'
   });
   const suffix = crypto.randomUUID().replaceAll('-', '');
-  const accessToken = 'test_' + suffix;
-  const now = new Date().toISOString();
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-  let stage = 'ai-generation';
-  let subscriptionCreated = false;
+  const testPassword1 = 'fitalpro-ci-password1-' + suffix;
+  const testPassword2 = 'fitalpro-ci-password2-' + suffix;
+  const diagnosticIp = '198.51.100.' + (1 + (parseInt(suffix.slice(0, 2), 16) % 254));
+  const rateLimitDigest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(diagnosticIp + '|checkout-test')
+  );
+  const rateLimitHash = [...new Uint8Array(rateLimitDigest)].map(x => x.toString(16).padStart(2, '0')).join('');
+  const diagnosticEnv = Object.create(env);
+  Object.assign(diagnosticEnv, {
+    ROBOKASSA_MERCHANT_LOGIN: 'FitalPro-CI',
+    ROBOKASSA_IS_TEST: '1',
+    ROBOKASSA_TEST_PASSWORD1: testPassword1,
+    ROBOKASSA_TEST_PASSWORD2: testPassword2
+  });
 
+  let stage = 'checkout-create';
+  let clientRef = '';
+  let invId = 0;
+  let accessToken = '';
+  let generationMode = '';
   try {
-    const plan = await generateAiPlan(profile, planKey, env);
-    if (plan.generationMode === 'catalog-fallback') {
-      throw new Error('Резервный план сформирован, но генеративный AI-провайдер недоступен; AI/D1 диагностический запуск остановлен до записи тестовой подписки.');
+    const checkoutRequest = new Request('https://fitalpro.internal/api/checkout', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'CF-Connecting-IP': diagnosticIp
+      },
+      body: JSON.stringify({
+        plan: planKey,
+        profile,
+        contact: 'ci+' + suffix + '@fitalpro.invalid',
+        pd_consent: true,
+        offer_accepted: true
+      })
+    });
+    const checkoutResponse = await checkout(checkoutRequest, diagnosticEnv, true);
+    const checkoutData = await checkoutResponse.json().catch(() => ({}));
+    if (!checkoutResponse.ok || checkoutData.ok !== true || !checkoutData.confirmation_url) {
+      throw new Error('Тестовый checkout не создал заказ: ' + clean(checkoutData.error, 180));
     }
-    stage = 'd1-test-subscription';
-    subscriptionCreated = true;
-    await env.DB.prepare(
-      'INSERT INTO subscriptions (id,payment_id,client_ref,plan,status,access_token,customer_contact,created_at,updated_at,expires_at) VALUES (?,?,?,?,?,?,?,?,?,?)'
-    ).bind(crypto.randomUUID(), 'ai-flow-test-' + suffix, 'ai-flow-test-' + suffix, planKey, 'active', accessToken, 'automated-test', now, now, expiresAt).run();
+    clientRef = clean(checkoutData.client_ref, 100);
+    generationMode = clean(checkoutData.preview?.generationMode, 40);
+    if (!clientRef) throw new Error('Checkout не вернул идентификатор заказа.');
+    if (generationMode === 'catalog-fallback' && diagnosticMode !== 'preview') {
+      throw new Error('Генеративный AI недоступен; production AI/D1 diagnostic остановлен до имитации оплаты.');
+    }
 
-    stage = 'd1-save-profile-and-plan';
-    await saveMemberPlan(env, accessToken, profile, plan);
+    stage = 'checkout-signature';
+    const confirmation = new URL(checkoutData.confirmation_url);
+    invId = Number(confirmation.searchParams.get('InvId'));
+    const outSum = confirmation.searchParams.get('OutSum') || '';
+    const successUrl2 = encodeURIComponent(confirmation.searchParams.get('SuccessUrl2') || '');
+    const failUrl2 = encodeURIComponent(confirmation.searchParams.get('FailUrl2') || '');
+    const paymentSignature = confirmation.searchParams.get('SignatureValue') || '';
+    const expectedPaymentSignature = buildRobokassaPaymentSignature({
+      merchant: 'FitalPro-CI',
+      outSum,
+      invId,
+      successUrl2,
+      failUrl2,
+      password1: testPassword1,
+      clientRef
+    });
+    if (!Number.isSafeInteger(invId) || invId < 1 || !sameHash(paymentSignature, expectedPaymentSignature) ||
+        confirmation.searchParams.get('Shp_ref') !== clientRef || confirmation.searchParams.get('IsTest') !== '1') {
+      throw new Error('Тестовый checkout сформировал некорректную подпись или параметры Robokassa.');
+    }
+
+    stage = 'payment-pending';
+    const checkoutCookie = (checkoutResponse.headers.get('Set-Cookie') || '').split(';')[0];
+    if (!checkoutCookie.startsWith('fitalpro_checkout_' + clientRef + '=')) {
+      throw new Error('Checkout не установил индивидуальный cookie заказа.');
+    }
+    const pendingResponse = await paymentStatus(new Request(
+      'https://fitalpro.internal/api/payment-status?ref=' + encodeURIComponent(clientRef),
+      { headers: { Cookie: checkoutCookie } }
+    ), diagnosticEnv);
+    const pending = await pendingResponse.json().catch(() => ({}));
+    if (!pendingResponse.ok || pending.status !== 'pending') {
+      throw new Error('Заказ должен оставаться закрытым до подтверждённого webhook.');
+    }
+
+    stage = 'payment-webhook';
+    const callbackFields = {
+      OutSum: outSum,
+      InvId: String(invId),
+      Shp_ref: clientRef
+    };
+    callbackFields.SignatureValue = robokassaResultSignature(outSum, invId, testPassword2, callbackFields);
+    const webhookResponse = await robokassaWebhook(new Request('https://fitalpro.internal/webhooks/robokassa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(callbackFields).toString()
+    }), diagnosticEnv);
+    const webhookText = await webhookResponse.text();
+    if (!webhookResponse.ok || webhookText !== 'OK' + invId) {
+      throw new Error('Тестовый Robokassa webhook не подтвердил оплату: ' + clean(webhookText, 120));
+    }
 
     stage = 'cabinet-api-read';
+    const activeResponse = await paymentStatus(new Request(
+      'https://fitalpro.internal/api/payment-status?ref=' + encodeURIComponent(clientRef),
+      { headers: { Cookie: checkoutCookie } }
+    ), diagnosticEnv);
+    const active = await activeResponse.json().catch(() => ({}));
+    if (!activeResponse.ok || active.status !== 'active' || !active.access_token) {
+      throw new Error('После webhook заказ не открыл доступ в личный кабинет.');
+    }
+    accessToken = active.access_token;
     const authHeaders = { Authorization: 'Bearer ' + accessToken };
     const [planResponse, profileResponse, memberResponse] = await Promise.all([
-      personalizedPlan(new Request('https://fitalpro.internal/api/plan', { headers: authHeaders }), env),
-      profileApi(new Request('https://fitalpro.internal/api/profile', { headers: authHeaders }), env),
-      me(new Request('https://fitalpro.internal/api/me', { headers: authHeaders }), env)
+      personalizedPlan(new Request('https://fitalpro.internal/api/plan', { headers: authHeaders }), diagnosticEnv),
+      profileApi(new Request('https://fitalpro.internal/api/profile', { headers: authHeaders }), diagnosticEnv),
+      me(new Request('https://fitalpro.internal/api/me', { headers: authHeaders }), diagnosticEnv)
     ]);
     if (!planResponse.ok || !profileResponse.ok || !memberResponse.ok) {
       throw new Error('D1 сохранение или чтение личного кабинета завершилось ошибкой.');
@@ -1732,14 +1822,22 @@ async function aiDataFlowDiagnostic(request, env) {
     ]);
     if (savedPlan.plan?.week?.length !== PLANS[planKey].menuDays ||
         savedProfile.profile?.name !== profile.name ||
-        member.subscription?.status !== 'active') {
-      throw new Error('Сохранённые данные не совпали с созданным планом или активной тестовой подпиской.');
+        member.subscription?.status !== 'active' ||
+        member.subscription?.plan !== planKey) {
+      throw new Error('Сохранённые данные, тариф или активная тестовая подписка не совпали.');
     }
+
     return json({
       ok: true,
       plan: planKey,
+      generationMode,
       days: savedPlan.plan.week.length,
       meals: savedPlan.plan.week.length * MEAL_KEYS.length,
+      checkoutCreated: true,
+      paymentSignatureVerified: true,
+      paymentWebhookVerified: true,
+      paymentStatusBefore: pending.status,
+      paymentStatusAfter: active.status,
       d1Write: true,
       cabinetPlanRead: true,
       cabinetProfileRead: true,
@@ -1749,16 +1847,32 @@ async function aiDataFlowDiagnostic(request, env) {
   } catch (error) {
     const detail = clean(error?.message, 240) || 'unknown error';
     const diagnostic = clean(error?.cause?.message, 600);
-    console.error('Fital Pro AI/D1 diagnostic failed:', stage, detail, diagnostic);
-    return json({ ok: false, stage, error: detail, diagnostic: diagnostic || undefined }, stage === 'ai-generation' ? 502 : 500);
+    console.error('Fital Pro AI/payment/D1 diagnostic failed:', stage, detail, diagnostic);
+    return json({ ok: false, stage, error: detail, diagnostic: diagnostic || undefined }, stage === 'checkout-create' ? 502 : 500);
   } finally {
-    if (subscriptionCreated) {
-      await env.DB.batch([
-        env.DB.prepare('DELETE FROM progress WHERE access_token=?').bind(accessToken),
-        env.DB.prepare('DELETE FROM weekly_plans WHERE access_token=?').bind(accessToken),
-        env.DB.prepare('DELETE FROM profiles WHERE access_token=?').bind(accessToken),
-        env.DB.prepare('DELETE FROM subscriptions WHERE access_token=?').bind(accessToken)
-      ]);
+    try {
+      if (clientRef) {
+        const subscription = await env.DB.prepare(
+          'SELECT access_token FROM subscriptions WHERE client_ref=?'
+        ).bind(clientRef).first();
+        const token = subscription?.access_token || accessToken;
+        if (token) {
+          await env.DB.batch([
+            env.DB.prepare('DELETE FROM progress WHERE access_token=?').bind(token),
+            env.DB.prepare('DELETE FROM weekly_plans WHERE access_token=?').bind(token),
+            env.DB.prepare('DELETE FROM profiles WHERE access_token=?').bind(token),
+            env.DB.prepare('DELETE FROM subscriptions WHERE access_token=?').bind(token)
+          ]);
+        }
+        if (invId) {
+          await env.DB.prepare('DELETE FROM payments WHERE id=?').bind('robokassa-test-' + invId).run();
+        }
+        await env.DB.prepare('DELETE FROM pending_orders WHERE client_ref=?').bind(clientRef).run();
+      }
+      await env.DB.prepare("DELETE FROM request_log WHERE ip_hash=? AND route='checkout-test'")
+        .bind(rateLimitHash).run();
+    } catch (cleanupError) {
+      console.error('Fital Pro diagnostic cleanup failed:', clean(cleanupError?.message, 180));
     }
   }
 }
