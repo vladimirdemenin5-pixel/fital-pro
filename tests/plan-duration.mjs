@@ -90,10 +90,10 @@ assert.ok(workerSource.includes('fdcId:173904'), 'oats reference must retain its
 assert.ok(workerSource.includes('for (let offset = 0; offset < totalDays; offset += 7)'), 'long plans must be generated and validated in seven-day blocks');
 assert.ok(workerSource.includes('const stepSizes = [20, 5, 1];') && workerSource.includes('for (let iteration = 0; iteration < 80; iteration++)') && workerSource.includes('for (const direction of [-1, 1])'), 'portion correction must make bounded large-to-small adjustments without relaxing nutrition ranges');
 assert.ok(workerSource.includes('const validationDiagnostics = [];') && workerSource.includes('validationDiagnostics.slice(-3)'), 'AI correction retry must retain actual validation failures instead of timeout noise');
-assert.ok(workerSource.includes("const models = ['@cf/zai-org/glm-4.7-flash', '@cf/qwen/qwen3.8-27b', MODEL];"), 'plan generation must use Flash, then current Qwen, then Gemma fallback');
+assert.ok(workerSource.includes("const models = ['@cf/zai-org/glm-4.7-flash', '@cf/meta/llama-3.1-8b-instruct-fast', MODEL];"), 'plan generation must use GLM Flash, fast Llama, then Gemma fallback');
 assert.ok(workerSource.includes('rejectIfBusy: true'), 'Workers AI must skip a busy model queue and fall back instead of waiting until the request times out');
 assert.ok(workerSource.includes('const AI_MODEL_TIMEOUT_MS = 45000;') && workerSource.includes('Promise.race([') && workerSource.includes('runAiInferenceWithTimeout(env, model'), 'each plan-model inference must have a hard timeout so a stalled model cannot block fallbacks');
-assert.equal((workerSource.match(/const models = \['@cf\/zai-org\/glm-4\.7-flash', '@cf\/qwen\/qwen3\.8-27b', MODEL\];/g) || []).length, 2, 'both chat and plan generation must try Flash, Qwen and Gemma in order');
+assert.equal((workerSource.match(/const models = \['@cf\/zai-org\/glm-4\.7-flash', '@cf\/qwen\/qwen3\.8-27b', MODEL\];/g) || []).length, 2, 'both chat and plan generation must try GLM Flash, fast Llama and Gemma in order');
 assert.ok(workerSource.includes('max_completion_tokens: 6500') && !workerSource.includes('max_tokens: 6500'), 'Workers AI output must use its supported max_completion_tokens parameter');
 assert.ok(workerSource.includes('reasoning_effort: null'), 'reasoning must be explicitly disabled for deterministic structured meal-plan generation');
 assert.ok(workerSource.includes('const aiOptions = {') && workerSource.includes('env.AI.run(model, aiOptions, { rejectIfBusy: true })'), 'the AI chat fallback must also disable reasoning before inference');
@@ -126,7 +126,7 @@ const timeoutRecoveredPlan = await generateAiPlan(profile, 'Питание', { A
   }
 } });
 assert.equal(timeoutRecoveredPlan.week.length, 7, 'a timed-out first model must fall back to the next available model');
-assert.equal(timeoutFallbackModels[1], '@cf/qwen/qwen3.8-27b', 'Qwen must be attempted after the first model times out');
+assert.equal(timeoutFallbackModels[1], '@cf/meta/llama-3.1-8b-instruct-fast', 'the catalog-listed fast Llama model must be attempted after the first model times out');
 const correctedPortionPlan = await generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, false, false, false, 0.7) });
 assert.equal(correctedPortionPlan.week.length, 14, 'server-side portion correction must recover a plan with initially undersized portions');
 assert.ok(correctedPortionPlan.week.every(day =>
