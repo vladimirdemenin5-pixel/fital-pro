@@ -330,12 +330,29 @@ function nutritionWithinTargets(nutrition, targets) {
 
 // Make small, bounded corrections to existing ingredient portions. Food choices,
 // meal names and recipes remain unchanged; the server still rejects an infeasible day.
+const MAX_MEAL_INGREDIENT_GRAMS = Object.freeze({
+  oats_dry:150, rice_dry:180, buckwheat_dry:180, pasta_dry:180, quinoa_dry:160,
+  chicken_raw:250, turkey_raw:250, salmon_raw:200, cod_raw:250, egg_raw:200,
+  greek_yogurt:300, cottage_cheese:250, milk_2pct:350,
+  banana:200, apple:250, blueberries:200, strawberry:200,
+  broccoli:250, tomato:200, cucumber:200, carrot:200, spinach:150, cabbage:250,
+  potato_raw:350, sweet_potato:300, avocado:100,
+  almonds:30, walnuts:30, olive_oil:20,
+  lentils_dry:100, chickpeas_dry:100, tofu:250, wholegrain_bread:150,
+  cheddar:50, orange:200, peanut_butter:25
+});
+
 function rebalanceDayNutrition(day, targets) {
   const items = MEAL_KEYS.flatMap(key => day[key + 'Ingredients']);
   const original = items.map(item => item.grams);
-  const bounds = original.map(grams => ({
-    min: Math.max(5, Math.floor(grams * 0.5)),
-    max: Math.min(500, Math.ceil(grams * 1.5))
+  // AI portions are starting estimates, not hard limits. Allow enough room
+  // to fix under-sized and over-sized meals while retaining sensible per-food caps.
+  const bounds = items.map(item => ({
+    min: Math.max(5, Math.floor(item.grams * 0.25)),
+    max: Math.max(item.grams, Math.min(
+      MAX_MEAL_INGREDIENT_GRAMS[item.foodId] || 250,
+      Math.max(80, Math.ceil(item.grams * 3))
+    ))
   }));
   const score = () => {
     const n = calculateDayNutrition(day);
@@ -360,11 +377,11 @@ function rebalanceDayNutrition(day, targets) {
   if (nutritionWithinTargets(day.nutrition, targets)) return true;
 
   // Correct large deviations efficiently first, then refine to single grams.
-  // The old 1 g-only search could spend its entire budget on a large number
-  // of tiny moves even when the day simply needed a modest overall increase.
-  const stepSizes = [20, 5, 1];
+  // AI output can be substantially under- or over-portioned; the bounded
+  // per-food ranges above let this optimizer repair amounts without changing foods.
+  const stepSizes = [40, 10, 2, 1];
   for (const stepSize of stepSizes) {
-    for (let iteration = 0; iteration < 80; iteration++) {
+    for (let iteration = 0; iteration < 100; iteration++) {
       let bestScore = score();
       let bestItem = -1;
       let bestGrams = 0;

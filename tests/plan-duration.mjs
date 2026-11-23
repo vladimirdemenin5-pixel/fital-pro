@@ -88,7 +88,7 @@ assert.ok(!proPlan.shopping.includes('Продукты на весь перио�
 assert.ok(proPlan.nutritionSource.includes('USDA FoodData Central'));
 assert.ok(workerSource.includes('fdcId:173904'), 'oats reference must retain its USDA food record identifier');
 assert.ok(workerSource.includes('for (let offset = 0; offset < totalDays; offset += 7)'), 'long plans must be generated and validated in seven-day blocks');
-assert.ok(workerSource.includes('const stepSizes = [20, 5, 1];') && workerSource.includes('for (let iteration = 0; iteration < 80; iteration++)') && workerSource.includes('for (const direction of [-1, 1])'), 'portion correction must make bounded large-to-small adjustments without relaxing nutrition ranges');
+assert.ok(workerSource.includes('const stepSizes = [40, 10, 2, 1];') && workerSource.includes('for (let iteration = 0; iteration < 100; iteration++)') && workerSource.includes('MAX_MEAL_INGREDIENT_GRAMS') && workerSource.includes('for (const direction of [-1, 1])'), 'portion correction must make bounded, food-specific large-to-small adjustments without relaxing nutrition ranges');
 assert.ok(workerSource.includes('const validationDiagnostics = [];') && workerSource.includes('validationDiagnostics.slice(-3)'), 'AI correction retry must retain actual validation failures instead of timeout noise');
 assert.ok(workerSource.includes("const models = ['@cf/zai-org/glm-4.7-flash', '@cf/meta/llama-3.1-8b-instruct-fast', MODEL];"), 'plan generation must use GLM Flash, fast Llama, then Gemma fallback');
 assert.ok(workerSource.includes('rejectIfBusy: true'), 'Workers AI must skip a busy model queue and fall back instead of waiting until the request times out');
@@ -156,6 +156,21 @@ assert.ok(breakfastIngredientSchema.items.required.includes('foodId') && breakfa
 assert.equal(fastLlamaModelInput.reasoning_effort, undefined, 'fast Llama should not receive parameters absent from its model input schema');
 assert.equal(fastLlamaModelInput.chat_template_kwargs, undefined, 'fast Llama should not receive unsupported chat-template options');
 const correctedPortionPlan = await generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, false, false, false, 0.7) });
+const severelyUnderPortionedPlan = await generateAiPlan(profile, 'Питание', { AI: makeAi(7, false, false, false, false, 0.4) });
+const severelyOverProteinPlan = await generateAiPlan(profile, 'Питание', { AI: makeAi(7, false, false, false, false, 1.4) });
+for (const [label, plan] of [['under-portioned', severelyUnderPortionedPlan], ['over-portioned', severelyOverProteinPlan]]) {
+  assert.equal(plan.week.length, 7, label + ' AI output must be recoverable when bounded correction can produce a valid menu');
+  assert.ok(plan.week.every(day =>
+    day.nutrition.calories >= plan.calories * 0.8 &&
+    day.nutrition.calories <= plan.calories * 1.2 &&
+    day.nutrition.protein >= plan.protein * 0.8 &&
+    day.nutrition.protein <= plan.protein * 1.2 &&
+    day.nutrition.fat >= plan.fat * 0.7 &&
+    day.nutrition.fat <= plan.fat * 1.3 &&
+    day.nutrition.carbs >= plan.carbs * 0.7 &&
+    day.nutrition.carbs <= plan.carbs * 1.3
+  ), label + ' plan must pass the same strict daily nutrition ranges as live plans');
+}
 assert.equal(correctedPortionPlan.week.length, 14, 'server-side portion correction must recover a plan with initially undersized portions');
 assert.ok(correctedPortionPlan.week.every(day =>
   day.nutrition.calories >= correctedPortionPlan.calories * 0.8 &&
