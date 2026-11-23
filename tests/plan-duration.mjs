@@ -156,6 +156,23 @@ assert.equal(proPlan.dailyAverage.protein, 98.1);
 assert.equal(proPlan.dailyAverage.fat, 71);
 assert.equal(proPlan.dailyAverage.carbs, 237.1);
 assert.ok(proPlan.fat > 0 && proPlan.carbs > 0, 'daily fat and carbohydrate targets must be calculated');
+
+let activePlanCalls = 0;
+let maxConcurrentPlanCalls = 0;
+const concurrentPlan = await generateAiPlan(profile, 'PRO', { AI: {
+  async run(model, input) {
+    activePlanCalls++;
+    maxConcurrentPlanCalls = Math.max(maxConcurrentPlanCalls, activePlanCalls);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 5));
+      return await makeAi(14).run(model, input);
+    } finally {
+      activePlanCalls--;
+    }
+  }
+} });
+assert.equal(concurrentPlan.week.length, 14, 'concurrent chunk generation must still assemble every PRO day');
+assert.equal(maxConcurrentPlanCalls, 2, 'two independent three-day chunks must generate concurrently, with a bounded concurrency of two');
 assert.ok(proPlan.shopping.includes('Овсяные хлопья, сухие — 1,12 кг'));
 assert.ok(proPlan.shopping.includes('Молоко 2% — 2,8 кг'));
 assert.ok(!proPlan.shopping.includes('Продукты на весь период'));
