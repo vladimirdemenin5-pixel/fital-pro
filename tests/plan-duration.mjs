@@ -126,7 +126,7 @@ const timeoutRecoveredPlan = await generateAiPlan(profile, 'Питание', { A
   }
 } });
 assert.equal(timeoutRecoveredPlan.week.length, 7, 'a timed-out first model must fall back to the next available model');
-assert.equal(timeoutFallbackModels[1], '@cf/google/gemma-4-26b-a4b-it', 'Gemma must be attempted after the first model times out');
+assert.equal(timeoutFallbackModels[1], '@cf/qwen/qwen3.8-27b', 'Qwen must be attempted after the first model times out');
 const correctedPortionPlan = await generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, false, false, false, 0.7) });
 assert.equal(correctedPortionPlan.week.length, 14, 'server-side portion correction must recover a plan with initially undersized portions');
 assert.ok(correctedPortionPlan.week.every(day =>
