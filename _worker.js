@@ -360,7 +360,7 @@ function foodAllowedByPreferences(foodId, profile) {
     ['chicken_raw','turkey_raw','salmon_raw','cod_raw'].forEach(id=>blocked.add(id));
   }
   if (/глютен|целиак|пшениц/.test(preferences)) ['oats_dry','pasta_dry','wholegrain_bread'].forEach(id=>blocked.add(id));
-  if (/лактоз|молочн|молоко|молочк/.test(preferences)) ['greek_yogurt','cottage_cheese','milk_2pct','cheddar'].forEach(id=>blocked.add(id));
+  if (/лактоз|молочн|молок|молочк/.test(preferences)) ['greek_yogurt','cottage_cheese','milk_2pct','cheddar'].forEach(id=>blocked.add(id));
   if (/орех/.test(preferences)) ['almonds','walnuts','peanut_butter'].forEach(id=>blocked.add(id));
   if (/арахис/.test(preferences)) blocked.add('peanut_butter');
   if (/рыб|морепродукт/.test(preferences)) ['salmon_raw','cod_raw'].forEach(id=>blocked.add(id));
@@ -371,7 +371,6 @@ function foodAllowedByPreferences(foodId, profile) {
   if (/индейк/.test(preferences)) blocked.add('turkey_raw');
   if (/банан/.test(preferences)) blocked.add('banana');
   if (/авокад/.test(preferences)) blocked.add('avocado');
-  if (/групп/.test(preferences)) { /* keep explicit product checks below */ }
   const foodName = FOOD_CATALOG[foodId]?.name?.toLowerCase() || '';
   const directExclusion = /(?:без|не ем|не люблю|исключить|аллерг(?:ия|ен)? на)\s+[^.;,]{0,30}/g;
   for (const match of preferences.matchAll(directExclusion)) {
