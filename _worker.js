@@ -193,6 +193,9 @@ async function runAiTextWithFallback(env, options, purpose, validate = () => tru
       console.error('Fital Pro AI returned an empty or invalid response:', purpose, model);
     } catch (error) {
       console.error('Fital Pro AI model failed:', purpose, model, error?.message || 'unknown error');
+      if (/(?:4006|3036|daily free allocation|used up your daily free allocation)/i.test(clean(error?.message, 240))) {
+        throw new Error('Дневной бесплатный лимит ИИ Cloudflare исчерпан. Используйте сохранённый план или повторите генеративный запрос после обновления квоты.', { cause: error });
+      }
     }
   }
   throw new Error('ИИ временно недоступен. Попробуйте ещё раз через минуту.');
