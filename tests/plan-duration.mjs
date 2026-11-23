@@ -153,18 +153,55 @@ await assert.rejects(
 assert.equal(timeoutSignalCapture.signal.aborted, true, 'a model timeout must also abort the underlying AI call');
 
 const quotaAttemptedModels = [];
-await assert.rejects(
-  () => generateAiPlan(profile, 'Питание', { AI: {
-    async run(model) {
-      quotaAttemptedModels.push(model);
-      throw new Error('4006: you have used up your daily free allocation of 10,000 neurons');
-    }
-  } }),
-  /Дневной бесплатный лимит ИИ Cloudflare исчерпан/,
-  'an exhausted Workers AI quota must return an actionable error instead of hiding it behind generic model fallback failure'
-);
+const quotaFallbackPlan = await generateAiPlan(profile, 'Питание', { AI: {
+  async run(model) {
+    quotaAttemptedModels.push(model);
+    throw new Error('4006: you have used up your daily free allocation of 10,000 neurons');
+  }
+} });
+assert.equal(quotaFallbackPlan.generationMode, 'catalog-fallback',
+  'an exhausted Workers AI quota must switch to the validated server-side catalog planner instead of blocking checkout');
+assert.equal(quotaFallbackPlan.week.length, 7);
 assert.equal(quotaAttemptedModels.length, 1, 'generation must stop after the first block detects exhausted quota');
-assert.ok(quotaAttemptedModels.every(model => model === '@cf/qwen/qwen3.8-27b'), 'an exhausted quota must stop every chunk before it calls any fallback model');
+assert.equal(quotaAttemptedModels[0], '@cf/qwen/qwen3.8-27b');
+assert.ok(quotaFallbackPlan.week.every(day => day.nutrition.calories >= quotaFallbackPlan.calories * 0.8 &&
+  day.nutrition.calories <= quotaFallbackPlan.calories * 1.2 &&
+  day.nutrition.protein >= quotaFallbackPlan.protein * 0.8 &&
+  day.nutrition.protein <= quotaFallbackPlan.protein * 1.2 &&
+  day.nutrition.fat >= quotaFallbackPlan.fat * 0.7 &&
+  day.nutrition.fat <= quotaFallbackPlan.fat * 1.3 &&
+  day.nutrition.carbs >= quotaFallbackPlan.carbs * 0.7 &&
+  day.nutrition.carbs <= quotaFallbackPlan.carbs * 1.3),
+  'every fallback day must pass the same strict calculated macro ranges as an AI-generated day');
+
+const noProviderNutritionPlan = await generateAiPlan(profile, 'Питание', {});
+assert.equal(noProviderNutritionPlan.generationMode, 'catalog-fallback');
+assert.equal(noProviderNutritionPlan.week.length, 7);
+
+const noProviderProPlan = await generateAiPlan(profile, 'PRO', {});
+assert.equal(noProviderProPlan.generationMode, 'catalog-fallback');
+assert.equal(noProviderProPlan.week.length, 14);
+assert.equal(noProviderProPlan.week.filter(day => day.trainingDay).length, 6,
+  'catalog fallback must preserve the exact server-owned PRO training schedule');
+
+const noProviderPremiumPlan = await generateAiPlan(profile, 'Premium', {});
+assert.equal(noProviderPremiumPlan.generationMode, 'catalog-fallback');
+assert.equal(noProviderPremiumPlan.week.length, 30);
+assert.equal(noProviderPremiumPlan.week.filter(day => day.trainingDay).length, 12,
+  'catalog fallback must preserve the exact server-owned Premium training schedule');
+
+const veganFallbackPlan = await generateAiPlan({
+  ...profile,
+  preferences: 'Веганство, без молочных продуктов, яиц, рыбы и мяса'
+}, 'Питание', {});
+assert.equal(veganFallbackPlan.generationMode, 'catalog-fallback');
+assert.ok(veganFallbackPlan.week.every(day =>
+  ['breakfast','lunch','snack','dinner'].every(key =>
+    day[key + 'Ingredients'].every(item => foodAllowedByPreferences(item.foodId, {
+      preferences: 'Веганство, без молочных продуктов, яиц, рыбы и мяса'
+    }))
+  )
+), 'catalog fallback must strictly respect vegan restrictions');
 
 const proPlan = await generateAiPlan(profile, 'PRO', { AI: makeAi(14) });
 assert.equal(proPlan.week.length, 14, 'PRO must contain 14 complete menu days');
@@ -253,17 +290,25 @@ assert.ok(workerSource.includes('fdcId:173904'), 'oats reference must retain its
 assert.ok(workerSource.includes('for (let offset = 0; offset < totalDays; offset += 2)') && workerSource.includes('const chunkDays = Math.min(2, totalDays - offset)') && !workerSource.includes('Promise.all([0, 2, 4, 6]'), 'long plans must be generated as sequential validated two-day blocks');
 assert.ok(workerSource.includes('MAX_MEAL_INGREDIENT_GRAMS') && workerSource.includes('min:5,max:') && workerSource.includes('for (let iteration=0;iteration<120;iteration++)') && workerSource.includes('const nutrientTargets = [targets.calories, targets.protein, targets.fat, targets.carbs];') && workerSource.includes('const derivatives=values.map(') && workerSource.includes('let learningRate=1000;') && workerSource.includes('const allowedFoods = Object.keys(FOOD_CATALOG).filter(id => foodAllowedByPreferences(id, profile));'), 'portion and food-choice correction must use bounded catalog search without relaxing nutrition ranges');
 assert.ok(workerSource.includes('const rejectionDiagnostics = [];') && workerSource.includes('rejectionDiagnostics.slice(-3)'), 'the next fallback model must receive concrete rejection reasons from the previous model');
-assert.ok(workerSource.includes("const models = ['@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b', '@cf/zai-org/glm-4.7-flash', MODEL];"), 'Cloudflare Qwen 3.8 must be primary, followed by GPT-OSS 120B, lower-latency 20B and safe fallbacks');
+assert.ok(workerSource.includes("...(env.AI ? ['@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'] : [])") &&
+  workerSource.includes("...(clean(env.GROQ_API_KEY, 300) ? ['groq:openai/gpt-oss-20b'] : [])"),
+  'plan generation must use an optional Groq GPT-OSS 20B provider and only the bounded Cloudflare Qwen/GPT-OSS fallback chain');
 assert.ok(workerSource.includes('for (let move = 0; move < 20; move++)') && workerSource.includes('!foodFitsMeal(foodId, key)'), 'nutrition correction must search more composition changes and keep replacement foods compatible with their meal');
 assert.ok(workerSource.includes('rejectIfBusy: true'), 'Workers AI must skip a busy model queue and fall back instead of waiting until the request times out');
 assert.ok(workerSource.includes('const AI_MODEL_TIMEOUT_MS = 45000;') && workerSource.includes('Promise.race([') && workerSource.includes('runAiInferenceWithTimeout(env, model'), 'each plan-model inference must have a hard timeout so a stalled model cannot block fallbacks');
-assert.equal((workerSource.match(/const models = \['@cf\/zai-org\/glm-4\.7-flash', '@cf\/meta\/llama-3\.1-8b-instruct-fast', MODEL\];/g) || []).length, 1, 'the general chat fallback chain remains unchanged');
+assert.ok(workerSource.includes("...(env.AI ? ['@cf/zai-org/glm-4.7-flash', '@cf/meta/llama-3.1-8b-instruct-fast', MODEL] : [])"),
+  'general chat must retain Cloudflare fallbacks when the binding is present');
 assert.ok(workerSource.includes('max_tokens: 4200') && workerSource.includes('max_completion_tokens: 4200') && workerSource.includes('QWEN_PLAN_TIMEOUT_MS = 75000') && workerSource.includes('GPT_OSS_PLAN_TIMEOUT_MS = 60000') && workerSource.includes('AI_PLAN_FALLBACK_TIMEOUT_MS = 60000'), 'each Workers AI plan model must use its documented token-limit parameter and bounded timeout');
 assert.ok(workerSource.includes("const isGptOss = model === '@cf/openai/gpt-oss-120b' || model === '@cf/openai/gpt-oss-20b'") && workerSource.includes('max_tokens: 4200') && workerSource.includes("reasoning_effort: 'low'"), 'both GPT-OSS fallbacks must use supported token limits and bounded reasoning');
 assert.ok(!workerSource.includes('QWEN4_API_KEY') && !workerSource.includes('qwen4-max'), 'paid QwenCloud integration must be absent from the Cloudflare-only model chain');
 assert.ok(workerSource.includes('function buildPlanResponseSchema(menuDays)') && workerSource.includes('minItems: menuDays') && workerSource.includes('maxItems: menuDays'), 'the reusable server schema helper must still describe exact plan length');
 assert.ok(workerSource.includes("reasoning_effort: 'low'"), 'reasoning must be bounded to low for structured meal-plan generation');
 assert.ok(workerSource.includes('const aiOptions = {') && workerSource.includes('env.AI.run(model, aiOptions, { rejectIfBusy: true })'), 'the AI chat fallback must also disable reasoning before inference');
+assert.ok(workerSource.includes("https://api.groq.com/openai/v1/chat/completions") &&
+  workerSource.includes("Authorization: 'Bearer ' + apiKey") &&
+  workerSource.includes("response_format: { type: 'json_object' }") &&
+  workerSource.includes("reasoning_format: 'hidden'"),
+  'optional Groq inference must use server-side API credentials, bounded output, and JSON-only structured generation');
 assert.ok(workerSource.includes('week должен содержать РОВНО'), 'the model prompt must explicitly require the exact block length');
 assert.equal(proPlan.week.slice(0, 7).filter(day => day.trainingDay).length, 3);
 assert.equal(proPlan.week.slice(7, 14).filter(day => day.trainingDay).length, 3);
