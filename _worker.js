@@ -168,7 +168,10 @@ function hasWorkoutPrescription(value) {
 
 async function runAiTextWithFallback(env, options, purpose, validate = () => true) {
   // Prefer the low-latency Flash model for chat; keep the stronger models as fallbacks.
-  const models = ['@cf/zai-org/glm-4.7-flash', '@cf/meta/llama-3.1-8b-instruct-fast', MODEL];
+  const models = [
+    ...(clean(env.GROQ_API_KEY, 300) ? ['groq:openai/gpt-oss-20b'] : []),
+    ...(env.AI ? ['@cf/zai-org/glm-4.7-flash', '@cf/meta/llama-3.1-8b-instruct-fast', MODEL] : [])
+  ];
   const aiOptions = {
     ...(options || {}),
     reasoning_effort: null,
@@ -176,7 +179,9 @@ async function runAiTextWithFallback(env, options, purpose, validate = () => tru
   };
   for (const model of models) {
     try {
-      const result = await env.AI.run(model, aiOptions, { rejectIfBusy: true });
+      const result = model.startsWith('groq:')
+        ? await runGroqInferenceWithTimeout(env, model.slice(5), aiOptions, 45000)
+        : await env.AI.run(model, aiOptions, { rejectIfBusy: true });
       const text = extractAiText(result);
       if (text && validate(text)) return text;
       console.error('Fital Pro AI returned an empty or invalid response:', purpose, model);
@@ -731,6 +736,40 @@ function isScheduledTrainingDay(absoluteDay, weeklyTarget) {
   return Math.floor((dayInWeek + 1) * sessions / 7) > Math.floor(dayInWeek * sessions / 7);
 }
 
+async function runGroqInferenceWithTimeout(env, model, inputs, timeoutMs = 60000) {
+  const apiKey = clean(env.GROQ_API_KEY, 300);
+  if (!apiKey) throw new Error('Groq API key is not configured.');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new Error('Groq inference timed out.')), timeoutMs);
+  try {
+    const payload = { ...inputs, model };
+    if (payload.max_tokens && !payload.max_completion_tokens) {
+      payload.max_completion_tokens = payload.max_tokens;
+    }
+    delete payload.max_tokens;
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+    const responseText = await response.text();
+    if (!response.ok) {
+      throw new Error('Groq inference HTTP ' + response.status + ': ' + clean(responseText, 360));
+    }
+    try {
+      return JSON.parse(responseText);
+    } catch {
+      throw new Error('Groq returned an invalid JSON envelope.');
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function runAiInferenceWithTimeout(env, model, inputs, timeoutMs = AI_MODEL_TIMEOUT_MS) {
   const controller = new AbortController();
   let timer;
@@ -758,7 +797,10 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
     { role: 'user', content: prompt }
   ];
   // Cloudflare Qwen 3.8 is primary; GPT-OSS 120B is the first fallback and lower-latency 20B is the corrective alternative.
-  const models = ['@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b', '@cf/zai-org/glm-4.7-flash', MODEL];
+  const models = [
+    ...(clean(env.GROQ_API_KEY, 300) ? ['groq:openai/gpt-oss-20b'] : []),
+    ...(env.AI ? ['@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'] : [])
+  ];
   const diagnostics = [];
   const rejectionDiagnostics = [];
 
@@ -775,23 +817,34 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
     try {
       const isQwen = model === '@cf/qwen/qwen3.8-27b';
       const isGptOss = model === '@cf/openai/gpt-oss-120b' || model === '@cf/openai/gpt-oss-20b';
-      const modelInput = {
-        messages: currentMessages,
-        temperature: 0.2,
-        ...(isGptOss ? {
-          // GPT-OSS uses max_tokens; keep JSON enforcement in the prompt and validate server-side.
-          max_tokens: 4200,
-          reasoning_effort: 'low'
-        } : {
-          // Qwen/GLM/Gemma use max_completion_tokens in Workers AI.
-          max_completion_tokens: 4200,
-          ...(isQwen ? { reasoning_effort: 'low' } : {})
-        })
-      };
-      const result = await runAiInferenceWithTimeout(
-        env, model, modelInput,
-        isQwen ? QWEN_PLAN_TIMEOUT_MS : (isGptOss ? GPT_OSS_PLAN_TIMEOUT_MS : AI_PLAN_FALLBACK_TIMEOUT_MS)
-      );
+      const isGroq = model.startsWith('groq:');
+      const modelInput = isGroq
+        ? {
+            messages: currentMessages,
+            temperature: 0.2,
+            max_completion_tokens: 4200,
+            reasoning_effort: 'low',
+            reasoning_format: 'hidden',
+            response_format: { type: 'json_object' }
+          }
+        : {
+            messages: currentMessages,
+            temperature: 0.2,
+            ...(isGptOss ? {
+              // GPT-OSS uses max_tokens; keep JSON enforcement in the prompt and validate server-side.
+              max_tokens: 4200,
+              reasoning_effort: 'low'
+            } : {
+              max_completion_tokens: 4200,
+              ...(isQwen ? { reasoning_effort: 'low' } : {})
+            })
+          };
+      const result = isGroq
+        ? await runGroqInferenceWithTimeout(env, model.slice(5), modelInput, GPT_OSS_PLAN_TIMEOUT_MS)
+        : await runAiInferenceWithTimeout(
+            env, model, modelInput,
+            isQwen ? QWEN_PLAN_TIMEOUT_MS : (isGptOss ? GPT_OSS_PLAN_TIMEOUT_MS : AI_PLAN_FALLBACK_TIMEOUT_MS)
+          );
       const text = extractAiText(result);
       const normalized = text.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
       const match = normalized.match(/\{[\s\S]*\}/);
@@ -835,8 +888,167 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
   const diagnostic = new Error(diagnostics.join(' | ').slice(0, 1800));
   throw new Error('Сервис ИИ временно не смог подготовить проверенный план. Повторите отправку анкеты через минуту.', { cause: diagnostic });
 }
+function chooseCatalogFallbackFood(candidates, profile, dayIndex, mealKey, usedFoodIds) {
+  const allowed = candidates.filter(foodId =>
+    Object.hasOwn(FOOD_CATALOG, foodId) &&
+    foodAllowedByPreferences(foodId, profile) &&
+    foodFitsMeal(foodId, mealKey) &&
+    !usedFoodIds.has(foodId)
+  );
+  if (!allowed.length) return null;
+  return allowed[dayIndex % allowed.length];
+}
+
+function catalogFallbackWorkout(profile, absoluteDay, includesTraining) {
+  if (!includesTraining) return 'Восстановление: спокойная ходьба 20–30 минут и лёгкая растяжка без силовой нагрузки.';
+  if (!isScheduledTrainingDay(absoluteDay, profile.days)) {
+    return 'День восстановления: прогулка 20–30 минут, лёгкая подвижность суставов и отдых без силовой нагрузки.';
+  }
+  const routines = profile.training === 'gym'
+    ? [
+        'Разминка 5–7 минут. Приседания 3×10, тяга верхнего блока 3×10, жим гантелей 3×10, планка 3×20 секунд. Заминка 5 минут.',
+        'Разминка 5–7 минут. Жим ногами 3×10, горизонтальная тяга 3×10, ягодичный мост 3×12, dead bug 3×10. Заминка 5 минут.'
+      ]
+    : profile.training === 'home'
+      ? [
+          'Разминка 5–7 минут. Приседания с собственным весом 3×10, отжимания от опоры 3×8, ягодичный мост 3×12, bird-dog 3×10. Заминка 5 минут.',
+          'Разминка 5–7 минут. Выпады назад 3×8, тяга резинки 3×12, подъём на носки 3×12, планка 3×20 секунд. Заминка 5 минут.'
+        ]
+      : [
+          'Разминка 5–7 минут. Приседания 3×10, тяга резинки 3×12, жим гантелей 3×10, планка 3×20 секунд. Заминка 5 минут.',
+          'Разминка 5–7 минут. Ягодичный мост 3×12, выпады назад 3×8, горизонтальная тяга 3×10, bird-dog 3×10. Заминка 5 минут.'
+        ];
+  return routines[(absoluteDay - 1) % routines.length];
+}
+
+function buildCatalogFallbackDay(profile, planKey, absoluteDay, targets) {
+  const used = Object.fromEntries(MEAL_KEYS.map(key => [key, new Set()]));
+  const day = {
+    day: 'День ' + absoluteDay,
+    trainingDay: planKey !== 'Питание' && isScheduledTrainingDay(absoluteDay, profile.days),
+    breakfast: '', breakfastRecipe: '', breakfastIngredients: [],
+    lunch: '', lunchRecipe: '', lunchIngredients: [],
+    snack: '', snackRecipe: '', snackIngredients: [],
+    dinner: '', dinnerRecipe: '', dinnerIngredients: [],
+    workout: catalogFallbackWorkout(profile, absoluteDay, planKey !== 'Питание')
+  };
+  const add = (mealKey, candidates, grams) => {
+    const foodId = chooseCatalogFallbackFood(candidates, profile, absoluteDay - 1, mealKey, used[mealKey]);
+    if (!foodId) throw new Error('Для одного из приёмов пищи не найден разрешённый продукт из справочника.');
+    used[mealKey].add(foodId);
+    day[mealKey + 'Ingredients'].push({
+      foodId,
+      name: FOOD_CATALOG[foodId].name,
+      grams
+    });
+  };
+  const grains = ['oats_dry','buckwheat_dry','quinoa_dry','rice_dry','wholegrain_bread','pasta_dry'];
+  const fruits = ['banana','apple','blueberries','strawberry','orange'];
+  const vegetables = ['broccoli','tomato','cucumber','carrot','spinach','cabbage'];
+  const proteins = ['chicken_raw','turkey_raw','cod_raw','salmon_raw','tofu','lentils_dry','chickpeas_dry','egg_raw'];
+  const breakfastProteins = ['greek_yogurt','cottage_cheese','egg_raw','tofu'];
+  const snackProteins = ['greek_yogurt','cottage_cheese','tofu','egg_raw','peanut_butter'];
+  const fats = ['olive_oil','avocado','almonds','walnuts','peanut_butter'];
+  const carbohydrates = [...grains,'potato_raw','sweet_potato'];
+
+  add('breakfast', grains, 75);
+  add('breakfast', breakfastProteins, 150);
+  add('breakfast', fruits, 120);
+  add('breakfast', fats, 10);
+
+  add('lunch', proteins, 140);
+  add('lunch', carbohydrates, 80);
+  add('lunch', vegetables, 150);
+  add('lunch', fats, 8);
+
+  add('snack', snackProteins, 150);
+  add('snack', fruits, 150);
+  add('snack', fats, 10);
+
+  add('dinner', proteins, 130);
+  add('dinner', carbohydrates, 75);
+  add('dinner', vegetables, 150);
+  add('dinner', fats, 8);
+
+  // Scale the starter composition toward this client's calculated energy target,
+  // then let the existing catalog optimizer validate and correct all four macros.
+  const initialCalories = calculateDayNutrition(day).calories;
+  if (!initialCalories) throw new Error('Не удалось рассчитать пищевую ценность резервного рациона.');
+  const scale = Math.max(0.65, Math.min(2.3, targets.calories / initialCalories));
+  for (const mealKey of MEAL_KEYS) {
+    for (const item of day[mealKey + 'Ingredients']) {
+      const maximum = MAX_MEAL_INGREDIENT_GRAMS[item.foodId] || 250;
+      item.grams = Math.max(5, Math.min(maximum, Math.round(item.grams * scale)));
+    }
+    const text = buildSynchronizedMealText(day, mealKey);
+    day[mealKey] = text.title;
+    day[mealKey + 'Recipe'] = text.recipe.slice(0, 300);
+  }
+  day.nutrition = calculateDayNutrition(day);
+  if (!nutritionWithinTargets(day.nutrition, targets) && !rebalanceDayNutrition(day, targets, profile)) {
+    throw new Error('Не удалось подобрать безопасный рацион, который проходит серверную проверку калорий и БЖУ. Заказ не будет отправлен на оплату.');
+  }
+  return day;
+}
+
+function generateCatalogFallbackPlan(profile, planKey, targets, cause) {
+  const includesTraining = planKey !== 'Питание';
+  const totalDays = PLANS[planKey].menuDays;
+  const week = [];
+  for (let absoluteDay = 1; absoluteDay <= totalDays; absoluteDay++) {
+    let day = null;
+    let lastError = null;
+    for (let variant = 0; variant < 3 && !day; variant++) {
+      try {
+        day = buildCatalogFallbackDay(profile, planKey, absoluteDay + variant * 2, targets);
+        day.day = 'День ' + absoluteDay;
+        day.trainingDay = includesTraining && isScheduledTrainingDay(absoluteDay, profile.days);
+        day.workout = catalogFallbackWorkout(profile, absoluteDay, includesTraining);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    if (!day) {
+      throw new Error(
+        'Резервный расчёт не смог сформировать проверенный план на ' + totalDays +
+        ' дней: ' + clean(lastError?.message, 180)
+      );
+    }
+    week.push(day);
+  }
+  const dailyAverage = {
+    calories: Math.round(week.reduce((sum, day) => sum + day.nutrition.calories, 0) / week.length),
+    protein: Math.round(week.reduce((sum, day) => sum + day.nutrition.protein, 0) / week.length * 10) / 10,
+    fat: Math.round(week.reduce((sum, day) => sum + day.nutrition.fat, 0) / week.length * 10) / 10,
+    carbs: Math.round(week.reduce((sum, day) => sum + day.nutrition.carbs, 0) / week.length * 10) / 10
+  };
+  return {
+    plan: planKey,
+    planLabel: PLANS[planKey].label,
+    intro: 'Персональный план рассчитан сервером Fital Pro по вашей анкете и справочнику пищевой ценности. Генеративная модель временно недоступна; калории и БЖУ каждого дня рассчитаны по составу и граммовкам продуктов и проверены сервером.',
+    calories: targets.calories,
+    protein: targets.protein,
+    fat: targets.fat,
+    carbs: targets.carbs,
+    week,
+    menuDays: totalDays,
+    shopping: buildShoppingList(week),
+    dailyAverage,
+    nutritionSource: 'Справочные значения USDA FoodData Central на 100 г; вес продуктов указан до приготовления. Для продуктов без отдельного FDC ID используются общие справочные значения. Фактическая пищевая ценность зависит от сорта, марки и приготовления.',
+    tips: [
+      'Вес круп, макарон и бобовых указан в сухом виде; вес мяса, рыбы, овощей и фруктов — до приготовления.',
+      'Готовьте блюда без добавления продуктов, не указанных в составе.',
+      'Пейте воду в течение дня и корректируйте нагрузку по самочувствию.'
+    ],
+    trainingIncluded: includesTraining,
+    durationDays: PLANS[planKey].days,
+    generationMode: 'catalog-fallback',
+    generationIssue: clean(cause?.message, 180) || 'Генеративная модель временно недоступна.',
+    disclaimer: 'План носит информационный характер и не заменяет консультацию врача или специалиста по питанию.'
+  };
+}
+
 async function generateAiPlan(profile, planKey, env) {
-  if (!env.AI) throw new Error('Сервис ИИ пока не подключён. Оплата не создавалась.');
   const targets = nutritionTargets(profile);
   const includesTraining = planKey !== 'Питание';
   const totalDays = PLANS[planKey].menuDays;
@@ -844,9 +1056,11 @@ async function generateAiPlan(profile, planKey, env) {
   let intro = '';
   const tips = [];
 
-  // Generate one validated two-day block at a time. If a block fails,
-  // later blocks are never started and cannot consume additional AI quota.
-  for (let offset = 0; offset < totalDays; offset += 2) {
+  try {
+    if (!env.AI && !clean(env.GROQ_API_KEY, 300)) throw new Error('Нет доступного подключения к генеративной модели.');
+    // Generate one validated two-day block at a time. If a block fails,
+    // later blocks are never started and cannot consume additional AI quota.
+    for (let offset = 0; offset < totalDays; offset += 2) {
     const chunkDays = Math.min(2, totalDays - offset);
     const mealCalorieTargets = [
       ['завтрак', 0.25],
@@ -912,6 +1126,10 @@ async function generateAiPlan(profile, planKey, env) {
     if (Array.isArray(parsed.tips)) {
       tips.push(...parsed.tips.map(item => clean(item, 220)).filter(Boolean));
     }
+    }
+  } catch (error) {
+    console.error('Fital Pro generation provider unavailable; switching to validated catalog planner:', clean(error?.message, 240));
+    return generateCatalogFallbackPlan(profile, planKey, targets, error);
   }
 
   const shopping = buildShoppingList(fullWeek);
@@ -937,6 +1155,7 @@ async function generateAiPlan(profile, planKey, env) {
     tips: [...new Set(tips)].slice(0, 12),
     trainingIncluded: includesTraining,
     durationDays: PLANS[planKey].days,
+    generationMode: clean(env.GROQ_API_KEY, 300) ? 'ai-provider' : 'cloudflare-ai',
     disclaimer: 'План носит информационный характер и не заменяет консультацию врача или специалиста по питанию.'
   };
 }
@@ -1130,7 +1349,7 @@ async function aiPlanDiagnostic(request, env) {
   if (!secretAuthorized && !oidcAuthorized) {
     return json({ error: 'Диагностический доступ не настроен или ключ неверен.' }, 404);
   }
-  if (!env.AI) return json({ error: 'Workers AI не подключён.' }, 503);
+  if (!env.AI && !clean(env.GROQ_API_KEY, 300)) return json({ error: 'Не подключён генеративный AI-провайдер.' }, 503);
 
   let body;
   try { body = await request.json(); }
@@ -1155,8 +1374,17 @@ async function aiPlanDiagnostic(request, env) {
     }, 502);
   }
 
+  if (plan.generationMode === 'catalog-fallback') {
+    return json({
+      ok: false,
+      error: 'Резервный расчёт плана работает, но генеративная модель недоступна.',
+      generationMode: plan.generationMode
+    }, 503);
+  }
+
   return json({
     ok: true,
+    generationMode: plan.generationMode,
     plan: plan.plan,
     durationDays: plan.durationDays,
     menuDays: plan.menuDays,
@@ -1419,7 +1647,7 @@ async function aiDataFlowDiagnostic(request, env) {
   if (!secretAuthorized && !oidcAuthorized) {
     return json({ error: 'Диагностический доступ не настроен или ключ неверен.' }, 404);
   }
-  if (!env.DB || !env.AI) return json({ error: 'Для проверки необходимы подключения D1 и Workers AI.' }, 503);
+  if (!env.DB || (!env.AI && !clean(env.GROQ_API_KEY, 300))) return json({ error: 'Для проверки необходимы подключения D1 и генеративного AI-провайдера.' }, 503);
 
   let body;
   try { body = await request.json(); }
@@ -1449,6 +1677,9 @@ async function aiDataFlowDiagnostic(request, env) {
 
   try {
     const plan = await generateAiPlan(profile, planKey, env);
+    if (plan.generationMode === 'catalog-fallback') {
+      throw new Error('Резервный план сформирован, но генеративный AI-провайдер недоступен; AI/D1 диагностический запуск остановлен до записи тестовой подписки.');
+    }
     stage = 'd1-test-subscription';
     subscriptionCreated = true;
     await env.DB.prepare(
@@ -1756,4 +1987,4 @@ export default {
   }
 };
 
-export { buildRobokassaPaymentSignature, robokassaResultSignature, verifyRobokassaResultSignature, robokassaWebhook, paymentStatus, testCheckout, aiPlanDiagnostic, aiDataFlowDiagnostic, generateAiPlan, runAiTextWithFallback, runAiInferenceWithTimeout, FOOD_CATALOG, buildPlanResponseSchema, diagnosePlanWeekFailure, rebalanceDayNutrition, foodAllowedByPreferences, foodRole, foodCanReplaceFood, foodFitsMeal };
+export { buildRobokassaPaymentSignature, robokassaResultSignature, verifyRobokassaResultSignature, robokassaWebhook, paymentStatus, testCheckout, aiPlanDiagnostic, aiDataFlowDiagnostic, generateAiPlan, generateCatalogFallbackPlan, runAiTextWithFallback, runAiInferenceWithTimeout, runGroqInferenceWithTimeout, FOOD_CATALOG, buildPlanResponseSchema, diagnosePlanWeekFailure, rebalanceDayNutrition, foodAllowedByPreferences, foodRole, foodCanReplaceFood, foodFitsMeal };
