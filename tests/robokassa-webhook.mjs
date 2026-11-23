@@ -304,7 +304,7 @@ function makeCheckoutAi() {
   return {
     async run(_model, input) {
       const prompt = input?.messages?.[1]?.content || '';
-      const block = prompt.match(/БЛОК: дни (\\d+)–(\\d+) из (\\d+)/);
+      const block = prompt.match(/БЛОК: дни (\d+)–(\d+) из (\d+)/);
       const requestedDays = block ? Number(block[2]) - Number(block[1]) + 1 : 7;
       const week = Array.from({ length: requestedDays }, (_, index) => {
         const dayInWeek = index % 7;
