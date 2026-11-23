@@ -135,3 +135,97 @@
 @media(max-width:980px){.sample-plan-grid{grid-template-columns:1fr 1fr}.sample-workout{grid-column:1/-1}.demo-account{gap:25px}}
 @media(max-width:720px){.showcase-photo-grid{grid-template-columns:1fr 1fr;gap:9px;margin-bottom:35px}.showcase-photo{min-height:190px}.showcase-photo img{min-height:190px}.showcase-photo-food{grid-column:1/-1}.showcase-photo-food img{height:230px;min-height:230px}.showcase-photo-caption{left:13px;right:13px;bottom:12px}.showcase-photo-caption strong{font-size:12px}.sample-plan{padding:20px 15px;border-radius:17px}.sample-plan-heading{align-items:flex-start;flex-direction:column;gap:10px}.sample-plan-heading h3{font-size:20px}.sample-plan-grid{grid-template-columns:1fr}.sample-workout{grid-column:auto}.demo-account{grid-template-columns:1fr;gap:20px;margin-top:48px}.demo-account-intro h3{font-size:30px}.demo-dashboard{padding:12px}.demo-dashboard-body{grid-template-columns:1fr;gap:9px}.demo-sidebar{display:flex;overflow-x:auto;gap:3px}.demo-sidebar span{font-size:7px;padding:7px}.demo-greeting strong{font-size:12px}.demo-stats>div{padding:8px}.demo-stats strong{font-size:15px}.demo-lower{grid-template-columns:1fr 1fr}}
 @media(max-width:390px){.showcase-photo-grid{grid-template-columns:1fr}.showcase-photo-food{grid-column:auto}.showcase-photo,.showcase-photo img{min-height:210px}.showcase-photo-food img{height:210px;min-height:210px}.demo-lower{grid-template-columns:1fr}.sample-tag{white-space:normal}}
+
+
+/* Fital Pro — vibrant, confident and professional visual system */
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,500;1,600&display=swap');
+
+:root{
+  --ink:#17243a;
+  --ink-soft:#243b55;
+  --paper:#f6f8fc;
+  --white:#fff;
+  --muted:#69788e;
+  --line:#e2e8f1;
+  --lime:#18a77b;
+  --coral:#ed765f;
+  --cyan:#4d8fe8;
+  --violet:#8870d5;
+  --amber:#dfa13b;
+  --radius:22px;
+  --shadow:0 18px 55px rgba(25,43,72,.09)
+}
+body{font-family:'Manrope',ui-sans-serif,system-ui,sans-serif;color:var(--ink);background:var(--paper)}
+button,input,select,textarea{font-family:'Manrope',ui-sans-serif,system-ui,sans-serif}
+h1,h2,h3,h4,h5,.brand,.price,.visual-kcal,.benefit-number{font-family:'Manrope',ui-sans-serif,system-ui,sans-serif}
+h1,h2,h3{font-weight:800}
+.hero h1 em,h2 em,.section-heading h2 em,.form-intro h2 em{font-family:'DM Sans',sans-serif;font-style:italic;font-weight:600;letter-spacing:-.045em}
+.site-header{background:linear-gradient(105deg,#17243a 0%,#233e5c 100%);border-bottom-color:rgba(255,255,255,.12)}
+.brand-mark{background:linear-gradient(135deg,#23c995,#4d8fe8);color:#fff}
+.header-cta{color:#72e0bb}
+.hero{background:radial-gradient(ellipse at 82% 18%,rgba(136,112,213,.34),transparent 33%),radial-gradient(ellipse at 76% 83%,rgba(24,167,123,.28),transparent 38%),linear-gradient(125deg,#17243a 0%,#203b59 54%,#174d57 100%)}
+.eyebrow-dot{background:#4ed2a6;box-shadow:0 0 0 4px rgba(78,210,166,.15)}
+.hero h1 em,h2 em{color:#73e0bd}
+.button-primary{background:linear-gradient(105deg,#19aa7e,#24bd9a);color:#fff;box-shadow:0 9px 24px rgba(24,167,123,.22)}
+.button-primary:hover{background:linear-gradient(105deg,#14966f,#1eaa89);box-shadow:0 12px 28px rgba(24,167,123,.28)}
+.button-outline{border-color:#cbd6e5;color:#263b56}
+.button-outline:hover{background:#edf5ff;border-color:#8eb3e8}
+.text-link span{color:#72e0bd}
+.proof-avatars span:first-child{background:#20b889;color:#fff}
+.proof-avatars span:nth-child(2){background:#4d8fe8;color:#fff}
+.proof-avatars span:nth-child(3){background:#ed876e;color:#fff}
+.visual-orbit{border-color:rgba(91,213,177,.23)}
+.orbit-two{border-color:rgba(123,157,238,.2)}
+.visual-card-main{box-shadow:0 28px 75px rgba(4,17,36,.3)}
+.meal-orange{background:#fff0e8;color:#bd6549}
+.meal-blue{background:#e7f0ff;color:#376db7}
+.meal-pink{background:#f2eaff;color:#8060b7}
+.note-check{background:#dcf7ec;color:#13845f}
+.benefit-number{color:#18a77b}
+.section-heading h2 em,.form-intro h2 em{color:#159c78}
+.step-icon{background:#e2f6ef;color:#128b67}
+.step-card:nth-child(2) .step-icon{background:#e6efff;color:#477ed0}
+.step-card:nth-child(3) .step-icon{background:#fff0e9;color:#d66d55}
+.step-card:nth-child(4) .step-icon{background:#f0eaff;color:#8067c3}
+.tariffs-section{background:linear-gradient(135deg,#edf3f9 0%,#f4f2fb 55%,#edf7f3 100%)}
+.tariff-featured{background:linear-gradient(145deg,#203957 0%,#225d65 100%);border-color:#225d65;box-shadow:0 20px 48px rgba(29,65,91,.2)}
+.popular-label{background:#f3b95f;color:#28364b}
+.tariff-card li:before{color:#18a77b}
+.tariff-featured li:before{color:#6be0b8}
+.selected-plan-line{background:#e8f6f0;color:#587568}
+.selected-plan-line strong{color:#167b5d}
+.selected-plan-line a{color:#168c69}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:#55b995;box-shadow:0 0 0 3px rgba(24,167,123,.13)}
+.form-assurance span{background:#e0f5ed;color:#168b68}
+.preview-section{background:linear-gradient(135deg,#edf5fc 0%,#f2f0fb 100%)}
+.preview-metrics>div{background:linear-gradient(145deg,#203957,#27556a)}
+.preview-metrics strong{color:#6be0b8}
+.preview-workout{background:#e7f6ef;color:#26765d}
+.preview-payment,.account-welcome{background:linear-gradient(110deg,#203957,#225b65)}
+.account-section{background:#f0f5f9}
+.account-status{background:#dcf5e9;color:#16845f}
+.day-workout{background:#e6f5ee;color:#26765d!important}
+.tool-icon{color:#2788d4}
+.chat-reply{background:#edf3fb;color:#405775}
+.faq-list summary:after{color:#1aa77d}
+.site-footer{background:linear-gradient(105deg,#17243a,#203f59)}
+.toast{background:#203957;border-color:#45617a}
+.premium-review-output{background:#f4f8fc;border-color:#e0e8f1}
+.premium-review-metrics span{background:#e4f5ee;color:#27745b}
+.premium-review-focus{background:#e7f5ee}
+.premium-review-focus strong{color:#286c57}
+.progress-entry{background:#f0f6fb;border-color:#e0eaf2}
+.progress-entry-top b{color:#168b68}
+.profile-editor{border-color:#e0e8f1}
+.profile-editor summary:after{color:#168b68}
+#intakeForm .form-consent-check input{accent-color:#18a77b}
+.demo-dashboard{background:linear-gradient(145deg,#203957,#225b65)}
+.demo-brand>b{background:#20b889;color:#fff}
+.demo-online,.demo-ai-card>span{color:#73e0bd}
+.demo-online i,.demo-progress-track i{background:#4ed2a6}
+.demo-sidebar .demo-side-active{background:rgba(78,210,166,.16);color:#8aebc9}
+.demo-stats strong{color:#8aebc9}
+.demo-ai-message{background:#dff7ed;color:#205943}
+@media(max-width:720px){
+  .hero{background:radial-gradient(ellipse at 88% 20%,rgba(136,112,213,.3),transparent 38%),linear-gradient(145deg,#17243a,#1d4b5b)}
+}
