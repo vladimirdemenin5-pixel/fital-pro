@@ -201,8 +201,8 @@
             <label class="field">Вес, кг<input name="weight" type="number" min="35" max="250" step="0.1" value="70" required></label>
             <label class="field">Активность<select name="activity" required><option value="low">Низкая</option><option value="medium" selected>Средняя</option><option value="high">Высокая</option></select></label>
             <label class="field">Цель<select name="goal" required><option value="loss">Снижение веса</option><option value="maintenance" selected>Поддержание формы</option><option value="gain">Набор массы</option></select></label>
-            <label class="field">Где тренируетесь<select name="training" required><option value="home">Дома</option><option value="gym">В зале</option><option value="mixed" selected>Дома и в зале</option></select></label>
-            <label class="field">Тренировок в неделю<select name="days" required><option value="2">2 дня</option><option value="3" selected>3 дня</option><option value="4">4 дня</option><option value="5">5 дней</option><option value="6">6 дней</option><option value="7">7 дней</option></select></label>
+            <label class="field" data-training-field>Где тренируетесь<select name="training" required><option value="home">Дома</option><option value="gym">В зале</option><option value="mixed" selected>Дома и в зале</option></select></label>
+            <label class="field" data-training-field>Тренировок в неделю<select name="days" required><option value="2">2 дня</option><option value="3" selected>3 дня</option><option value="4">4 дня</option><option value="5">5 дней</option><option value="6">6 дней</option><option value="7">7 дней</option></select></label>
             <label class="field field-wide">Пищевые предпочтения и ограничения<textarea name="preferences" rows="3" maxlength="700" placeholder="Например: не употребляю рыбу, предпочитаю простые блюда. Не указывайте диагнозы и сведения о здоровье."></textarea></label>
           </div>
           <p class="form-consent">Указывайте только сведения, необходимые для составления программы. Не вводите диагнозы, результаты обследований и медицинские документы. Сервис не заменяет медицинскую консультацию.</p>
@@ -253,8 +253,8 @@
             <label class="field">Вес, кг<input name="weight" type="number" min="35" max="250" step="0.1" required></label>
             <label class="field">Активность<select name="activity" required><option value="low">Низкая</option><option value="medium">Средняя</option><option value="high">Высокая</option></select></label>
             <label class="field">Цель<select name="goal" required><option value="loss">Снижение веса</option><option value="maintenance">Поддержание формы</option><option value="gain">Набор массы</option></select></label>
-            <label class="field">Где тренируетесь<select name="training" required><option value="home">Дома</option><option value="gym">В зале</option><option value="mixed">Дома и в зале</option></select></label>
-            <label class="field">Тренировок в неделю<select name="days" required><option value="2">2 дня</option><option value="3">3 дня</option><option value="4">4 дня</option><option value="5">5 дней</option><option value="6">6 дней</option><option value="7">7 дней</option></select></label>
+            <label class="field" data-training-field>Где тренируетесь<select name="training" required><option value="home">Дома</option><option value="gym">В зале</option><option value="mixed">Дома и в зале</option></select></label>
+            <label class="field" data-training-field>Тренировок в неделю<select name="days" required><option value="2">2 дня</option><option value="3">3 дня</option><option value="4">4 дня</option><option value="5">5 дней</option><option value="6">6 дней</option><option value="7">7 дней</option></select></label>
             <label class="field field-wide">Пищевые предпочтения и ограничения<textarea name="preferences" rows="3" maxlength="700" placeholder="Укажите продукты, которые не употребляете, и пищевые предпочтения"></textarea></label>
           </div>
           <button class="button button-primary button-full" id="saveProfileButton" type="submit">Сохранить анкету и пересобрать план</button>
