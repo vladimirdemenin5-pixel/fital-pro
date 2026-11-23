@@ -166,7 +166,7 @@ assert.ok(workerSource.includes('rejectIfBusy: true'), 'Workers AI must skip a b
 assert.ok(workerSource.includes('const AI_MODEL_TIMEOUT_MS = 45000;') && workerSource.includes('Promise.race([') && workerSource.includes('runAiInferenceWithTimeout(env, model'), 'each plan-model inference must have a hard timeout so a stalled model cannot block fallbacks');
 assert.equal((workerSource.match(/const models = \['@cf\/zai-org\/glm-4\.7-flash', '@cf\/meta\/llama-3\.1-8b-instruct-fast', MODEL\];/g) || []).length, 1, 'the general chat fallback chain remains unchanged');
 assert.ok(workerSource.includes('max_completion_tokens: 6500') && workerSource.includes('QWEN_PLAN_TIMEOUT_MS = 90000'), 'Qwen and fallback plan models must use bounded output and a model-specific timeout');
-assert.ok(workerSource.includes("type: 'json_schema'") && workerSource.includes('minItems: menuDays') && workerSource.includes('maxItems: menuDays'), 'fast Llama JSON schema must constrain the week array to the requested number of days');
+assert.ok(workerSource.includes('function buildPlanResponseSchema(menuDays)') && workerSource.includes('minItems: menuDays') && workerSource.includes('maxItems: menuDays'), 'the reusable server schema helper must still describe exact plan length');
 assert.ok(workerSource.includes('reasoning_effort: null'), 'reasoning must be explicitly disabled for deterministic structured meal-plan generation');
 assert.ok(workerSource.includes('const aiOptions = {') && workerSource.includes('env.AI.run(model, aiOptions, { rejectIfBusy: true })'), 'the AI chat fallback must also disable reasoning before inference');
 assert.ok(workerSource.includes('week должен содержать РОВНО'), 'the model prompt must explicitly require the exact block length');
