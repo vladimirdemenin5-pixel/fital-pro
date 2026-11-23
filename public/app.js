@@ -36,13 +36,15 @@ async function api(path, options) {
   return data;
 }
 
-function invalidateCheckout() {
+function invalidateCheckout(showMessage = true) {
   intakeRevision++;
   if (checkoutData) {
     checkoutData = null;
     $('#planPreview').classList.add('is-hidden');
     $('#paymentError').textContent = '';
-    $('#formError').textContent = 'Анкета или тариф изменились. Создайте персональный план повторно перед оплатой.';
+    if (showMessage) {
+      $('#formError').textContent = 'Анкета или тариф изменились. Создайте персональный план повторно перед оплатой.';
+    }
   }
   return intakeRevision;
 }
@@ -79,7 +81,7 @@ $('#intakeForm').addEventListener('submit', async function (event) {
   button.textContent = 'ИИ составляет ваш план…';
   const fields = new FormData(form);
   const requestPlan = selectedPlan;
-  const requestRevision = invalidateCheckout();
+  const requestRevision = invalidateCheckout(false);
   const profile = {
     name: fields.get('name'),
     sex: fields.get('sex'),
