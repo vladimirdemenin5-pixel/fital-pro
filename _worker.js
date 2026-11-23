@@ -827,7 +827,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
       const detail = clean(error?.message, 240) || 'unknown model error';
       diagnostics.push(model + ': request-error=' + detail);
       console.error('Fital Pro AI model failed:', model, detail, 'elapsedMs=' + (Date.now() - modelStartedAt));
-      if (/(?:\\b4006\\b|\\b3036\\b|daily free allocation|used up your daily free allocation)/i.test(detail)) {
+      if (/(?:4006|3036|daily free allocation|used up your daily free allocation)/i.test(detail)) {
         throw new Error('Дневной бесплатный лимит ИИ Cloudflare исчерпан. Сейчас новый план создать нельзя; заказ и оплата не создаются. Попробуйте позже.', { cause: error });
       }
     }
