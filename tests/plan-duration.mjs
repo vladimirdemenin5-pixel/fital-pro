@@ -322,7 +322,7 @@ await assert.rejects(
       return { response: JSON.stringify(parsed) };
     }
   } }),
-  /временно не вернул текстовый ответ/,
+  /временно не смог подготовить проверенный план/,
   'plans without practical cooking instructions must be rejected'
 );
 assert.equal(nutritionPlan.week.length, 7);
@@ -331,28 +331,28 @@ assert.equal(nutritionPlan.durationDays, 7);
 
 await assert.rejects(
   () => generateAiPlan(profile, 'PRO', { AI: makeAi(14, true) }),
-  /временно не вернул текстовый ответ/,
+  /временно не смог подготовить проверенный план/,
   'PRO must reject an AI response containing only seven days'
 );
 await assert.rejects(
   () => generateAiPlan(profile, 'Premium', { AI: makeAi(30, true) }),
-  /временно не вернул текстовый ответ/,
+  /временно не смог подготовить проверенный план/,
   'Premium must reject a 14-day response and require all 30 days'
 );
 
 await assert.rejects(
   () => generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, true, false) }),
-  /временно не вернул текстовый ответ/,
+  /временно не смог подготовить проверенный план/,
   'plans without explicit meal portions must be rejected'
 );
 await assert.rejects(
   () => generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, false, true) }),
-  /временно не вернул текстовый ответ/,
+  /временно не смог подготовить проверенный план/,
   'training days without sets or repetitions must be rejected'
 );
 await assert.rejects(
   () => generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, false, false, true) }),
-  /временно не вернул текстовый ответ/,
+  /временно не смог подготовить проверенный план/,
   'days with implausibly low calculated calories and protein must be rejected'
 );
 
