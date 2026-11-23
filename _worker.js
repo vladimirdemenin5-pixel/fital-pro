@@ -832,7 +832,14 @@ async function generateAiPlan(profile, planKey, env) {
 
   // Generate at most three days per model call. Short blocks reduce inference latency
   // and keep structured JSON output manageable for Qwen and GPT-OSS fallbacks.
-  for (let offset = 0; offset < totalDays; offset += 3) {
+  // Generate two independent three-day chunks concurrently. This cuts the
+  // wall-clock time for 14/30-day plans without increasing output size or
+  // weakening per-chunk nutrition/training validation.
+  for (let batchOffset = 0; batchOffset < totalDays; batchOffset += 6) {
+    const batch = await Promise.all([0, 3]
+      .filter(delta => batchOffset + delta < totalDays)
+      .map(async delta => {
+    const offset = batchOffset + delta;
     const chunkDays = Math.min(3, totalDays - offset);
     const trainingDays = Array.from({ length: chunkDays }, (_, index) => offset + index + 1)
       .filter(day => isScheduledTrainingDay(day, profile.days));
@@ -881,12 +888,21 @@ async function generateAiPlan(profile, planKey, env) {
     if (!week) {
       throw new Error('ИИ не смог составить блок с проверяемыми порциями и подходящими суточными калориями и БЖУ.');
     }
-    week.forEach((day, index) => {
-      day.day = 'День ' + (offset + index + 1);
-      fullWeek.push(day);
-    });
-    if (!intro) intro = clean(parsed.intro, 700);
-    if (Array.isArray(parsed.tips)) tips.push(...parsed.tips.map(item => clean(item, 220)).filter(Boolean));
+    return {
+      offset,
+      week,
+      intro: clean(parsed.intro, 700),
+      tips: Array.isArray(parsed.tips) ? parsed.tips.map(item => clean(item, 220)).filter(Boolean) : []
+    };
+      }));
+    for (const chunk of batch.sort((a, b) => a.offset - b.offset)) {
+      chunk.week.forEach((day, index) => {
+        day.day = 'День ' + (chunk.offset + index + 1);
+        fullWeek.push(day);
+      });
+      if (!intro) intro = chunk.intro;
+      tips.push(...chunk.tips);
+    }
   }
 
   const shopping = buildShoppingList(fullWeek);
