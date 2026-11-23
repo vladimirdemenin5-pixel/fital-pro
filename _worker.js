@@ -1116,7 +1116,9 @@ async function parsePaymentFields(request) {
 async function aiPlanDiagnostic(request, env) {
   const expectedKey = clean(env.ROBOKASSA_TEST_ACCESS_KEY, 256);
   const suppliedKey = clean(request.headers.get('X-Fital-Test-Key'), 256);
-  if (!expectedKey || !suppliedKey || !sameHash(md5(expectedKey), md5(suppliedKey))) {
+  const secretAuthorized = !!expectedKey && !!suppliedKey && sameHash(md5(expectedKey), md5(suppliedKey));
+  const oidcAuthorized = secretAuthorized ? false : await verifyGitHubActionsOidc(request, env, 'preview');
+  if (!secretAuthorized && !oidcAuthorized) {
     return json({ error: 'Диагностический доступ не настроен или ключ неверен.' }, 404);
   }
   if (!env.AI) return json({ error: 'Workers AI не подключён.' }, 503);
@@ -1336,7 +1338,7 @@ async function githubOidcJwks() {
   return githubOidcJwksCache;
 }
 
-async function verifyGitHubActionsOidc(request) {
+async function verifyGitHubActionsOidc(request, env, mode = 'production') {
   const authorization = request.headers.get('Authorization') || '';
   const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
   if (!token) return false;
@@ -1348,15 +1350,30 @@ async function verifyGitHubActionsOidc(request) {
     const claims = JSON.parse(new TextDecoder().decode(base64UrlBytes(parts[1])));
     const now = Math.floor(Date.now() / 1000);
     const repository = 'vladimirdemenin5-pixel/fital-pro';
-    const workflowRef = repository + '/.github/workflows/main.yml@refs/heads/main';
+    const productionWorkflowRef = repository + '/.github/workflows/main.yml@refs/heads/main';
+    const productionWorkflow =
+      claims.ref === 'refs/heads/main' &&
+      claims.workflow_ref === productionWorkflowRef &&
+      claims.event_name === 'push' &&
+      ['repo:' + repository + ':ref:refs/heads/main', 'repo:vladimirdemenin5-pixel@324070911/fital-pro@1354815283:ref:refs/heads/main'].includes(claims.sub);
+    // Preview OIDC is accepted only in an explicitly remote-dev Worker session.
+    // Production does not define FITALPRO_PREVIEW_CI, so a PR token cannot invoke
+    // the AI-only diagnostic route on the live Worker.
+    const previewWorkflowRef = repository + '/.github/workflows/preview-ai-generation.yml@refs/pull/47/merge';
+    const previewWorkflow =
+      mode === 'preview' &&
+      env?.FITALPRO_PREVIEW_CI === '1' &&
+      claims.ref === 'refs/pull/47/merge' &&
+      claims.workflow_ref === previewWorkflowRef &&
+      claims.event_name === 'pull_request' &&
+      claims.head_ref === 'fix/ai-plan-generation-three-day-chunks' &&
+      claims.base_ref === 'main' &&
+      claims.sub === 'repo:' + repository + ':pull_request';
     if (header.alg !== 'RS256' || !header.kid ||
         claims.iss !== 'https://token.actions.githubusercontent.com' ||
         claims.aud !== 'fitalpro-ai-data-flow' ||
         claims.repository !== repository ||
-        claims.ref !== 'refs/heads/main' ||
-        claims.workflow_ref !== workflowRef ||
-        claims.event_name !== 'push' ||
-        !['repo:' + repository + ':ref:refs/heads/main', 'repo:vladimirdemenin5-pixel@324070911/fital-pro@1354815283:ref:refs/heads/main'].includes(claims.sub) ||
+        (mode === 'production' ? !productionWorkflow : !previewWorkflow) ||
         !Number.isFinite(claims.exp) || claims.exp <= now ||
         !Number.isFinite(claims.iat) || claims.iat > now + 60 || now - claims.iat > 600 ||
         (Number.isFinite(claims.nbf) && claims.nbf > now + 60)) return false;
