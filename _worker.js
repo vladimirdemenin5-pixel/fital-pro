@@ -512,7 +512,7 @@ function rebalanceDayNutrition(day, targets, profile) {
             ingredients.push({foodId,name:FOOD_CATALOG[foodId].name,grams});
             const candidateScore = score();
             if (candidateScore < currentScore - 1e-8 && (!best || candidateScore < best.score)) {
-              best = {type:'add',key,item:{foodId,name:food.name,grams},score:candidateScore};
+              best = {type:'add',key,item:{foodId,name:FOOD_CATALOG[foodId].name,grams},score:candidateScore};
             }
             ingredients.pop();
           }
