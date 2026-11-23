@@ -1627,14 +1627,14 @@ async function verifyGitHubActionsOidc(request, env, mode = 'production') {
     // Preview OIDC is accepted only in an explicitly remote-dev Worker session.
     // Production does not define FITALPRO_PREVIEW_CI, so a PR token cannot invoke
     // the AI-only diagnostic route on the live Worker.
-    const previewWorkflowRef = repository + '/.github/workflows/preview-ai-generation.yml@refs/pull/47/merge';
+    const previewWorkflowRef = repository + '/.github/workflows/pull-request-checks.yml@refs/pull/53/merge';
     const previewWorkflow =
       mode === 'preview' &&
       env?.FITALPRO_PREVIEW_CI === '1' &&
-      claims.ref === 'refs/pull/47/merge' &&
+      claims.ref === 'refs/pull/53/merge' &&
       claims.workflow_ref === previewWorkflowRef &&
       claims.event_name === 'pull_request' &&
-      claims.head_ref === 'fix/ai-plan-generation-three-day-chunks' &&
+      claims.head_ref === 'design/tilda-inspired-bold-redesign' &&
       claims.base_ref === 'main' &&
       ['repo:' + repository + ':pull_request', 'repo:vladimirdemenin5-pixel@324070911/fital-pro@1354815283:pull_request'].includes(claims.sub);
     if (header.alg !== 'RS256' || !header.kid ||
@@ -1670,7 +1670,8 @@ async function aiDataFlowDiagnostic(request, env) {
   const expectedKey = clean(env.FITALPRO_CI_TEST_KEY || env.ROBOKASSA_TEST_ACCESS_KEY, 256);
   const suppliedKey = clean(request.headers.get('X-Fital-Test-Key'), 256);
   const secretAuthorized = !!expectedKey && !!suppliedKey && sameHash(md5(expectedKey), md5(suppliedKey));
-  const oidcAuthorized = secretAuthorized ? false : await verifyGitHubActionsOidc(request);
+  const diagnosticMode = env?.FITALPRO_PREVIEW_CI === '1' ? 'preview' : 'production';
+  const oidcAuthorized = secretAuthorized ? false : await verifyGitHubActionsOidc(request, env, diagnosticMode);
   if (!secretAuthorized && !oidcAuthorized) {
     return json({ error: 'Диагностический доступ не настроен или ключ неверен.' }, 404);
   }
