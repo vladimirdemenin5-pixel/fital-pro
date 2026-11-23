@@ -244,13 +244,22 @@ function diagnoseMealIngredients(raw) {
   return null;
 }
 
-function normalizeMealIngredients(raw) {
-  if (diagnoseMealIngredients(raw)) return null;
-  return raw.map(item => {
-    const foodId = Array.isArray(item) ? item[0] : item.foodId;
-    const grams = Array.isArray(item) ? item[1] : item.grams;
-    return { foodId, name: FOOD_CATALOG[foodId].name, grams };
-  });
+function normalizeMealIngredients(raw, enforceFoodPortionLimits = false) {
+  if (!Array.isArray(raw) || raw.length < 1 || raw.length > 6) return null;
+  const normalized = [];
+  for (const item of raw) {
+    const foodId = Array.isArray(item) && item.length === 2 ? item[0] : item?.foodId;
+    const grams = Array.isArray(item) && item.length === 2 ? item[1] : item?.grams;
+    if (typeof foodId !== 'string' || !Object.hasOwn(FOOD_CATALOG, foodId) || !Number.isSafeInteger(grams)) return null;
+    if (enforceFoodPortionLimits) {
+      const maximum = MAX_MEAL_INGREDIENT_GRAMS[foodId] || 250;
+      normalized.push({ foodId, name: FOOD_CATALOG[foodId].name, grams: Math.max(5, Math.min(maximum, grams)) });
+    } else {
+      if (grams < 5 || grams > 500) return null;
+      normalized.push({ foodId, name: FOOD_CATALOG[foodId].name, grams });
+    }
+  }
+  return normalized;
 }
 
 function buildPlanResponseSchema(menuDays) {
@@ -605,16 +614,16 @@ function normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, target
       trainingDay: includesTraining && isScheduledTrainingDay(startDay + index, profile.days),
       breakfast: clean(source.breakfast, 120),
       breakfastRecipe: clean(source.breakfastRecipe, 300),
-      breakfastIngredients: normalizeMealIngredients(source.breakfastIngredients),
+      breakfastIngredients: normalizeMealIngredients(source.breakfastIngredients, true),
       lunch: clean(source.lunch, 120),
       lunchRecipe: clean(source.lunchRecipe, 300),
-      lunchIngredients: normalizeMealIngredients(source.lunchIngredients),
+      lunchIngredients: normalizeMealIngredients(source.lunchIngredients, true),
       snack: clean(source.snack, 120),
       snackRecipe: clean(source.snackRecipe, 300),
-      snackIngredients: normalizeMealIngredients(source.snackIngredients),
+      snackIngredients: normalizeMealIngredients(source.snackIngredients, true),
       dinner: clean(source.dinner, 120),
       dinnerRecipe: clean(source.dinnerRecipe, 300),
-      dinnerIngredients: normalizeMealIngredients(source.dinnerIngredients),
+      dinnerIngredients: normalizeMealIngredients(source.dinnerIngredients, true),
       workout: includesTraining && isScheduledTrainingDay(startDay + index, profile.days)
         ? clean(source.workout, 400)
         : (includesTraining
@@ -847,7 +856,12 @@ async function generateAiPlan(profile, planKey, env) {
       ['обед', 0.30],
       ['перекус', 0.15],
       ['ужин', 0.30]
-    ].map(([name, share]) => name + ' — около ' + Math.round(targets.calories * share) + ' ккал').join('; ');
+    ].map(([name, share]) =>
+      name + ': ' + Math.round(targets.calories * share) + ' ккал, белки ' +
+      Math.round(targets.protein * share) + ' г, жиры ' +
+      Math.round(targets.fat * share) + ' г, углеводы ' +
+      Math.round(targets.carbs * share) + ' г'
+    ).join('; ');
 
     const prompt = [
       'Ты — Fital Pro, профессиональный помощник по здоровому питанию и безопасному фитнесу.',
@@ -855,10 +869,10 @@ async function generateAiPlan(profile, planKey, env) {
       'Верни только корректный JSON без Markdown, без комментариев и без текста до или после JSON.',
       'КРИТИЧЕСКИ ВАЖНО: массив week должен содержать РОВНО ' + chunkDays + ' дней этого блока. Верни все дни от День ' + (offset + 1) + ' до День ' + (offset + chunkDays) + '. Не сокращай блок до меньшего количества дней, не объединяй дни и не пропускай дни.',
       'Структура JSON: {"intro":"короткое персональное объяснение","week":[{"day":"День ' + (offset + 1) + '","trainingDay":false,"breakfast":"название блюда","breakfastRecipe":"короткий способ приготовления","breakfastIngredients":[{"foodId":"oats_dry","grams":60}],"lunch":"название блюда","lunchRecipe":"короткий способ приготовления","lunchIngredients":[{"foodId":"chicken_raw","grams":120}],"snack":"название блюда","snackRecipe":"короткий способ подачи или приготовления","snackIngredients":[{"foodId":"greek_yogurt","grams":150}],"dinner":"название блюда","dinnerRecipe":"короткий способ приготовления","dinnerIngredients":[{"foodId":"salmon_raw","grams":120}],"workout":"план тренировки или восстановления"}],"tips":["практичный совет"]}. trainingDay — строго boolean. Для каждого приёма пищи обязательны ingredients-массивы.',
-      'Для каждого приёма пищи обязательно заполни отдельное поле: breakfastRecipe, lunchRecipe, snackRecipe или dinnerRecipe соответственно. Это 1 короткая, конкретная инструкция по приготовлению (1–2 шага, от 15 до 300 символов); не повторяй список ингредиентов и не пиши общие фразы. Каждый ingredients-массив содержит 1–6 объектов вида {"foodId":"oats_dry","grams":60}. В каждом объекте обязательны ровно два поля: foodId и grams. Используй ТОЛЬКО точные foodId из справочника ниже. grams — целое число от 5 до 500 съедобных граммов ДО приготовления: мясо, рыба, овощи и фрукты — сырые очищенные части; крупы, макароны и бобовые — сухой вес; яйца — без скорлупы. Не используй готовый вес. Масло и орехи учитывай, если добавляешь их в блюдо. Не добавляй в название блюда продукты, которых нет в его ingredients.',
+      'Для каждого приёма пищи обязательно заполни отдельное поле: breakfastRecipe, lunchRecipe, snackRecipe или dinnerRecipe соответственно. Это 1 короткая, конкретная инструкция по приготовлению (1–2 шага, от 15 до 300 символов); не повторяй список ингредиентов и не пиши общие фразы. Каждый ingredients-массив содержит 2–4 объекта вида {"foodId":"oats_dry","grams":60}. В каждом объекте обязательны ровно два поля: foodId и grams. Используй ТОЛЬКО точные foodId из справочника ниже. grams — целое число от 5 до 500 съедобных граммов ДО приготовления: мясо, рыба, овощи и фрукты — сырые очищенные части; крупы, макароны и бобовые — сухой вес; яйца — без скорлупы. Не используй готовый вес. Масло и орехи учитывай, если добавляешь их в блюдо. Не добавляй в название блюда продукты, которых нет в его ingredients.',
       'Пиши краткое название блюда без граммов. Полный состав и вес продуктов будут показаны отдельно. shopping не возвращай: список покупок сервер рассчитает сам по всем ингредиентам.',
       'Целевые ориентиры КАЖДОГО дня: ' + targets.calories + ' ккал, белок ' + targets.protein + ' г, жиры ' + targets.fat + ' г, углеводы ' + targets.carbs + ' г. Для надёжного запаса от границ проверки планируй рацион около 95–105% целевых калорий и белка, 90–110% целевых жиров и углеводов; не стремись к нижней границе допуска. Допуск сервера остаётся неизменным: калории и белок ±20%, жиры и углеводы ±30%. Калорийность каждого дня должна быть не ниже ' + Math.round(targets.calories * 0.8) + ' и не выше ' + Math.round(targets.calories * 1.2) + ' ккал.',
-      'Целевые калории по приёмам пищи: ' + mealCalorieTargets + '. Не делай маленькие порции и не оставляй значительную часть дневной нормы нераспределённой. Если сумма калорий ниже цели, увеличь граммовки подходящих продуктов из справочника и перепроверь сумму каждого дня. Индивидуальные максимумы на один продукт в одном приёме пищи (г): ' + JSON.stringify(Object.fromEntries(Object.keys(FOOD_CATALOG).map(id => [id, MAX_MEAL_INGREDIENT_GRAMS[id] || 250]))) + '. Никогда не превышай максимум соответствующего foodId и общий предел 500 г.',
+      'Распредели дневные нормы калорий и всех БЖУ по четырём приёмам пищи так: ' + mealCalorieTargets + '. Ориентир каждого приёма пищи — отклонение не более 15%; итоговые значения за день обязаны пройти строгую серверную проверку. Не делай маленькие порции и не оставляй значительную часть дневной нормы нераспределённой. Если сумма калорий ниже цели, увеличь граммовки подходящих продуктов из справочника и перепроверь сумму каждого дня. Индивидуальные максимумы на один продукт в одном приёме пищи (г): ' + JSON.stringify(Object.fromEntries(Object.keys(FOOD_CATALOG).map(id => [id, MAX_MEAL_INGREDIENT_GRAMS[id] || 250]))) + '. Никогда не превышай максимум соответствующего foodId и общий предел 500 г.',
       'Не делай рацион преимущественно белковым: распределяй нужное количество сложных углеводов по завтраку, обеду и ужину. Для источников углеводов выбирай подходящие по предпочтениям продукты из овсянки, риса, гречки, макарон, киноа, картофеля, батата, цельнозернового хлеба, бобовых и фруктов. При цели углеводов от 150 г в сутки используй несколько таких источников в течение дня, а не только овощи.',
       'Перед выдачей проверь каждый день отдельно: сложи калории и БЖУ всех ингредиентов по справочнику. Не возвращай день, если калории, белок, жиры или углеводы выходят за указанные допуски.',
       'СПРАВОЧНИК ПРОДУКТОВ НА 100 г (ккал, белки г, жиры г, углеводы г): ' + JSON.stringify(Object.entries(FOOD_CATALOG).map(([id,food])=>[id,food.name,food.kcal,food.protein,food.fat,food.carbs])),
