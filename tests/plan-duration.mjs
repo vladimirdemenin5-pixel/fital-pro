@@ -169,7 +169,7 @@ const wrongModelTrainingFlagsPlan = await generateAiPlan(profile, 'PRO', { AI: {
 } });
 assert.deepEqual(
   wrongModelTrainingFlagsPlan.week.map(day => day.trainingDay),
-  wrongModelTrainingFlagsPlan.week.map((_, index) => Math.floor(((index + 1) % 7) * profile.days / 7) > Math.floor((index % 7) * profile.days / 7)),
+  wrongModelTrainingFlagsPlan.week.map((_, index) => Math.floor(((index % 7) + 1) * profile.days / 7) > Math.floor((index % 7) * profile.days / 7)),
   'the server must override model-provided training flags and enforce the exact weekly schedule'
 );
 assert.ok(wrongModelTrainingFlagsPlan.week.every((day,index) =>
@@ -244,7 +244,7 @@ const timeoutRecoveredPlan = await generateAiPlan(profile, 'Питание', { A
   }
 } });
 assert.equal(timeoutRecoveredPlan.week.length, 7, 'a timed-out first model must fall back to the next available model');
-assert.equal(timeoutFallbackModelsByBlock.get(1)?.[1], '@cf/openai/gpt-oss-120b', 'the same three-day block must fall back from Qwen 3.8 to OpenAI GPT-OSS 120B');
+assert.equal(timeoutFallbackModelsByBlock.get(1)?.[1], '@cf/openai/gpt-oss-120b', 'the same two-day block must fall back from Qwen 3.8 to OpenAI GPT-OSS 120B');
 assert.equal(timeoutFallbackModelsByBlock.get(3)?.[0], '@cf/qwen/qwen3.8-27b', 'the second concurrent two-day block must keep its own independent Qwen primary call');
 let qwenModelInput = null;
 const qwenPrimaryPlan = await generateAiPlan(profile, 'Питание', { AI: {
