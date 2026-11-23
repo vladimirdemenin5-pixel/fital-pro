@@ -159,7 +159,7 @@ assert.ok(app.includes("$('#premiumReviewTool').classList.toggle('is-hidden', !p
 assert.ok(app.includes("api('/api/premium/review')"));
 assert.ok(html.includes('id="premiumReviewTool"'));
 assert.ok(html.includes('Еженедельный разбор дневника'));
-assert.ok(html.includes('сервис показывает фактическую сводку по сохранённым отметкам'));
+assert.ok(html.includes('фактическую сводку по сохранённым записям без ИИ'));
 assert.ok(offer.includes('автоматизированный разбор дневника'));
 assert.ok(offer.includes('фактическую сводку по сохранённым отметкам'));
 
