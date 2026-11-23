@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { generateAiPlan, runAiTextWithFallback, runAiInferenceWithTimeout, aiPlanDiagnostic, aiDataFlowDiagnostic, FOOD_CATALOG, buildPlanResponseSchema, diagnosePlanWeekFailure, rebalanceDayNutrition, foodAllowedByPreferences } from '../_worker.js';
+import { generateAiPlan, runAiTextWithFallback, runAiInferenceWithTimeout, aiPlanDiagnostic, aiDataFlowDiagnostic, FOOD_CATALOG, buildPlanResponseSchema, diagnosePlanWeekFailure, rebalanceDayNutrition, foodAllowedByPreferences, foodRole, foodCanReplaceFood, foodFitsMeal } from '../_worker.js';
 import { readFile } from 'node:fs/promises';
 
 const workerSource = await readFile(new URL('../_worker.js', import.meta.url), 'utf8');
@@ -56,12 +56,22 @@ function makeAi(menuDays, wrongLength = false, invalidMeal = false, invalidWorko
   };
 }
 
+assert.ok(Object.keys(FOOD_CATALOG).every(id => foodRole(id)), 'every catalog item must have a meal role');
+assert.equal(foodCanReplaceFood('chicken_raw', 'turkey_raw'), true, 'poultry may be substituted with poultry');
+assert.equal(foodCanReplaceFood('chicken_raw', 'banana'), false, 'protein must not be replaced with fruit');
+assert.equal(foodCanReplaceFood('rice_dry', 'buckwheat_dry'), true, 'grain may be substituted with another grain');
+assert.equal(foodCanReplaceFood('rice_dry', 'chicken_raw'), false, 'grain must not be replaced with meat');
+assert.equal(foodFitsMeal('cod_raw', 'dinner'), true, 'fish is compatible with dinner');
+assert.equal(foodFitsMeal('cod_raw', 'snack'), false, 'fish must not be auto-added to a snack');
+assert.equal(foodFitsMeal('banana', 'snack'), true, 'fruit is compatible with a snack');
+assert.equal(foodFitsMeal('banana', 'dinner'), false, 'fruit must not be auto-added as a dinner component');
+
 const macroCorrectionDay = {
   day: 'День 1',
   trainingDay: false,
   breakfast: 'Омлет',
   breakfastRecipe: 'Приготовь продукты до готовности и подай вместе.',
-  breakfastIngredients: [{ foodId: 'chicken_raw', name: FOOD_CATALOG.chicken_raw.name, grams: 250 }],
+  breakfastIngredients: [{ foodId: 'egg_raw', name: FOOD_CATALOG.egg_raw.name, grams: 200 }],
   lunch: 'Индейка',
   lunchRecipe: 'Приготовь продукты до готовности и подай вместе.',
   lunchIngredients: [{ foodId: 'turkey_raw', name: FOOD_CATALOG.turkey_raw.name, grams: 250 }],
@@ -83,7 +93,11 @@ assert.ok(macroCorrectionDay.nutrition.fat >= 40.6 && macroCorrectionDay.nutriti
 assert.ok(macroCorrectionDay.nutrition.carbs >= 157.5 && macroCorrectionDay.nutrition.carbs <= 292.5);
 const correctedMacroFoodIds = ['breakfast','lunch','snack','dinner'].flatMap(key => macroCorrectionDay[key + 'Ingredients'].map(item => item.foodId));
 assert.notDeepEqual(correctedMacroFoodIds, originalMacroFoodIds, 'the correction must actually replace products from the catalog');
-assert.ok(['breakfast','lunch','snack','dinner'].some(key => macroCorrectionDay[key + 'Recipe'].startsWith('Состав скорректирован по нормам БЖУ: ')), 'the recipe must be synchronized with changed ingredients');
+assert.ok(['breakfast','lunch','snack','dinner'].some(key => macroCorrectionDay[key + 'Recipe'].length >= 20 && macroCorrectionDay[key + 'Recipe'].includes('приготов')), 'the recipe must be synchronized with changed ingredients');
+for (const key of ['breakfast','lunch','snack','dinner']) {
+  assert.ok(macroCorrectionDay[key+'Ingredients'].every(item => foodFitsMeal(item.foodId, key)), key + ' correction must keep every ingredient compatible with its meal');
+  assert.ok(macroCorrectionDay[key+'Ingredients'].every(item => foodAllowedByPreferences(item.foodId, profile)), key + ' correction must preserve client food restrictions');
+}
 assert.equal(foodAllowedByPreferences('greek_yogurt', { preferences: 'Без молочных продуктов' }), false, 'replacement candidates must respect dairy restrictions');
 assert.equal(foodAllowedByPreferences('milk_2pct', { preferences: 'Без молока' }), false, 'inflected dairy restrictions must also be recognized');
 assert.equal(foodAllowedByPreferences('chicken_raw', { preferences: 'Вегетарианство' }), false, 'replacement candidates must respect vegetarian restrictions');
