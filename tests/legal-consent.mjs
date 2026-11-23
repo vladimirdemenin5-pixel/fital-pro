@@ -132,14 +132,19 @@ assert.ok(chatStart >= 0 && leadStart > chatStart, 'AI chat handler must exist')
 const chatSource = worker.slice(chatStart, leadStart);
 assert.ok(chatSource.includes("'SELECT plan_json FROM weekly_plans WHERE access_token=?'"), 'AI consultant must load the member saved plan');
 assert.ok(chatSource.includes("'Сохранённый план клиента (JSON): ' + plan"), 'AI consultant prompt must include the saved weekly plan');
-assert.equal(worker.split('clean(planRow.plan_json, 24000)').length - 1, 2, 'AI chat and Premium review must receive the complete saved plan');
+assert.equal(worker.split('clean(planRow.plan_json, 100000)').length - 1, 2, 'AI chat and Premium review must receive the complete saved plan');
 assert.ok(chatSource.includes('сначала опирайся на сохранённый план'), 'AI consultant must prioritize the actual plan for substitutions and workouts');
 assert.ok(chatSource.includes('reply = await runAiTextWithFallback(env,'), 'AI consultant must use the primary and existing fallback model');
-assert.ok(chatSource.includes('ИИ-консультант временно недоступен'), 'AI provider failures must return a controlled API error');
+assert.ok(chatSource.includes('buildLocalPlanChatReply(message, savedPlan)') && chatSource.includes("replyMode = 'saved-plan'"),
+  'AI provider failures must fall back to an honest response based on the saved member plan');
 
 
 assert.ok(worker.includes("memberRateLimit(env, sub.access_token, 'profile-update', 5, 3600000)"), 'AI profile regeneration must be limited per active subscription');
 assert.ok(worker.includes("async function premiumReviewApi(request, env)"), 'Premium weekly review API must exist');
+assert.ok(worker.includes("buildLocalPremiumDiaryReview(stats, progress)"), 'Premium must return a factual diary summary when the generative provider is unavailable');
+assert.ok(worker.includes("reviewMode: parsed.reviewMode || reviewMode"), 'Premium review must disclose whether it is an AI review or a factual diary summary');
+assert.ok(worker.includes("buildLocalPlanChatReply(message, savedPlan)"), 'member consultant must answer from the saved plan when the AI provider is unavailable');
+assert.ok(worker.includes("const planJson = planRow ? clean(planRow.plan_json, 100000) : ''"), 'member consultant must load the complete 30-day Premium plan without truncating the saved data');
 assert.ok(worker.includes("sub.plan !== 'Premium'"), 'Premium review must be restricted to Premium');
 assert.ok(worker.includes("CREATE TABLE IF NOT EXISTS premium_reviews"), 'Premium review history must persist in D1');
 assert.ok(premiumSchema.includes('UNIQUE(access_token, period_start)'), 'Premium review migration must enforce one report per week');
@@ -153,7 +158,9 @@ assert.ok(worker.includes("SELECT plan_json FROM weekly_plans WHERE access_token
 assert.ok(app.includes("$('#premiumReviewTool').classList.toggle('is-hidden', !premiumFeatures)"));
 assert.ok(app.includes("api('/api/premium/review')"));
 assert.ok(html.includes('id="premiumReviewTool"'));
-assert.ok(html.includes('Еженедельный ИИ-разбор дневника'));
-assert.ok(offer.includes('автоматизированный ИИ-разбор дневника'));
+assert.ok(html.includes('Еженедельный разбор дневника'));
+assert.ok(html.includes('фактическую сводку по сохранённым записям без ИИ'));
+assert.ok(offer.includes('автоматизированный разбор дневника'));
+assert.ok(offer.includes('фактическую сводку по сохранённым отметкам'));
 
 console.log('PASS: legal/payment protections, AI plans, and Premium weekly review');

@@ -169,10 +169,10 @@
         </article>
         <article class="tariff-card" data-card-plan="Premium">
           <div class="tariff-top"><span class="tariff-type">РАСШИРЕННЫЙ ДОСТУП</span><span class="tariff-duration">30 ДНЕЙ</span></div>
-          <h3>Premium</h3><p class="tariff-description">Всё из PRO плюс регулярный ИИ-анализ динамики и следующие шаги.</p>
+          <h3>Premium</h3><p class="tariff-description">Всё из PRO плюс еженедельный разбор дневника и персональные ориентиры на следующую неделю.</p>
           <div class="price">3 990 <small>₽</small></div>
           <div class="price-note">разовая оплата · 30 дней доступа</div>
-          <ul><li>Персональное меню и тренировочная программа на все 30 дней</li><li>Еженедельный ИИ-разбор дневника</li><li>Анализ веса, питания и тренировок</li><li>Персональные ориентиры на следующую неделю</li><li>История пяти последних разборов</li><li>Доступ на 30 дней</li></ul>
+          <ul><li>Персональное меню и тренировочная программа на все 30 дней</li><li>Еженедельный разбор дневника</li><li>Анализ веса, питания и тренировок</li><li>Персональные ориентиры на следующую неделю</li><li>История пяти последних разборов</li><li>Доступ на 30 дней</li></ul>
           <button class="button button-outline select-plan" type="button" data-plan="Premium">Выбрать Premium <span>↗</span></button>
         </article>
       </div>
@@ -183,7 +183,7 @@
       <div class="form-intro">
         <div class="eyebrow"><span class="eyebrow-dot"></span> ПЕРСОНАЛЬНЫЙ ПОДБОР</div>
         <h2>Начнём<br><em>с вашей цели.</em></h2>
-        <p>Заполните анкету. ИИ подготовит персональную программу. До оплаты вы увидите пример первого дня, а полная программа откроется после подтверждения оплаты.</p>
+        <p>Заполните анкету. Fital Pro подготовит персональную программу по вашим параметрам. При доступности генеративной модели используется ИИ; иначе план рассчитывается сервером по справочнику продуктов. До оплаты вы увидите пример первого дня.</p>
         <div class="form-assurance"><span>✓</span> Данные анкеты не публикуются</div>
         <div class="form-assurance"><span>✓</span> План формируется индивидуально</div>
         <div class="form-assurance"><span>✓</span> Оплата — только после создания плана</div>
@@ -206,10 +206,10 @@
             <label class="field field-wide">Пищевые предпочтения и ограничения<textarea name="preferences" rows="3" maxlength="700" placeholder="Например: не употребляю рыбу, предпочитаю простые блюда. Не указывайте диагнозы и сведения о здоровье."></textarea></label>
           </div>
           <p class="form-consent">Указывайте только сведения, необходимые для составления программы. Не вводите диагнозы, результаты обследований и медицинские документы. Сервис не заменяет медицинскую консультацию.</p>
-          <p class="form-consent">Для подготовки плана используется Cloudflare Workers AI (в том числе модели Qwen и OpenAI GPT-OSS, размещённые в инфраструктуре Cloudflare). Перед отправкой имя клиента заменяется на нейтральное обозначение; контактные и платёжные данные в запрос модели не передаются. Состав передаваемых данных и обработка описаны в <a href="/privacy.html" target="_blank" rel="noopener">Политике обработки персональных данных</a>.</p>
+          <p class="form-consent">Для подготовки плана используется Cloudflare Workers AI (модели Qwen и OpenAI GPT-OSS в инфраструктуре Cloudflare). Резервный генеративный провайдер Groq может использоваться только при отдельной настройке серверного ключа; сейчас этот провайдер не активирован. Если резервный провайдер будет включён, необходимые параметры анкеты и текст вопроса будут передаваться ему для обработки. Перед отправкой имя клиента заменяется на нейтральное обозначение; контактные и платёжные данные в запрос модели не передаются. При недоступности генеративных моделей план рассчитывается по серверному справочнику продуктов и формулам Fital Pro. Состав передаваемых данных и обработка описаны в <a href="/privacy.html" target="_blank" rel="noopener">Политике обработки персональных данных</a>.</p>
           <label class="form-consent form-consent-check"><input name="pd_consent" type="checkbox" required> <span>Согласен(а) на обработку персональных данных по <a href="/privacy.html" target="_blank" rel="noopener">Политике обработки персональных данных</a>.</span></label>
           <label class="form-consent form-consent-check"><input name="offer_accepted" type="checkbox" required> <span>Принимаю условия <a href="/oferta.html" target="_blank" rel="noopener">публичной оферты</a> и <a href="/delivery-refund.html" target="_blank" rel="noopener">условия оказания услуг и возврата</a>.</span></label>
-          <button class="button button-primary button-full" id="generateButton" type="submit">Создать мой план с ИИ <span>↗</span></button>
+          <button class="button button-primary button-full" id="generateButton" type="submit">Создать мой персональный план <span>↗</span></button>
           <p class="form-error" id="formError" role="alert"></p>
         </form>
       </div>
@@ -244,7 +244,7 @@
       <div class="account-welcome"><div><span class="mini-label">FITAL PRO</span><h3 id="accountPlanName">Ваша программа</h3><p id="accountExpiry">Доступ активен</p></div><button class="button button-outline button-small" id="reloadPlan" type="button">Обновить план ↻</button></div>
       <details class="profile-editor">
         <summary>Изменить анкету и пересобрать программу</summary>
-        <p class="profile-editor-note">Обновите вес, цель, активность или предпочтения. Fital AI создаст новый план на основе этих данных.</p>
+        <p class="profile-editor-note">Обновите вес, цель, активность или предпочтения. Сервис пересчитает программу на основе этих данных; при доступности генеративной модели будет использован ИИ.</p>
         <form id="profileUpdateForm">
           <div class="form-grid">
             <label class="field field-wide">Как к вам обращаться<input name="name" type="text" maxlength="80" autocomplete="name" required></label>
@@ -269,13 +269,13 @@
           <p class="tool-message" id="progressMessage"></p>
           <div class="progress-history" id="progressHistory" aria-live="polite"></div>
         </div>
-        <div class="tool-card chat-card" id="chatTool"><span class="tool-icon">✳</span><h3>Fital AI — ваш консультант</h3><p>Задайте вопрос по вашему плану питания или тренировок.</p>
-          <form id="chatForm"><label class="field">Ваш вопрос<textarea name="message" rows="3" maxlength="2000" placeholder="Например: чем заменить курицу в обеде?" required></textarea></label><button class="button button-primary button-full" type="submit">Спросить ИИ ↗</button></form>
+        <div class="tool-card chat-card" id="chatTool"><span class="tool-icon">✳</span><h3>Fital Pro — ваш консультант</h3><p>Задайте вопрос по сохранённому плану питания или тренировкам. При доступности генеративной модели ответит ИИ; в резервном режиме сервис покажет данные вашего плана.</p>
+          <form id="chatForm"><label class="field">Ваш вопрос<textarea name="message" rows="3" maxlength="2000" placeholder="Например: чем заменить курицу в обеде?" required></textarea></label><button class="button button-primary button-full" type="submit">Задать вопрос ↗</button></form>
           <div id="chatReply" class="chat-reply" aria-live="polite"></div>
         </div>
         <div class="tool-card premium-review-card is-hidden" id="premiumReviewTool">
           <span class="tool-icon">✦</span><h3>Еженедельный разбор Premium</h3>
-          <p>Fital AI сопоставит записи дневника с вашим планом, выделит динамику и подготовит конкретные ориентиры на следующую неделю.</p>
+          <p>При доступности генеративной модели Fital AI подготовит разбор дневника. Если модель недоступна, сервис сформирует фактическую сводку по сохранённым записям без ИИ.</p>
           <button class="button button-primary button-full" id="premiumReviewButton" type="button" disabled>Подготовить разбор недели ↗</button>
           <p class="tool-message" id="premiumReviewMessage" role="status">Для разбора нужны минимум две записи дневника за текущую неделю.</p>
           <div id="premiumReviewResult" aria-live="polite"></div>
@@ -287,9 +287,9 @@
     <section class="section faq-section" id="faq">
       <div class="section-heading"><div><div class="eyebrow"><span class="eyebrow-dot"></span> ЧАСТЫЕ ВОПРОСЫ</div><h2>Всё <em>понятно.</em></h2></div><p>Основные условия сервиса до оформления программы.</p></div>
       <div class="faq-list">
-        <details><summary>Чем Premium отличается от PRO?</summary><p>Premium включает персональное меню и тренировочную программу на 30 дней, а также еженедельный автоматический ИИ-разбор дневника с рекомендациями на следующую неделю. Для отчёта нужны минимум две записи дневника за текущую неделю. Это автоматический информационный разбор, а не ручное сопровождение специалистом.</p></details>
-        <details><summary>Когда я получу полный план?</summary><p>Сначала ИИ формирует персональную программу по анкете. После подтверждения оплаты Robokassa сервис активирует доступ и откроет полный план в личном кабинете.</p></details>
-        <details><summary>Можно ли указать аллергии и продукты, которые я не ем?</summary><p>Да. Укажите ограничения и пожелания в анкете. ИИ учитывает их при составлении меню. При тяжёлых аллергиях обязательно перепроверяйте состав каждого продукта.</p></details>
+        <details><summary>Чем Premium отличается от PRO?</summary><p>Premium включает персональное меню и тренировочную программу на 30 дней, а также еженедельный разбор дневника с рекомендациями на следующую неделю. При доступности генеративной модели формируется ИИ-разбор; при её недоступности — фактическая сводка по сохранённым отметкам без ИИ. Для отчёта нужны минимум две записи дневника за текущую неделю. Это автоматический информационный разбор, а не ручное сопровождение специалистом.</p></details>
+        <details><summary>Когда я получу полный план?</summary><p>Сервис формирует персональную программу по анкете; генеративный ИИ используется при наличии доступного провайдера. После подтверждения оплаты Robokassa сервис активирует доступ и откроет полный план в личном кабинете.</p></details>
+        <details><summary>Можно ли указать аллергии и продукты, которые я не ем?</summary><p>Да. Укажите ограничения и пожелания в анкете. Сервис учитывает их при составлении меню. При тяжёлых аллергиях обязательно перепроверяйте состав каждого продукта.</p></details>
         <details><summary>Как работает оплата?</summary><p>Оплата проходит на защищённой странице Robokassa. Доступ открывается только после серверного подтверждения платежа.</p></details>
         <details><summary>Заменяет ли программа врача или диетолога?</summary><p>Нет. Fital Pro предоставляет информационные рекомендации общего характера. При заболеваниях, беременности, травмах, противопоказаниях или расстройствах пищевого поведения обратитесь к профильному специалисту.</p></details>
       </div>
