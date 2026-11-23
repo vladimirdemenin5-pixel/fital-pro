@@ -179,8 +179,14 @@ async function runAiTextWithFallback(env, options, purpose, validate = () => tru
   };
   for (const model of models) {
     try {
-      const result = model.startsWith('groq:')
-        ? await runGroqInferenceWithTimeout(env, model.slice(5), aiOptions, 45000)
+        const result = model.startsWith('groq:')
+        ? await runGroqInferenceWithTimeout(env, model.slice(5), {
+            messages: options?.messages || [],
+            temperature: options?.temperature ?? 0.4,
+            max_completion_tokens: options?.max_completion_tokens ?? 900,
+            reasoning_effort: 'low',
+            reasoning_format: 'hidden'
+          }, 45000)
         : await env.AI.run(model, aiOptions, { rejectIfBusy: true });
       const text = extractAiText(result);
       if (text && validate(text)) return text;
@@ -936,10 +942,17 @@ function buildCatalogFallbackDay(profile, planKey, absoluteDay, targets) {
     const foodId = chooseCatalogFallbackFood(candidates, profile, absoluteDay - 1, mealKey, used[mealKey]);
     if (!foodId) throw new Error('Для одного из приёмов пищи не найден разрешённый продукт из справочника.');
     used[mealKey].add(foodId);
+    const adjustedGrams =
+      foodId === 'potato_raw' || foodId === 'sweet_potato' ? Math.max(200, grams) :
+      foodId === 'lentils_dry' || foodId === 'chickpeas_dry' ? Math.min(100, Math.max(70, grams * 0.55)) :
+      foodId === 'tofu' ? Math.max(160, grams) :
+      foodId === 'avocado' ? Math.max(40, grams) :
+      foodId === 'almonds' || foodId === 'walnuts' || foodId === 'peanut_butter' ? Math.min(20, grams) :
+      grams;
     day[mealKey + 'Ingredients'].push({
       foodId,
       name: FOOD_CATALOG[foodId].name,
-      grams
+      grams: Math.round(adjustedGrams)
     });
   };
   const grains = ['oats_dry','buckwheat_dry','quinoa_dry','rice_dry','wholegrain_bread','pasta_dry'];
@@ -947,7 +960,7 @@ function buildCatalogFallbackDay(profile, planKey, absoluteDay, targets) {
   const vegetables = ['broccoli','tomato','cucumber','carrot','spinach','cabbage'];
   const proteins = ['chicken_raw','turkey_raw','cod_raw','salmon_raw','tofu','lentils_dry','chickpeas_dry','egg_raw'];
   const breakfastProteins = ['greek_yogurt','cottage_cheese','egg_raw','tofu'];
-  const snackProteins = ['greek_yogurt','cottage_cheese','tofu','egg_raw','peanut_butter'];
+  const snackProteins = ['greek_yogurt','cottage_cheese','tofu','egg_raw','lentils_dry','chickpeas_dry'];
   const fats = ['olive_oil','avocado','almonds','walnuts','peanut_butter'];
   const carbohydrates = [...grains,'potato_raw','sweet_potato'];
 
