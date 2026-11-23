@@ -2,8 +2,9 @@ import { createHash } from 'node:crypto';
 
 const MODEL = '@cf/google/gemma-4-26b-a4b-it';
 const AI_MODEL_TIMEOUT_MS = 45000;
-const QWEN_PLAN_TIMEOUT_MS = 60000;
-const GPT_OSS_PLAN_TIMEOUT_MS = 45000;
+const QWEN_PLAN_TIMEOUT_MS = 75000;
+const GPT_OSS_PLAN_TIMEOUT_MS = 60000;
+const AI_PLAN_FALLBACK_TIMEOUT_MS = 60000;
 const PLANS = {
   'Питание': { amount: '990.00', label: 'Fital Pro — Питание, 7 дней', days: 7, menuDays: 7 },
   'PRO': { amount: '1990.00', label: 'Fital Pro PRO — питание + тренировки, 14 дней', days: 14, menuDays: 14 },
@@ -482,7 +483,7 @@ function rebalanceDayNutrition(day, targets, profile) {
 
   // First change the food composition, not just the grams. Greedy bounded
   // substitutions/additions use only the existing catalog and client-safe foods.
-  for (let move = 0; move < 12; move++) {
+  for (let move = 0; move < 20; move++) {
     const currentScore = score();
     let best = null;
     for (const key of MEAL_KEYS) {
@@ -748,7 +749,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
     { role: 'user', content: prompt }
   ];
   // Cloudflare Qwen 3.8 is primary; OpenAI GPT-OSS 120B is the first structured-output fallback.
-  const models = ['@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/zai-org/glm-4.7-flash', MODEL];
+  const models = ['@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-120b', '@cf/zai-org/glm-4.7-flash', MODEL];
   const diagnostics = [];
   const rejectionDiagnostics = [];
 
@@ -780,7 +781,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
       };
       const result = await runAiInferenceWithTimeout(
         env, model, modelInput,
-        isQwen ? QWEN_PLAN_TIMEOUT_MS : (isGptOss ? GPT_OSS_PLAN_TIMEOUT_MS : AI_MODEL_TIMEOUT_MS)
+        isQwen ? QWEN_PLAN_TIMEOUT_MS : (isGptOss ? GPT_OSS_PLAN_TIMEOUT_MS : AI_PLAN_FALLBACK_TIMEOUT_MS)
       );
       const text = extractAiText(result);
       const normalized = text.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
@@ -835,8 +836,8 @@ async function generateAiPlan(profile, planKey, env) {
   // for Qwen 3.8 and keep structured JSON output manageable for fallback models.
   // Generate two independent two-day chunks concurrently while retaining full
   // per-chunk nutrition and workout-prescription validation.
-  for (let batchOffset = 0; batchOffset < totalDays; batchOffset += 12) {
-    const batch = await Promise.all([0, 2, 4, 6, 8, 10]
+  for (let batchOffset = 0; batchOffset < totalDays; batchOffset += 8) {
+    const batch = await Promise.all([0, 2, 4, 6]
       .filter(delta => batchOffset + delta < totalDays)
       .map(async delta => {
     const offset = batchOffset + delta;
@@ -856,8 +857,8 @@ async function generateAiPlan(profile, planKey, env) {
       'Структура JSON: {"intro":"короткое персональное объяснение","week":[{"day":"День ' + (offset + 1) + '","trainingDay":false,"breakfast":"название блюда","breakfastRecipe":"короткий способ приготовления","breakfastIngredients":[{"foodId":"oats_dry","grams":60}],"lunch":"название блюда","lunchRecipe":"короткий способ приготовления","lunchIngredients":[{"foodId":"chicken_raw","grams":120}],"snack":"название блюда","snackRecipe":"короткий способ подачи или приготовления","snackIngredients":[{"foodId":"greek_yogurt","grams":150}],"dinner":"название блюда","dinnerRecipe":"короткий способ приготовления","dinnerIngredients":[{"foodId":"salmon_raw","grams":120}],"workout":"план тренировки или восстановления"}],"tips":["практичный совет"]}. trainingDay — строго boolean. Для каждого приёма пищи обязательны ingredients-массивы.',
       'Для каждого приёма пищи обязательно заполни отдельное поле: breakfastRecipe, lunchRecipe, snackRecipe или dinnerRecipe соответственно. Это 1 короткая, конкретная инструкция по приготовлению (1–2 шага, от 15 до 300 символов); не повторяй список ингредиентов и не пиши общие фразы. Каждый ingredients-массив содержит 1–6 объектов вида {"foodId":"oats_dry","grams":60}. В каждом объекте обязательны ровно два поля: foodId и grams. Используй ТОЛЬКО точные foodId из справочника ниже. grams — целое число от 5 до 500 съедобных граммов ДО приготовления: мясо, рыба, овощи и фрукты — сырые очищенные части; крупы, макароны и бобовые — сухой вес; яйца — без скорлупы. Не используй готовый вес. Масло и орехи учитывай, если добавляешь их в блюдо. Не добавляй в название блюда продукты, которых нет в его ingredients.',
       'Пиши краткое название блюда без граммов. Полный состав и вес продуктов будут показаны отдельно. shopping не возвращай: список покупок сервер рассчитает сам по всем ингредиентам.',
-      'Целевые ориентиры КАЖДОГО дня: ' + targets.calories + ' ккал, белок ' + targets.protein + ' г, жиры ' + targets.fat + ' г, углеводы ' + targets.carbs + ' г. Допуск сервера: калории и белок ±20%, жиры и углеводы ±30%. Значит калорийность каждого дня должна быть не ниже ' + Math.round(targets.calories * 0.8) + ' и не выше ' + Math.round(targets.calories * 1.2) + ' ккал.',
-      'Целевые калории по приёмам пищи: ' + mealCalorieTargets + '. Не делай маленькие порции и не оставляй значительную часть дневной нормы нераспределённой. Если сумма калорий ниже цели, увеличь граммовки подходящих продуктов из справочника и перепроверь сумму каждого дня.',
+      'Целевые ориентиры КАЖДОГО дня: ' + targets.calories + ' ккал, белок ' + targets.protein + ' г, жиры ' + targets.fat + ' г, углеводы ' + targets.carbs + ' г. Для надёжного запаса от границ проверки планируй рацион около 95–105% целевых калорий и белка, 90–110% целевых жиров и углеводов; не стремись к нижней границе допуска. Допуск сервера остаётся неизменным: калории и белок ±20%, жиры и углеводы ±30%. Калорийность каждого дня должна быть не ниже ' + Math.round(targets.calories * 0.8) + ' и не выше ' + Math.round(targets.calories * 1.2) + ' ккал.',
+      'Целевые калории по приёмам пищи: ' + mealCalorieTargets + '. Не делай маленькие порции и не оставляй значительную часть дневной нормы нераспределённой. Если сумма калорий ниже цели, увеличь граммовки подходящих продуктов из справочника и перепроверь сумму каждого дня. Индивидуальные максимумы на один продукт в одном приёме пищи (г): ' + JSON.stringify(Object.fromEntries(Object.keys(FOOD_CATALOG).map(id => [id, MAX_MEAL_INGREDIENT_GRAMS[id] || 250]))) + '. Никогда не превышай максимум соответствующего foodId и общий предел 500 г.',
       'Не делай рацион преимущественно белковым: распределяй нужное количество сложных углеводов по завтраку, обеду и ужину. Для источников углеводов выбирай подходящие по предпочтениям продукты из овсянки, риса, гречки, макарон, киноа, картофеля, батата, цельнозернового хлеба, бобовых и фруктов. При цели углеводов от 150 г в сутки используй несколько таких источников в течение дня, а не только овощи.',
       'Перед выдачей проверь каждый день отдельно: сложи калории и БЖУ всех ингредиентов по справочнику. Не возвращай день, если калории, белок, жиры или углеводы выходят за указанные допуски.',
       'СПРАВОЧНИК ПРОДУКТОВ НА 100 г (ккал, белки г, жиры г, углеводы г): ' + JSON.stringify(Object.entries(FOOD_CATALOG).map(([id,food])=>[id,food.name,food.kcal,food.protein,food.fat,food.carbs])),
