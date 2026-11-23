@@ -148,6 +148,8 @@ try {
   assert.equal(qwen4Request.options.headers.Authorization, 'Bearer test-qwen4-key');
   const qwen4Body = JSON.parse(qwen4Request.options.body);
   assert.equal(qwen4Body.model, 'qwen4-max');
+  const qwen4Prompt = qwen4Body.messages[1].content[0].text;
+  assert.ok(qwen4Prompt.includes('"name":"Клиент"') && !qwen4Prompt.includes('Тестовый клиент'), 'QwenCloud must receive an anonymized client profile without the customer name');
   assert.ok(Array.isArray(qwen4Body.messages[1].content) && qwen4Body.messages[1].content[0].type === 'text',
     'Qwen4 request must use the documented multimodal-compatible text content format');
 } finally {
