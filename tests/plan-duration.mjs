@@ -1,8 +1,24 @@
 import assert from 'node:assert/strict';
-import { generateAiPlan, runAiTextWithFallback, runAiInferenceWithTimeout, aiPlanDiagnostic, aiDataFlowDiagnostic, buildLocalPlanChatReply, buildLocalPremiumDiaryReview, FOOD_CATALOG, buildPlanResponseSchema, diagnosePlanWeekFailure, rebalanceDayNutrition, foodAllowedByPreferences, foodRole, foodCanReplaceFood, foodFitsMeal } from '../_worker.js';
+import worker, { generateAiPlan, runAiTextWithFallback, runAiInferenceWithTimeout, aiPlanDiagnostic, aiDataFlowDiagnostic, buildLocalPlanChatReply, buildLocalPremiumDiaryReview, FOOD_CATALOG, buildPlanResponseSchema, diagnosePlanWeekFailure, rebalanceDayNutrition, foodAllowedByPreferences, foodRole, foodCanReplaceFood, foodFitsMeal } from '../_worker.js';
 import { readFile } from 'node:fs/promises';
 
 const workerSource = await readFile(new URL('../_worker.js', import.meta.url), 'utf8');
+const previewCheckoutBlocked = await worker.fetch(new Request('https://fitalpro.test/api/checkout', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ plan: 'Питание' })
+}), { FITALPRO_PREVIEW_CI: '1' });
+assert.equal(previewCheckoutBlocked.status, 503, 'Preview must block public checkout writes to the shared production D1');
+const previewWebhookBlocked = await worker.fetch(new Request('https://fitalpro.test/webhooks/robokassa', {
+  method: 'GET'
+}), { FITALPRO_PREVIEW_CI: '1' });
+assert.equal(previewWebhookBlocked.status, 503, 'Preview must block public payment webhooks');
+const previewDiagnosticStillProtected = await worker.fetch(new Request('https://fitalpro.test/api/ai-data-flow-diagnostic', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ plan: 'Питание' })
+}), { FITALPRO_PREVIEW_CI: '1' });
+assert.equal(previewDiagnosticStillProtected.status, 404, 'Preview diagnostic must remain available only to authenticated CI');
 const appSource = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
 const htmlSource = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
 const productionWorkflow = await readFile(new URL('../.github/workflows/main.yml', import.meta.url), 'utf8');
