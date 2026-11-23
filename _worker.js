@@ -2222,6 +2222,12 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     try {
+      const previewDiagnosticPath = ['/api/ai-diagnostic', '/api/ai-data-flow-diagnostic'].includes(url.pathname);
+      const mutatingMethod = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method);
+      if (env.FITALPRO_PREVIEW_CI === '1' &&
+          ((mutatingMethod && !previewDiagnosticPath) || url.pathname === '/webhooks/robokassa')) {
+        return json({ error: 'Временный Preview: публичные записи, заказы и платёжные уведомления отключены.' }, 503);
+      }
       if (url.pathname === '/health' && request.method === 'GET') {
         return json({
           ok: true,
