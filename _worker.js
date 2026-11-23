@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 const MODEL = '@cf/google/gemma-4-26b-a4b-it';
 const AI_MODEL_TIMEOUT_MS = 45000;
+const QWEN_PLAN_TIMEOUT_MS = 90000;
 const PLANS = {
   'Питание': { amount: '990.00', label: 'Fital Pro — Питание, 7 дней', days: 7, menuDays: 7 },
   'PRO': { amount: '1990.00', label: 'Fital Pro PRO — питание + тренировки, 14 дней', days: 14, menuDays: 14 },
@@ -754,7 +755,8 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
     { role: 'system', content: 'Ты Fital Pro. Отвечай только валидным JSON без Markdown и пояснений.' },
     { role: 'user', content: prompt }
   ];
-  const models = ['@cf/zai-org/glm-4.7-flash', '@cf/meta/llama-3.1-8b-instruct-fast', MODEL];
+  // Qwen 3.8 is the primary meal-plan model; smaller/other models remain fallbacks.
+  const models = ['@cf/qwen/qwen3.8-27b', '@cf/zai-org/glm-4.7-flash', MODEL];
   const diagnostics = [];
   const rejectionDiagnostics = [];
 
@@ -769,24 +771,25 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
         }]
       : messages;
     try {
-      const isFastLlama = model === '@cf/meta/llama-3.1-8b-instruct-fast';
+      const isQwen = model === '@cf/qwen/qwen3.8-27b';
       const modelInput = {
         messages: currentMessages,
         temperature: 0.2,
-        ...(isFastLlama ? {
-          max_tokens: 6500,
-          response_format: {
-            type: 'json_schema',
-            json_schema: buildPlanResponseSchema(menuDays)
-          }
+        max_completion_tokens: 6500,
+        ...(isQwen ? {
+          // Qwen supports reasoning_effort but is not on Cloudflare's JSON Mode
+          // compatibility list; keep output-format enforcement in the prompt
+          // and the authoritative validation in normalizeAndValidatePlanWeek.
+          reasoning_effort: 'low'
         } : {
-          max_completion_tokens: 6500,
           reasoning_effort: null,
           response_format: { type: 'json_object' },
           chat_template_kwargs: { enable_thinking: false }
         })
       };
-      const result = await runAiInferenceWithTimeout(env, model, modelInput);
+      const result = await runAiInferenceWithTimeout(
+        env, model, modelInput, isQwen ? QWEN_PLAN_TIMEOUT_MS : AI_MODEL_TIMEOUT_MS
+      );
       const text = extractAiText(result);
       const normalized = text.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
       const match = normalized.match(/\{[\s\S]*\}/);
