@@ -135,7 +135,8 @@ assert.ok(chatSource.includes("'Сохранённый план клиента (
 assert.equal(worker.split('clean(planRow.plan_json, 100000)').length - 1, 2, 'AI chat and Premium review must receive the complete saved plan');
 assert.ok(chatSource.includes('сначала опирайся на сохранённый план'), 'AI consultant must prioritize the actual plan for substitutions and workouts');
 assert.ok(chatSource.includes('reply = await runAiTextWithFallback(env,'), 'AI consultant must use the primary and existing fallback model');
-assert.ok(chatSource.includes('ИИ-консультант временно недоступен'), 'AI provider failures must return a controlled API error');
+assert.ok(chatSource.includes('buildLocalPlanChatReply(message, savedPlan)') && chatSource.includes("replyMode = 'saved-plan'"),
+  'AI provider failures must fall back to an honest response based on the saved member plan');
 
 
 assert.ok(worker.includes("memberRateLimit(env, sub.access_token, 'profile-update', 5, 3600000)"), 'AI profile regeneration must be limited per active subscription');
