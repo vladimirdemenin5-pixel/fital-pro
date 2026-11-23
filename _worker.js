@@ -1033,7 +1033,7 @@ async function checkout(request, env, forceTestMode = false) {
   const now = new Date().toISOString();
   const order = await env.DB.prepare(
     'INSERT INTO pending_orders (client_ref,plan,amount,customer_contact,profile_json,plan_json,status,created_at,updated_at,pd_consent_at,pd_policy_version,offer_accepted_at,offer_version,is_test) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING inv_id'
-  ).bind(clientRef, planKey, product.amount, contact, JSON.stringify(profile), JSON.stringify(plan), 'pending', now, now, now, '2026-11-21', now, '2026-11-21', testMode ? 1 : 0).first();
+  ).bind(clientRef, planKey, product.amount, contact, JSON.stringify(profile), JSON.stringify(plan), 'pending', now, now, now, '2026-11-23', now, '2026-11-21', testMode ? 1 : 0).first();
   const invId = Number(order?.inv_id);
   if (!Number.isSafeInteger(invId) || invId < 1) {
     throw new Error('Не удалось сохранить заказ. Попробуйте ещё раз.');
