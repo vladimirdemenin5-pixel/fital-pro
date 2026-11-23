@@ -485,9 +485,8 @@ function rebalanceDayNutrition(day, targets, profile) {
     day.nutrition = calculateDayNutrition(day);
     return nutritionWithinTargets(day.nutrition,targets);
   };
-  if (withinTargets()) return true;
-
-  for (let iteration=0;iteration<120;iteration++) {
+  if (!withinTargets()) {
+    for (let iteration=0;iteration<120;iteration++) {
     const values=nutrientTotals();
     const derivatives=values.map((value,index)=>2*(value-nutrientTargets[index])/(nutrientScales[index]*nutrientScales[index]));
     const gradients=items.map((item,index)=>{
@@ -512,6 +511,7 @@ function rebalanceDayNutrition(day, targets, profile) {
     }
     if(!improved) break;
     if(withinTargets()) break;
+    }
   }
   if (!withinTargets()) return false;
 
