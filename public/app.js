@@ -6,6 +6,17 @@ let selectedPlan = 'PRO';
 let checkoutData = null;
 let intakeRevision = 0;
 
+function syncTrainingFields(form, plan) {
+  if (!form) return;
+  const showTraining = plan !== 'Питание';
+  form.querySelectorAll('[data-training-field]').forEach(function (field) {
+    field.classList.toggle('is-hidden', !showTraining);
+    field.querySelectorAll('select, input').forEach(function (control) {
+      control.required = showTraining;
+    });
+  });
+}
+
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, function (char) {
     return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char];
@@ -53,6 +64,7 @@ function choosePlan(plan) {
   if (!prices[plan]) return;
   if (selectedPlan !== plan) invalidateCheckout();
   selectedPlan = plan;
+  syncTrainingFields($('#intakeForm'), plan);
   $('#selectedPlanLabel').textContent = plan;
   document.querySelectorAll('[data-card-plan]').forEach(function (card) {
     card.classList.toggle('selected', card.getAttribute('data-card-plan') === plan);
@@ -351,6 +363,7 @@ async function loadAccount() {
   try {
     const [me, planData] = await Promise.all([api('/api/me'), api('/api/plan')]);
     const subscription = me.subscription || {};
+    syncTrainingFields($('#profileUpdateForm'), subscription.plan);
     $('#accountPlanName').textContent = 'Тариф ' + (subscription.plan || 'Fital Pro');
     $('#accountExpiry').textContent = subscription.expires_at
       ? 'Доступ до ' + new Date(subscription.expires_at).toLocaleDateString('ru-RU')
