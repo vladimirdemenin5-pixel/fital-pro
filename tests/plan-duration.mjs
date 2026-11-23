@@ -127,6 +127,33 @@ assert.equal(foodAllowedByPreferences('milk_2pct', { preferences: 'Без мол
 assert.equal(foodAllowedByPreferences('chicken_raw', { preferences: 'Вегетарианство' }), false, 'replacement candidates must respect vegetarian restrictions');
 assert.equal(foodAllowedByPreferences('rice_dry', { preferences: 'Без глютена' }), true, 'gluten-free restrictions must keep safe catalog alternatives available');
 
+let qwen4Request = null;
+const originalFetch = globalThis.fetch;
+try {
+  globalThis.fetch = async (url, options) => {
+    qwen4Request = { url: String(url), options };
+    const fixture = await makeAi(7).run();
+    const parsed = JSON.parse(fixture.response);
+    return new Response(JSON.stringify({
+      choices: [{ message: { role: 'assistant', content: JSON.stringify(parsed) }, finish_reason: 'stop' }]
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  const qwen4Plan = await generateAiPlan(profile, 'Питание', {
+    QWEN4_API_KEY: 'test-qwen4-key',
+    QWEN4_REGION: 'eu-central-1',
+    AI: { async run() { throw new Error('Workers AI must not run when Qwen4 succeeds'); } }
+  });
+  assert.equal(qwen4Plan.week.length, 7, 'Qwen4 must generate a complete verified seven-day plan');
+  assert.equal(qwen4Request.url, 'https://eu-central-1.maas.qwencloudapi.com/compatible-mode/v1/chat/completions');
+  assert.equal(qwen4Request.options.headers.Authorization, 'Bearer test-qwen4-key');
+  const qwen4Body = JSON.parse(qwen4Request.options.body);
+  assert.equal(qwen4Body.model, 'qwen4-max');
+  assert.ok(Array.isArray(qwen4Body.messages[1].content) && qwen4Body.messages[1].content[0].type === 'text',
+    'Qwen4 request must use the documented multimodal-compatible text content format');
+} finally {
+  globalThis.fetch = originalFetch;
+}
+
 const timeoutSignalCapture = { signal: null };
 await assert.rejects(
   () => runAiInferenceWithTimeout({
@@ -161,7 +188,8 @@ assert.ok(workerSource.includes('fdcId:173904'), 'oats reference must retain its
 assert.ok(workerSource.includes('for (let offset = 0; offset < totalDays; offset += 7)'), 'long plans must be generated and validated in seven-day blocks');
 assert.ok(workerSource.includes('MAX_MEAL_INGREDIENT_GRAMS') && workerSource.includes('min:5,max:') && workerSource.includes('for (let iteration=0;iteration<120;iteration++)') && workerSource.includes('const nutrientTargets = [targets.calories, targets.protein, targets.fat, targets.carbs];') && workerSource.includes('const derivatives=values.map(') && workerSource.includes('let learningRate=1000;') && workerSource.includes('const allowedFoods = Object.keys(FOOD_CATALOG).filter(id => foodAllowedByPreferences(id, profile));'), 'portion and food-choice correction must use bounded catalog search without relaxing nutrition ranges');
 assert.ok(workerSource.includes('const rejectionDiagnostics = [];') && workerSource.includes('rejectionDiagnostics.slice(-3)'), 'the next fallback model must receive concrete rejection reasons from the previous model');
-assert.ok(workerSource.includes("const models = ['@cf/qwen/qwen3.8-27b', '@cf/zai-org/glm-4.7-flash', MODEL];"), 'plan generation must use Qwen 3.8 first, then GLM Flash and Gemma fallbacks');
+assert.ok(workerSource.includes("const models = [...(clean(env.QWEN4_API_KEY, 500) ? [QWEN4_MODEL] : []), '@cf/qwen/qwen3.8-27b', '@cf/zai-org/glm-4.7-flash', MODEL];"), 'Qwen4 Max must be the optional primary model, with Cloudflare Qwen 3.8, GLM Flash and Gemma as fallbacks');
+assert.ok(workerSource.includes('for (let move = 0; move < 12; move++)') && workerSource.includes('!foodFitsMeal(foodId, key)'), 'nutrition correction must search more composition changes and keep replacement foods compatible with their meal');
 assert.ok(workerSource.includes('rejectIfBusy: true'), 'Workers AI must skip a busy model queue and fall back instead of waiting until the request times out');
 assert.ok(workerSource.includes('const AI_MODEL_TIMEOUT_MS = 45000;') && workerSource.includes('Promise.race([') && workerSource.includes('runAiInferenceWithTimeout(env, model'), 'each plan-model inference must have a hard timeout so a stalled model cannot block fallbacks');
 assert.equal((workerSource.match(/const models = \['@cf\/zai-org\/glm-4\.7-flash', '@cf\/meta\/llama-3\.1-8b-instruct-fast', MODEL\];/g) || []).length, 1, 'the general chat fallback chain remains unchanged');
