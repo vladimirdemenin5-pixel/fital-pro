@@ -60,6 +60,7 @@ for (const item of plans) {
   }
   console.log(JSON.stringify({
     plan: item.key,
+    generationMode: result.generationMode,
     days: result.days,
     meals: result.meals,
     d1Write: 'passed',
