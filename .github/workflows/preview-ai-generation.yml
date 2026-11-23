@@ -33,8 +33,28 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install Wrangler
-        run: npm install
+      - name: Check existing external AI credentials without exposing secret values
+        run: |
+          set -euo pipefail
+          secrets="$(npx wrangler secret list --name red-waterfall-2af8 --format json)"
+          printf '%s' "$secrets" | node --input-type=module -e '
+            let input = "";
+            for await (const chunk of process.stdin) input += chunk;
+            const entries = JSON.parse(input);
+            const configured = new Set(entries.map(item => item.name));
+            const providers = {
+              openai: ["OPENAI_API_KEY"],
+              gemini: ["GEMINI_API_KEY", "GOOGLE_AI_API_KEY"],
+              openrouter: ["OPENROUTER_API_KEY"],
+              deepseek: ["DEEPSEEK_API_KEY"],
+              qwen: ["DASHSCOPE_API_KEY", "QWEN_API_KEY"],
+              groq: ["GROQ_API_KEY"]
+            };
+            const availability = Object.fromEntries(Object.entries(providers).map(([provider, names]) =>
+              [provider, names.some(name => configured.has(name))]
+            ));
+            console.log("Existing external AI provider credentials (presence only): " + JSON.stringify(availability));
+          '
 
       - name: Generate real 14-day and 30-day plans in isolated Cloudflare remote preview
         run: |
