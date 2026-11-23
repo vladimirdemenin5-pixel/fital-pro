@@ -147,6 +147,19 @@ await assert.rejects(
 );
 assert.equal(timeoutSignalCapture.signal.aborted, true, 'a model timeout must also abort the underlying AI call');
 
+let quotaRejectedCalls = 0;
+await assert.rejects(
+  () => generateAiPlan(profile, 'Питание', { AI: {
+    async run() {
+      quotaRejectedCalls++;
+      throw new Error('4006: you have used up your daily free allocation of 10,000 neurons');
+    }
+  } }),
+  /Дневной бесплатный лимит ИИ Cloudflare исчерпан/,
+  'an exhausted Workers AI quota must return an actionable error instead of hiding it behind generic model fallback failure'
+);
+assert.equal(quotaRejectedCalls, 1, 'an exhausted Workers AI quota must stop the fallback chain immediately');
+
 const proPlan = await generateAiPlan(profile, 'PRO', { AI: makeAi(14) });
 assert.equal(proPlan.week.length, 14, 'PRO must contain 14 complete menu days');
 assert.equal(proPlan.menuDays, 14);
