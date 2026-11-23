@@ -45,10 +45,7 @@ jobs:
             const required = [
               "ROBOKASSA_MERCHANT_LOGIN",
               "ROBOKASSA_PASSWORD1",
-              "ROBOKASSA_PASSWORD2",
-              "ROBOKASSA_TEST_PASSWORD1",
-              "ROBOKASSA_TEST_PASSWORD2",
-              "ROBOKASSA_TEST_ACCESS_KEY"
+              "ROBOKASSA_PASSWORD2"
             ];
             let input = "";
             for await (const chunk of process.stdin) input += chunk;
@@ -58,7 +55,7 @@ jobs:
             if (missing.length) {
               throw new Error("Missing required Cloudflare Worker secrets: " + missing.join(", "));
             }
-            console.log("PASS: all six required production and test secret bindings are present; secret values were not read or printed");
+            console.log("PASS: all three required production Robokassa secret bindings are present; optional test-only secrets are not required for production deployment");
           '
 
       - name: Deploy Worker and assets
