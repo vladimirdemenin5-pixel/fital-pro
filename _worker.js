@@ -484,14 +484,35 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
     for (const model of attemptModels) {
       const modelStartedAt = Date.now();
       try {
-        const result = await runAiInferenceWithTimeout(env, model, {
+        const isFastLlama = model === '@cf/meta/llama-3.1-8b-instruct-fast';
+        const modelInput = {
           messages: currentMessages,
-          max_completion_tokens: 6500,
-          reasoning_effort: null,
           temperature: 0.2,
-          response_format: { type: 'json_object' },
-          chat_template_kwargs: { enable_thinking: false }
-        });
+          ...(isFastLlama ? {
+            max_tokens: 6500,
+            response_format: {
+              type: 'json_schema',
+              json_schema: {
+                type: 'object',
+                properties: {
+                  week: {
+                    type: 'array',
+                    minItems: menuDays,
+                    maxItems: menuDays,
+                    items: { type: 'object' }
+                  }
+                },
+                required: ['week']
+              }
+            }
+          } : {
+            max_completion_tokens: 6500,
+            reasoning_effort: null,
+            response_format: { type: 'json_object' },
+            chat_template_kwargs: { enable_thinking: false }
+          })
+        };
+        const result = await runAiInferenceWithTimeout(env, model, modelInput);
         const text = extractAiText(result);
         const normalized = text.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
         const match = normalized.match(/\{[\s\S]*\}/);

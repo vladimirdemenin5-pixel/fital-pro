@@ -94,7 +94,8 @@ assert.ok(workerSource.includes("const models = ['@cf/zai-org/glm-4.7-flash', '@
 assert.ok(workerSource.includes('rejectIfBusy: true'), 'Workers AI must skip a busy model queue and fall back instead of waiting until the request times out');
 assert.ok(workerSource.includes('const AI_MODEL_TIMEOUT_MS = 45000;') && workerSource.includes('Promise.race([') && workerSource.includes('runAiInferenceWithTimeout(env, model'), 'each plan-model inference must have a hard timeout so a stalled model cannot block fallbacks');
 assert.equal((workerSource.match(/const models = \['@cf\/zai-org\/glm-4\.7-flash', '@cf\/meta\/llama-3\.1-8b-instruct-fast', MODEL\];/g) || []).length, 2, 'both chat and plan generation must try GLM Flash, fast Llama and Gemma in order');
-assert.ok(workerSource.includes('max_completion_tokens: 6500') && !workerSource.includes('max_tokens: 6500'), 'Workers AI output must use its supported max_completion_tokens parameter');
+assert.ok(workerSource.includes('max_completion_tokens: 6500') && workerSource.includes('max_tokens: 6500'), 'GLM/Gemma and fast Llama must use their respective documented output-token parameters');
+assert.ok(workerSource.includes("type: 'json_schema'") && workerSource.includes('minItems: menuDays') && workerSource.includes('maxItems: menuDays'), 'fast Llama JSON schema must constrain the week array to the requested number of days');
 assert.ok(workerSource.includes('reasoning_effort: null'), 'reasoning must be explicitly disabled for deterministic structured meal-plan generation');
 assert.ok(workerSource.includes('const aiOptions = {') && workerSource.includes('env.AI.run(model, aiOptions, { rejectIfBusy: true })'), 'the AI chat fallback must also disable reasoning before inference');
 assert.ok(workerSource.includes('week должен содержать РОВНО'), 'the model prompt must explicitly require the exact block length');
@@ -127,6 +128,29 @@ const timeoutRecoveredPlan = await generateAiPlan(profile, 'Питание', { A
 } });
 assert.equal(timeoutRecoveredPlan.week.length, 7, 'a timed-out first model must fall back to the next available model');
 assert.equal(timeoutFallbackModels[1], '@cf/meta/llama-3.1-8b-instruct-fast', 'the catalog-listed fast Llama model must be attempted after the first model times out');
+let fastLlamaModelInput = null;
+const schemaConstrainedPlan = await generateAiPlan(profile, 'Питание', { AI: {
+  async run(model, input, options) {
+    assert.ok(options?.signal instanceof AbortSignal, 'fast Llama inference must retain the hard timeout abort signal');
+    if (model === '@cf/zai-org/glm-4.7-flash') throw new Error('force the documented fast Llama fallback');
+    if (model !== '@cf/meta/llama-3.1-8b-instruct-fast') throw new Error('unexpected fallback model');
+    fastLlamaModelInput = input;
+    return makeAi(7).run(model, input);
+  }
+} });
+assert.equal(schemaConstrainedPlan.week.length, 7);
+assert.equal(fastLlamaModelInput.max_tokens, 6500, 'fast Llama must use its documented max_tokens parameter');
+assert.equal(fastLlamaModelInput.max_completion_tokens, undefined, 'fast Llama must not receive the unsupported max_completion_tokens parameter');
+assert.deepEqual(fastLlamaModelInput.response_format, {
+  type: 'json_schema',
+  json_schema: {
+    type: 'object',
+    properties: { week: { type: 'array', minItems: 7, maxItems: 7, items: { type: 'object' } } },
+    required: ['week']
+  }
+}, 'fast Llama schema must require exactly seven days in the requested block');
+assert.equal(fastLlamaModelInput.reasoning_effort, undefined, 'fast Llama should not receive parameters absent from its model input schema');
+assert.equal(fastLlamaModelInput.chat_template_kwargs, undefined, 'fast Llama should not receive unsupported chat-template options');
 const correctedPortionPlan = await generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, false, false, false, 0.7) });
 assert.equal(correctedPortionPlan.week.length, 14, 'server-side portion correction must recover a plan with initially undersized portions');
 assert.ok(correctedPortionPlan.week.every(day =>
