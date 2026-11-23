@@ -84,7 +84,7 @@ assert.ok(html.includes('id="progressTool"'));
 assert.ok(html.includes('id="chatTool"'));
 assert.ok(worker.includes('trainingDay: includesTraining && source.trainingDay'), 'training-day flag must be normalized from the validated AI response');
 assert.ok(worker.includes("max_completion_tokens: 6500"), 'GLM/Gemma must retain their supported max_completion_tokens field');
-assert.ok(worker.includes("model === '@cf/meta/llama-3.1-8b-instruct-fast'") && worker.includes("max_tokens: 6500"), 'fast Llama must use its model-specific max_tokens field');
+assert.ok(worker.includes("const models = ['@cf/zai-org/glm-4.7-flash', '@cf/meta/llama-3.1-8b-instruct-fast', MODEL];"), 'the general AI chat must retain the supported GLM, Llama and Gemma fallback order');
 assert.ok(worker.includes("response_format: { type: 'json_object' }"));
 assert.ok(worker.includes("chat_template_kwargs: { enable_thinking: false }"));
 assert.ok(!worker.includes("max_tokens: 4500"));
