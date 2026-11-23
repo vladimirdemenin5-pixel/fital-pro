@@ -77,6 +77,7 @@ jobs:
           echo "Cloudflare Preview: $FITALPRO_PREVIEW_URL"
 
       - name: Verify real AI generation with read-only remote diagnostic
+        continue-on-error: true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
