@@ -61,25 +61,25 @@ const macroCorrectionDay = {
   trainingDay: false,
   breakfast: 'Омлет',
   breakfastRecipe: 'Приготовь продукты до готовности и подай вместе.',
-  breakfastIngredients: [{ foodId: 'chicken_raw', name: FOOD_CATALOG.chicken_raw.name, grams: 200 }],
+  breakfastIngredients: [{ foodId: 'chicken_raw', name: FOOD_CATALOG.chicken_raw.name, grams: 250 }],
   lunch: 'Индейка',
   lunchRecipe: 'Приготовь продукты до готовности и подай вместе.',
-  lunchIngredients: [{ foodId: 'turkey_raw', name: FOOD_CATALOG.turkey_raw.name, grams: 200 }],
+  lunchIngredients: [{ foodId: 'turkey_raw', name: FOOD_CATALOG.turkey_raw.name, grams: 250 }],
   snack: 'Йогурт',
   snackRecipe: 'Приготовь продукты до готовности и подай вместе.',
-  snackIngredients: [{ foodId: 'greek_yogurt', name: FOOD_CATALOG.greek_yogurt.name, grams: 200 }],
+  snackIngredients: [{ foodId: 'greek_yogurt', name: FOOD_CATALOG.greek_yogurt.name, grams: 300 }],
   dinner: 'Треска',
   dinnerRecipe: 'Приготовь продукты до готовности и подай вместе.',
-  dinnerIngredients: [{ foodId: 'cod_raw', name: FOOD_CATALOG.cod_raw.name, grams: 200 }]
+  dinnerIngredients: [{ foodId: 'cod_raw', name: FOOD_CATALOG.cod_raw.name, grams: 250 }]
 };
 const macroCorrectionSucceeded = rebalanceDayNutrition(macroCorrectionDay, {
-  calories: 2000, protein: 100, fat: 65, carbs: 250
+  calories: 1800, protein: 90, fat: 58, carbs: 225
 }, profile);
 assert.equal(macroCorrectionSucceeded, true, 'server correction must change the food composition when portion-only tuning cannot balance protein, fat and carbohydrates');
-assert.ok(macroCorrectionDay.nutrition.calories >= 1600 && macroCorrectionDay.nutrition.calories <= 2400);
-assert.ok(macroCorrectionDay.nutrition.protein >= 80 && macroCorrectionDay.nutrition.protein <= 120);
-assert.ok(macroCorrectionDay.nutrition.fat >= 45.5 && macroCorrectionDay.nutrition.fat <= 84.5);
-assert.ok(macroCorrectionDay.nutrition.carbs >= 175 && macroCorrectionDay.nutrition.carbs <= 325);
+assert.ok(macroCorrectionDay.nutrition.calories >= 1440 && macroCorrectionDay.nutrition.calories <= 2160);
+assert.ok(macroCorrectionDay.nutrition.protein >= 72 && macroCorrectionDay.nutrition.protein <= 108);
+assert.ok(macroCorrectionDay.nutrition.fat >= 40.6 && macroCorrectionDay.nutrition.fat <= 75.4);
+assert.ok(macroCorrectionDay.nutrition.carbs >= 157.5 && macroCorrectionDay.nutrition.carbs <= 292.5);
 assert.ok(macroCorrectionDay.breakfastRecipe.length >= 15 || macroCorrectionDay.lunchRecipe.length >= 15);
 assert.equal(foodAllowedByPreferences('greek_yogurt', { preferences: 'Без молочных продуктов' }), false, 'replacement candidates must respect dairy restrictions');
 assert.equal(foodAllowedByPreferences('chicken_raw', { preferences: 'Вегетарианство' }), false, 'replacement candidates must respect vegetarian restrictions');
