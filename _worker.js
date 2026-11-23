@@ -250,7 +250,7 @@ function normalizeMealIngredients(raw, enforceFoodPortionLimits = false) {
   for (const item of raw) {
     const foodId = Array.isArray(item) && item.length === 2 ? item[0] : item?.foodId;
     const grams = Array.isArray(item) && item.length === 2 ? item[1] : item?.grams;
-    if (typeof foodId !== 'string' || !Object.hasOwn(FOOD_CATALOG, foodId) || !Number.isSafeInteger(grams)) return null;
+    if (typeof foodId !== 'string' || !Object.hasOwn(FOOD_CATALOG, foodId) || !Number.isSafeInteger(grams) || grams < 5 || grams > 500) return null;
     if (enforceFoodPortionLimits) {
       const maximum = MAX_MEAL_INGREDIENT_GRAMS[foodId] || 250;
       normalized.push({ foodId, name: FOOD_CATALOG[foodId].name, grams: Math.max(5, Math.min(maximum, grams)) });
