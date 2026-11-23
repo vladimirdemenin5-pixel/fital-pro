@@ -1368,7 +1368,7 @@ async function verifyGitHubActionsOidc(request, env, mode = 'production') {
       claims.event_name === 'pull_request' &&
       claims.head_ref === 'fix/ai-plan-generation-three-day-chunks' &&
       claims.base_ref === 'main' &&
-      claims.sub === 'repo:' + repository + ':pull_request';
+      ['repo:' + repository + ':pull_request', 'repo:vladimirdemenin5-pixel@324070911/fital-pro@1354815283:pull_request'].includes(claims.sub);
     if (header.alg !== 'RS256' || !header.kid ||
         claims.iss !== 'https://token.actions.githubusercontent.com' ||
         claims.aud !== 'fitalpro-ai-data-flow' ||
