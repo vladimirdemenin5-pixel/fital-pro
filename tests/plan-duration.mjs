@@ -30,7 +30,11 @@ function makeAi(menuDays, wrongLength = false, invalidMeal = false, invalidWorko
       const count = wrongLength ? Math.max(0, requestedDays - 1) : requestedDays;
       const week = Array.from({ length: count }, (_, index) => {
         const dayInWeek = index % 7;
-        const scheduledTrainingMatch = prompt.match(/ровно (\\d+) тренировочных дней/);\n        const scheduledTrainingDays = scheduledTrainingMatch ? Number(scheduledTrainingMatch[1]) : null;\n        const trainingDay = scheduledTrainingDays === null\n          ? (dayInWeek === 0 || dayInWeek === 2 || dayInWeek === 4)\n          : index < scheduledTrainingDays;
+        const scheduledTrainingMatch = prompt.match(/ровно (\d+) тренировочных дней/);
+        const scheduledTrainingDays = scheduledTrainingMatch ? Number(scheduledTrainingMatch[1]) : null;
+        const trainingDay = scheduledTrainingDays === null
+          ? (dayInWeek === 0 || dayInWeek === 2 || dayInWeek === 4)
+          : index < scheduledTrainingDays;
         const tiny = invalidNutrition;
         const portion = grams => Math.max(5, Math.round(grams * portionScale));
         return {
