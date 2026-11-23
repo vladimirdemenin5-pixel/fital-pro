@@ -776,15 +776,15 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
       const modelInput = {
         messages: currentMessages,
         temperature: 0.2,
-        max_tokens: 6500,
-        ...(isQwen ? {
-          // Qwen 3.8 does not support Workers AI JSON Mode; validate its JSON server-side.
+        ...(isGptOss ? {
+          // GPT-OSS uses max_tokens; keep JSON enforcement in the prompt and validate server-side.
+          max_tokens: 6500,
           reasoning_effort: 'low'
-        } : isGptOss ? {
-          // GPT-OSS supports JSON Mode and bounded reasoning on Workers AI.
-          reasoning_effort: 'low',
-          response_format: { type: 'json_object' }
-        } : {})
+        } : {
+          // Qwen/GLM/Gemma use max_completion_tokens in Workers AI.
+          max_completion_tokens: 6500,
+          ...(isQwen ? { reasoning_effort: 'low' } : {})
+        })
       };
       const result = await runAiInferenceWithTimeout(
         env, model, modelInput,
