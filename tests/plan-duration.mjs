@@ -72,6 +72,7 @@ const macroCorrectionDay = {
   dinnerRecipe: 'Приготовь продукты до готовности и подай вместе.',
   dinnerIngredients: [{ foodId: 'cod_raw', name: FOOD_CATALOG.cod_raw.name, grams: 250 }]
 };
+const originalMacroFoodIds = ['breakfast','lunch','snack','dinner'].flatMap(key => macroCorrectionDay[key + 'Ingredients'].map(item => item.foodId));
 const macroCorrectionSucceeded = rebalanceDayNutrition(macroCorrectionDay, {
   calories: 1800, protein: 90, fat: 58, carbs: 225
 }, profile);
@@ -80,8 +81,11 @@ assert.ok(macroCorrectionDay.nutrition.calories >= 1440 && macroCorrectionDay.nu
 assert.ok(macroCorrectionDay.nutrition.protein >= 72 && macroCorrectionDay.nutrition.protein <= 108);
 assert.ok(macroCorrectionDay.nutrition.fat >= 40.6 && macroCorrectionDay.nutrition.fat <= 75.4);
 assert.ok(macroCorrectionDay.nutrition.carbs >= 157.5 && macroCorrectionDay.nutrition.carbs <= 292.5);
-assert.ok(macroCorrectionDay.breakfastRecipe.length >= 15 || macroCorrectionDay.lunchRecipe.length >= 15);
+const correctedMacroFoodIds = ['breakfast','lunch','snack','dinner'].flatMap(key => macroCorrectionDay[key + 'Ingredients'].map(item => item.foodId));
+assert.notDeepEqual(correctedMacroFoodIds, originalMacroFoodIds, 'the correction must actually replace products from the catalog');
+assert.ok(['breakfast','lunch','snack','dinner'].some(key => macroCorrectionDay[key + 'Recipe'].startsWith('Состав скорректирован по нормам БЖУ: ')), 'the recipe must be synchronized with changed ingredients');
 assert.equal(foodAllowedByPreferences('greek_yogurt', { preferences: 'Без молочных продуктов' }), false, 'replacement candidates must respect dairy restrictions');
+assert.equal(foodAllowedByPreferences('milk_2pct', { preferences: 'Без молока' }), false, 'inflected dairy restrictions must also be recognized');
 assert.equal(foodAllowedByPreferences('chicken_raw', { preferences: 'Вегетарианство' }), false, 'replacement candidates must respect vegetarian restrictions');
 assert.equal(foodAllowedByPreferences('rice_dry', { preferences: 'Без глютена' }), true, 'gluten-free restrictions must keep safe catalog alternatives available');
 
