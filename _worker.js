@@ -483,7 +483,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
     }
   }
   const diagnostic = new Error(diagnostics.join(' | ').slice(0, 600));
-  throw new Error('Сервис ИИ временно не вернул проверенный план. Повторите отправку анкеты через минуту.', { cause: diagnostic });
+  throw new Error('Сервис ИИ временно не вернул текстовый ответ. Повторите отправку анкеты через минуту.', { cause: diagnostic });
 }
 
 async function generateAiPlan(profile, planKey, env) {
