@@ -211,7 +211,7 @@ const timeoutFallbackModelsByBlock = new Map();
 const timeoutRecoveredPlan = await generateAiPlan(profile, 'Питание', { AI: {
   async run(model, input, options) {
     const prompt = input?.messages?.[1]?.content || '';
-    const startDay = Number(prompt.match(/БЛОК: дни (\\d+)–/)?.[1] || 0);
+    const startDay = Number(prompt.match(/БЛОК: дни ([0-9]+)–/)?.[1] || 0);
     const models = timeoutFallbackModelsByBlock.get(startDay) || [];
     models.push(model);
     timeoutFallbackModelsByBlock.set(startDay, models);
