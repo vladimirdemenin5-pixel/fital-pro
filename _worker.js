@@ -342,6 +342,65 @@ const MAX_MEAL_INGREDIENT_GRAMS = Object.freeze({
   cheddar:50, orange:200, peanut_butter:25
 });
 
+const FOOD_ROLE_BY_ID = Object.freeze({
+  oats_dry:'grain', rice_dry:'grain', buckwheat_dry:'grain', pasta_dry:'grain', quinoa_dry:'grain', wholegrain_bread:'grain',
+  chicken_raw:'poultry', turkey_raw:'poultry', salmon_raw:'fish', cod_raw:'fish', egg_raw:'egg',
+  greek_yogurt:'dairy', cottage_cheese:'dairy', milk_2pct:'dairy', cheddar:'dairy',
+  banana:'fruit', apple:'fruit', blueberries:'fruit', strawberry:'fruit', orange:'fruit',
+  broccoli:'vegetable', tomato:'vegetable', cucumber:'vegetable', carrot:'vegetable', spinach:'vegetable', cabbage:'vegetable',
+  potato_raw:'starchy_vegetable', sweet_potato:'starchy_vegetable', avocado:'fat', olive_oil:'fat',
+  almonds:'nuts', walnuts:'nuts', peanut_butter:'nuts', lentils_dry:'plant_protein', chickpeas_dry:'plant_protein', tofu:'plant_protein'
+});
+function foodRole(foodId) { return FOOD_ROLE_BY_ID[foodId] || null; }
+function foodCanReplaceFood(sourceFoodId, candidateFoodId) {
+  const role = foodRole(sourceFoodId);
+  return Boolean(role && role === foodRole(candidateFoodId));
+}
+function foodFitsMeal(foodId, mealKey) {
+  const role = foodRole(foodId);
+  const allowed = {
+    breakfast:['grain','egg','dairy','fruit','vegetable','starchy_vegetable','plant_protein','nuts','fat'],
+    lunch:['grain','poultry','fish','egg','dairy','vegetable','starchy_vegetable','plant_protein','nuts','fat'],
+    snack:['grain','egg','dairy','fruit','vegetable','plant_protein','nuts','fat'],
+    dinner:['grain','poultry','fish','egg','dairy','vegetable','starchy_vegetable','plant_protein','nuts','fat']
+  };
+  return Boolean(role && allowed[mealKey]?.includes(role));
+}
+function buildSynchronizedMealText(day, mealKey) {
+  const byRole = {};
+  for (const item of day[mealKey + 'Ingredients']) {
+    const role = foodRole(item.foodId);
+    if (role) (byRole[role] ||= []).push(item.name || FOOD_CATALOG[item.foodId].name);
+  }
+  const names = roles => roles.flatMap(role => byRole[role] || []).join(', ');
+  const grains = names(['grain','starchy_vegetable']);
+  const proteins = names(['poultry','fish','egg','plant_protein']);
+  const dairy = names(['dairy']);
+  const vegetables = names(['vegetable']);
+  const fruits = names(['fruit']);
+  const extras = names(['nuts','fat']);
+  const steps = [];
+  if (mealKey === 'breakfast' || mealKey === 'snack') {
+    if (grains) steps.push('Приготовь ' + grains + ' до готовности');
+    if (dairy) steps.push('подай с ' + dairy);
+    if (proteins) steps.push('приготовь ' + proteins + ' подходящим способом');
+    if (fruits) steps.push('добавь ' + fruits + ' свежими');
+    if (vegetables) steps.push('подай с ' + vegetables);
+  } else {
+    if (proteins) steps.push('приготовь ' + proteins + ' до полной готовности');
+    if (grains) steps.push('отдельно приготовь ' + grains);
+    if (vegetables) steps.push('подай с ' + vegetables);
+    if (dairy) steps.push('добавь ' + dairy);
+    if (fruits) steps.push('подай ' + fruits + ' отдельно');
+  }
+  if (extras) steps.push('добавь ' + extras + ' к готовому блюду');
+  const ingredientNames = day[mealKey + 'Ingredients'].map(item => item.name || FOOD_CATALOG[item.foodId].name);
+  return {
+    title: ('Сбалансированное блюдо: ' + ingredientNames.join(', ')).slice(0,120),
+    recipe: (steps.length ? steps.join('; ') : 'Подготовь продукты и подай вместе') + '.'
+  };
+}
+
 function foodAllowedByPreferences(foodId, profile) {
   const preferences = clean(profile?.preferences, 700).toLowerCase();
   if (!preferences || /без ограничений|нет ограничений|всеядн/.test(preferences)) return true;
@@ -429,7 +488,7 @@ function rebalanceDayNutrition(day, targets, profile) {
       for (let index = 0; index < ingredients.length; index++) {
         const item = ingredients[index];
         for (const foodId of allowedFoods) {
-          if (foodId === item.foodId || ingredients.some((other,i)=>i!==index&&other.foodId===foodId)) continue;
+          if (foodId === item.foodId || !foodCanReplaceFood(item.foodId, foodId) || ingredients.some((other,i)=>i!==index&&other.foodId===foodId)) continue;
           const previous = {...item};
           item.foodId = foodId;
           item.name = FOOD_CATALOG[foodId].name;
@@ -442,11 +501,13 @@ function rebalanceDayNutrition(day, targets, profile) {
         }
       }
       if (ingredients.length < 6) {
-        const additions = allowedFoods.filter(id => !ingredients.some(item=>item.foodId===id));
+        const additions = allowedFoods.filter(id => foodFitsMeal(id, key) && !ingredients.some(item=>item.foodId===id));
         for (const foodId of additions) {
-          const food = FOOD_CATALOG[foodId];
-          const portions = food.carbs >= 20 && food.protein <= 18 ? [30,50,70] :
-            food.fat >= 10 ? [10,15,20] : [];
+          const role = foodRole(foodId);
+          const portions = role === 'grain' || role === 'plant_protein' ? [30,50,70] :
+            role === 'fruit' || role === 'vegetable' || role === 'starchy_vegetable' ? [50,80,100] :
+            role === 'dairy' || role === 'egg' || role === 'poultry' || role === 'fish' ? [30,50,75] :
+            role === 'fat' || role === 'nuts' ? [5,10,15] : [];
           for (const grams of portions) {
             ingredients.push({foodId,name:food.name,grams});
             const candidateScore = score();
@@ -513,16 +574,18 @@ function rebalanceDayNutrition(day, targets, profile) {
     if(withinTargets()) break;
     }
   }
-  if (!withinTargets()) return false;
-
+  if (!withinTargets()) {
+    for (const key of MEAL_KEYS) day[key + 'Ingredients'] = originalIngredients[key].map(item => ({...item}));
+    day.nutrition = calculateDayNutrition(day);
+    return false;
+  }
   for (const key of MEAL_KEYS) {
     const before = originalIngredients[key].map(item=>item.foodId).join('|');
     const after = day[key+'Ingredients'].map(item=>item.foodId).join('|');
     if (before !== after) {
-      const names = day[key+'Ingredients'].map(item=>item.name).filter(Boolean).slice(0,4);
-      day[key] = ('Сбалансированное блюдо: ' + names.join(', ')).slice(0,120);
-      day[key+'Recipe'] = ('Состав скорректирован по нормам БЖУ: ' + names.join(', ') +
-        '. Приготовь продукты до готовности и подай вместе.').slice(0,300);
+      const synchronized = buildSynchronizedMealText(day, key);
+      day[key] = synchronized.title;
+      day[key+'Recipe'] = synchronized.recipe.slice(0,300);
     }
   }
   return true;
@@ -1653,4 +1716,4 @@ export default {
   }
 };
 
-export { buildRobokassaPaymentSignature, robokassaResultSignature, verifyRobokassaResultSignature, robokassaWebhook, paymentStatus, testCheckout, aiPlanDiagnostic, aiDataFlowDiagnostic, generateAiPlan, runAiTextWithFallback, runAiInferenceWithTimeout, FOOD_CATALOG, buildPlanResponseSchema, diagnosePlanWeekFailure, rebalanceDayNutrition, foodAllowedByPreferences };
+export { buildRobokassaPaymentSignature, robokassaResultSignature, verifyRobokassaResultSignature, robokassaWebhook, paymentStatus, testCheckout, aiPlanDiagnostic, aiDataFlowDiagnostic, generateAiPlan, runAiTextWithFallback, runAiInferenceWithTimeout, FOOD_CATALOG, buildPlanResponseSchema, diagnosePlanWeekFailure, rebalanceDayNutrition, foodAllowedByPreferences, foodRole, foodCanReplaceFood, foodFitsMeal };
