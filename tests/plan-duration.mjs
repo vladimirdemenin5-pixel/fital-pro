@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { generateAiPlan, runAiTextWithFallback, aiPlanDiagnostic, aiDataFlowDiagnostic, FOOD_CATALOG } from '../_worker.js';
+import { generateAiPlan, runAiTextWithFallback, runAiInferenceWithTimeout, aiPlanDiagnostic, aiDataFlowDiagnostic, FOOD_CATALOG } from '../_worker.js';
 import { readFile } from 'node:fs/promises';
 
 const workerSource = await readFile(new URL('../_worker.js', import.meta.url), 'utf8');
@@ -56,6 +56,21 @@ function makeAi(menuDays, wrongLength = false, invalidMeal = false, invalidWorko
   };
 }
 
+const timeoutSignalCapture = { signal: null };
+await assert.rejects(
+  () => runAiInferenceWithTimeout({
+    AI: {
+      run(_model, _inputs, options) {
+        timeoutSignalCapture.signal = options.signal;
+        return new Promise(() => {});
+      }
+    }
+  }, 'test-stalled-model', {}, 5),
+  error => error?.name === 'TimeoutError',
+  'the inference wrapper must reject even if the AI binding never settles'
+);
+assert.equal(timeoutSignalCapture.signal.aborted, true, 'a model timeout must also abort the underlying AI call');
+
 const proPlan = await generateAiPlan(profile, 'PRO', { AI: makeAi(14) });
 assert.equal(proPlan.week.length, 14, 'PRO must contain 14 complete menu days');
 assert.equal(proPlan.menuDays, 14);
@@ -75,7 +90,7 @@ assert.ok(workerSource.includes('fdcId:173904'), 'oats reference must retain its
 assert.ok(workerSource.includes('for (let offset = 0; offset < totalDays; offset += 7)'), 'long plans must be generated and validated in seven-day blocks');
 assert.ok(workerSource.includes("const models = ['@cf/zai-org/glm-4.7-flash', MODEL, '@cf/meta/llama-3.3-70b-instruct-fp8-fast'];"), 'the low-latency Flash model must be tried before slower plan-generation fallbacks');
 assert.ok(workerSource.includes('rejectIfBusy: true'), 'Workers AI must skip a busy model queue and fall back instead of waiting until the request times out');
-assert.ok(workerSource.includes('const AI_MODEL_TIMEOUT_MS = 45000;') && workerSource.includes('signal: AbortSignal.timeout(AI_MODEL_TIMEOUT_MS)'), 'each plan-model inference must have a cancellable timeout so a stalled model cannot block fallbacks');
+assert.ok(workerSource.includes('const AI_MODEL_TIMEOUT_MS = 45000;') && workerSource.includes('Promise.race([') && workerSource.includes('runAiInferenceWithTimeout(env, model'), 'each plan-model inference must have a hard timeout so a stalled model cannot block fallbacks');
 assert.equal((workerSource.match(/const models = \['@cf\/zai-org\/glm-4\.7-flash', MODEL, '@cf\/meta\/llama-3\.3-70b-instruct-fp8-fast'\];/g) || []).length, 2, 'both chat and plan generation must try the low-latency Flash model first');
 assert.ok(workerSource.includes('max_completion_tokens: 6500') && !workerSource.includes('max_tokens: 6500'), 'Workers AI output must use its supported max_completion_tokens parameter');
 assert.ok(workerSource.includes('reasoning_effort: null'), 'reasoning must be explicitly disabled for deterministic structured meal-plan generation');
