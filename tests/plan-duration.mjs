@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { generateAiPlan, runAiTextWithFallback, runAiInferenceWithTimeout, aiPlanDiagnostic, aiDataFlowDiagnostic, FOOD_CATALOG } from '../_worker.js';
+import { generateAiPlan, runAiTextWithFallback, runAiInferenceWithTimeout, aiPlanDiagnostic, aiDataFlowDiagnostic, FOOD_CATALOG, buildPlanResponseSchema } from '../_worker.js';
 import { readFile } from 'node:fs/promises';
 
 const workerSource = await readFile(new URL('../_worker.js', import.meta.url), 'utf8');
@@ -38,16 +38,16 @@ function makeAi(menuDays, wrongLength = false, invalidMeal = false, invalidWorko
           trainingDay,
           breakfast: 'Овсяная каша с бананом',
           breakfastRecipe: 'Свари хлопья на молоке до мягкости и добавь нарезанный банан.',
-          breakfastIngredients: invalidMeal ? [] : (tiny ? [['oats_dry', 5]] : [['oats_dry', portion(80)], ['milk_2pct', portion(200)], ['banana', portion(120)]]),
+          breakfastIngredients: invalidMeal ? [] : (tiny ? [['oats_dry', 5]] : [['oats_dry', portion(80)], ['milk_2pct', portion(200)], ['banana', portion(120)]]).map(([foodId, grams]) => ({ foodId, grams })),
           lunch: 'Курица с рисом и брокколи',
           lunchRecipe: 'Отвари рис, запеки курицу и приготовь брокколи на пару.',
-          lunchIngredients: tiny ? [['chicken_raw', 5]] : [['chicken_raw', portion(100)], ['rice_dry', portion(85)], ['broccoli', portion(100)]],
+          lunchIngredients: (tiny ? [['chicken_raw', 5]] : [['chicken_raw', portion(100)], ['rice_dry', portion(85)], ['broccoli', portion(100)]]).map(([foodId, grams]) => ({ foodId, grams })),
           snack: 'Йогурт с яблоком и миндалём',
           snackRecipe: 'Нарежь яблоко и подай с йогуртом и миндалём.',
-          snackIngredients: tiny ? [['greek_yogurt', 5]] : [['greek_yogurt', portion(150)], ['apple', portion(150)], ['almonds', portion(15)]],
+          snackIngredients: (tiny ? [['greek_yogurt', 5]] : [['greek_yogurt', portion(150)], ['apple', portion(150)], ['almonds', portion(15)]]).map(([foodId, grams]) => ({ foodId, grams })),
           dinner: 'Лосось с картофелем и овощами',
           dinnerRecipe: 'Запеки лосось с картофелем, подай с овощами.',
-          dinnerIngredients: tiny ? [['salmon_raw', 5]] : [['salmon_raw', portion(100)], ['potato_raw', portion(200)], ['olive_oil', portion(28)], ['tomato', portion(100)], ['avocado', portion(50)]],
+          dinnerIngredients: (tiny ? [['salmon_raw', 5]] : [['salmon_raw', portion(100)], ['potato_raw', portion(200)], ['olive_oil', portion(28)], ['tomato', portion(100)], ['avocado', portion(50)]]).map(([foodId, grams]) => ({ foodId, grams })),
           workout: trainingDay ? (invalidWorkout ? 'Разминка, приседания и тяга' : 'Разминка, приседания 3×10, тяга 3×10, заминка') : 'Прогулка и восстановление'
         };
       });
@@ -141,14 +141,18 @@ const schemaConstrainedPlan = await generateAiPlan(profile, 'Питание', { 
 assert.equal(schemaConstrainedPlan.week.length, 7);
 assert.equal(fastLlamaModelInput.max_tokens, 6500, 'fast Llama must use its documented max_tokens parameter');
 assert.equal(fastLlamaModelInput.max_completion_tokens, undefined, 'fast Llama must not receive the unsupported max_completion_tokens parameter');
-assert.deepEqual(fastLlamaModelInput.response_format, {
-  type: 'json_schema',
-  json_schema: {
-    type: 'object',
-    properties: { week: { type: 'array', minItems: 7, maxItems: 7, items: { type: 'object' } } },
-    required: ['week']
-  }
-}, 'fast Llama schema must require exactly seven days in the requested block');
+assert.equal(fastLlamaModelInput.response_format.type, 'json_schema');
+const sevenDaySchema = buildPlanResponseSchema(7);
+assert.deepEqual(fastLlamaModelInput.response_format.json_schema, sevenDaySchema, 'fast Llama must receive the full validated plan schema');
+assert.equal(sevenDaySchema.properties.week.minItems, 7);
+assert.equal(sevenDaySchema.properties.week.maxItems, 7, 'the plan schema must require exactly seven days');
+const breakfastIngredientSchema = sevenDaySchema.properties.week.items.properties.breakfastIngredients;
+assert.equal(breakfastIngredientSchema.minItems, 1);
+assert.equal(breakfastIngredientSchema.maxItems, 6);
+assert.deepEqual(breakfastIngredientSchema.items.properties.foodId.enum, Object.keys(FOOD_CATALOG), 'AI food IDs must be restricted to the server catalog');
+assert.equal(breakfastIngredientSchema.items.properties.grams.minimum, 5);
+assert.equal(breakfastIngredientSchema.items.properties.grams.maximum, 500);
+assert.ok(breakfastIngredientSchema.items.required.includes('foodId') && breakfastIngredientSchema.items.required.includes('grams'));
 assert.equal(fastLlamaModelInput.reasoning_effort, undefined, 'fast Llama should not receive parameters absent from its model input schema');
 assert.equal(fastLlamaModelInput.chat_template_kwargs, undefined, 'fast Llama should not receive unsupported chat-template options');
 const correctedPortionPlan = await generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, false, false, false, 0.7) });
