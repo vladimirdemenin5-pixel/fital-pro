@@ -3,7 +3,6 @@ import { createHash } from 'node:crypto';
 const MODEL = '@cf/google/gemma-4-26b-a4b-it';
 const AI_MODEL_TIMEOUT_MS = 45000;
 const QWEN_PLAN_TIMEOUT_MS = 90000;
-const QWEN4_API_TIMEOUT_MS = 90000;
 const PLANS = {
   'Питание': { amount: '990.00', label: 'Fital Pro — Питание, 7 дней', days: 7, menuDays: 7 },
   'PRO': { amount: '1990.00', label: 'Fital Pro PRO — питание + тренировки, 14 дней', days: 14, menuDays: 14 },
@@ -751,69 +750,13 @@ async function runAiInferenceWithTimeout(env, model, inputs, timeoutMs = AI_MODE
   }
 }
 
-const QWEN4_MODEL = 'qwencloud:qwen4-max';
-const QWEN4_REGION_HOSTS = Object.freeze({
-  'ap-southeast-1': 'ap-southeast-1.maas.qwencloudapi.com',
-  'eu-central-1': 'eu-central-1.maas.qwencloudapi.com',
-  'cn-beijing': 'cn-beijing.maas.qwencloudapi.com',
-  'cn-hongkong': 'cn-hongkong.maas.qwencloudapi.com',
-  'ap-northeast-1': 'ap-northeast-1.maas.qwencloudapi.com',
-  'us-east-1': 'us-east-1.maas.qwencloudapi.com'
-});
-
-async function runQwen4PlanInference(env, messages) {
-  const apiKey = clean(env.QWEN4_API_KEY, 500);
-  if (!apiKey) throw new Error('QWEN4_API_KEY is not configured.');
-  const region = clean(env.QWEN4_REGION, 32) || 'ap-southeast-1';
-  const host = QWEN4_REGION_HOSTS[region];
-  if (!host) throw new Error('Unsupported QWEN4_REGION. Use a documented QwenCloud region ID.');
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), QWEN4_API_TIMEOUT_MS);
-  try {
-    const response = await fetch('https://' + host + '/compatible-mode/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: 'Bearer ' + apiKey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'qwen4-max',
-        messages: messages.map(message => {
-          if (message.role !== 'user') return { role: message.role, content: String(message.content || '') };
-          // The client's name is not needed for nutrition generation; anonymize it before the external API call.
-          const content = String(message.content || '').replace(/ДАННЫЕ КЛИЕНТА:\s*(\{[^\n]*\})/, (_match, rawProfile) => {
-            try {
-              const anonymizedProfile = JSON.parse(rawProfile);
-              anonymizedProfile.name = 'Клиент';
-              return 'ДАННЫЕ КЛИЕНТА: ' + JSON.stringify(anonymizedProfile);
-            } catch {
-              return 'ДАННЫЕ КЛИЕНТА: [анонимизировано]';
-            }
-          });
-          return { role: 'user', content: [{ type: 'text', text: content }] };
-        }),
-        temperature: 0.2,
-        max_tokens: 6500
-      }),
-      signal: controller.signal
-    });
-    if (!response.ok) {
-      const detail = clean(await response.text(), 260);
-      throw new Error('QwenCloud HTTP ' + response.status + (detail ? ': ' + detail : ''));
-    }
-    return await response.json();
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 async function runPlanModel(env, prompt, profile, planKey, menuDays) {
   const messages = [
     { role: 'system', content: 'Ты Fital Pro. Отвечай только валидным JSON без Markdown и пояснений.' },
     { role: 'user', content: prompt }
   ];
-  // Qwen 3.8 is the primary meal-plan model; smaller/other models remain fallbacks.
-  const models = [...(clean(env.QWEN4_API_KEY, 500) ? [QWEN4_MODEL] : []), '@cf/qwen/qwen3.8-27b', '@cf/zai-org/glm-4.7-flash', MODEL];
+  // Cloudflare Qwen 3.8 is primary; OpenAI GPT-OSS 120B is the first structured-output fallback.
+  const models = ['@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/zai-org/glm-4.7-flash', MODEL];
   const diagnostics = [];
   const rejectionDiagnostics = [];
 
@@ -828,28 +771,25 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
         }]
       : messages;
     try {
-      const isQwen4 = model === QWEN4_MODEL;
       const isQwen = model === '@cf/qwen/qwen3.8-27b';
+      const isGptOss = model === '@cf/openai/gpt-oss-120b';
       const modelInput = {
         messages: currentMessages,
         temperature: 0.2,
-        max_completion_tokens: 6500,
-        ...(isQwen ? {
-          // Qwen supports reasoning_effort but is not on Cloudflare's JSON Mode
-          // compatibility list; keep output-format enforcement in the prompt
-          // and the authoritative validation in normalizeAndValidatePlanWeek.
+        ...(isGptOss ? {
+          // GPT-OSS uses max_tokens; keep JSON enforcement in the prompt and validate server-side.
+          max_tokens: 6500,
           reasoning_effort: 'low'
         } : {
-          reasoning_effort: null,
-          response_format: { type: 'json_object' },
-          chat_template_kwargs: { enable_thinking: false }
+          // Qwen/GLM/Gemma use max_completion_tokens in Workers AI.
+          max_completion_tokens: 6500,
+          ...(isQwen ? { reasoning_effort: 'low' } : {})
         })
       };
-      const result = isQwen4
-        ? await runQwen4PlanInference(env, currentMessages)
-        : await runAiInferenceWithTimeout(
-            env, model, modelInput, isQwen ? QWEN_PLAN_TIMEOUT_MS : AI_MODEL_TIMEOUT_MS
-          );
+      const result = await runAiInferenceWithTimeout(
+        env, model, modelInput,
+        isQwen || isGptOss ? QWEN_PLAN_TIMEOUT_MS : AI_MODEL_TIMEOUT_MS
+      );
       const text = extractAiText(result);
       const normalized = text.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
       const match = normalized.match(/\{[\s\S]*\}/);
@@ -932,7 +872,7 @@ async function generateAiPlan(profile, planKey, env) {
       'Учитывай пищевые предпочтения, ограничения и аллергии. Не включай продукты, которые клиент указал как нежелательные или аллергенные. Если подходящего продукта нет в справочнике, подбери ближайшую безопасную альтернативу только из справочника.',
       'Рацион должен быть из доступных продуктов, с простыми блюдами и без экстремальных ограничений.',
       'Не диагностируй болезни, не назначай лечение и не давай рекомендаций по отмене лекарств. При заболеваниях, беременности, расстройствах пищевого поведения или противопоказаниях направляй к врачу.',
-      'ДАННЫЕ КЛИЕНТА: ' + JSON.stringify(profile),
+      'ДАННЫЕ КЛИЕНТА: ' + JSON.stringify({ ...profile, name: 'Клиент' }),
       'ТАРИФ: ' + planKey,
       'БЛОК: дни ' + (offset + 1) + '–' + (offset + chunkDays) + ' из ' + totalDays + '.'
     ].join('\n');
@@ -1093,7 +1033,7 @@ async function checkout(request, env, forceTestMode = false) {
   const now = new Date().toISOString();
   const order = await env.DB.prepare(
     'INSERT INTO pending_orders (client_ref,plan,amount,customer_contact,profile_json,plan_json,status,created_at,updated_at,pd_consent_at,pd_policy_version,offer_accepted_at,offer_version,is_test) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING inv_id'
-  ).bind(clientRef, planKey, product.amount, contact, JSON.stringify(profile), JSON.stringify(plan), 'pending', now, now, now, '2026-11-21', now, '2026-11-21', testMode ? 1 : 0).first();
+  ).bind(clientRef, planKey, product.amount, contact, JSON.stringify(profile), JSON.stringify(plan), 'pending', now, now, now, '2026-11-23', now, '2026-11-21', testMode ? 1 : 0).first();
   const invId = Number(order?.inv_id);
   if (!Number.isSafeInteger(invId) || invId < 1) {
     throw new Error('Не удалось сохранить заказ. Попробуйте ещё раз.');

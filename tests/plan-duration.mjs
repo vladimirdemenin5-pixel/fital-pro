@@ -127,35 +127,6 @@ assert.equal(foodAllowedByPreferences('milk_2pct', { preferences: 'Без мол
 assert.equal(foodAllowedByPreferences('chicken_raw', { preferences: 'Вегетарианство' }), false, 'replacement candidates must respect vegetarian restrictions');
 assert.equal(foodAllowedByPreferences('rice_dry', { preferences: 'Без глютена' }), true, 'gluten-free restrictions must keep safe catalog alternatives available');
 
-let qwen4Request = null;
-const originalFetch = globalThis.fetch;
-try {
-  globalThis.fetch = async (url, options) => {
-    qwen4Request = { url: String(url), options };
-    const fixture = await makeAi(7).run();
-    const parsed = JSON.parse(fixture.response);
-    return new Response(JSON.stringify({
-      choices: [{ message: { role: 'assistant', content: JSON.stringify(parsed) }, finish_reason: 'stop' }]
-    }), { status: 200, headers: { 'content-type': 'application/json' } });
-  };
-  const qwen4Plan = await generateAiPlan(profile, 'Питание', {
-    QWEN4_API_KEY: 'test-qwen4-key',
-    QWEN4_REGION: 'eu-central-1',
-    AI: { async run() { throw new Error('Workers AI must not run when Qwen4 succeeds'); } }
-  });
-  assert.equal(qwen4Plan.week.length, 7, 'Qwen4 must generate a complete verified seven-day plan');
-  assert.equal(qwen4Request.url, 'https://eu-central-1.maas.qwencloudapi.com/compatible-mode/v1/chat/completions');
-  assert.equal(qwen4Request.options.headers.Authorization, 'Bearer test-qwen4-key');
-  const qwen4Body = JSON.parse(qwen4Request.options.body);
-  assert.equal(qwen4Body.model, 'qwen4-max');
-  const qwen4Prompt = qwen4Body.messages[1].content[0].text;
-  assert.ok(qwen4Prompt.includes('"name":"Клиент"') && !qwen4Prompt.includes('Тестовый клиент'), 'QwenCloud must receive an anonymized client profile without the customer name');
-  assert.ok(Array.isArray(qwen4Body.messages[1].content) && qwen4Body.messages[1].content[0].type === 'text',
-    'Qwen4 request must use the documented multimodal-compatible text content format');
-} finally {
-  globalThis.fetch = originalFetch;
-}
-
 const timeoutSignalCapture = { signal: null };
 await assert.rejects(
   () => runAiInferenceWithTimeout({
@@ -190,14 +161,16 @@ assert.ok(workerSource.includes('fdcId:173904'), 'oats reference must retain its
 assert.ok(workerSource.includes('for (let offset = 0; offset < totalDays; offset += 7)'), 'long plans must be generated and validated in seven-day blocks');
 assert.ok(workerSource.includes('MAX_MEAL_INGREDIENT_GRAMS') && workerSource.includes('min:5,max:') && workerSource.includes('for (let iteration=0;iteration<120;iteration++)') && workerSource.includes('const nutrientTargets = [targets.calories, targets.protein, targets.fat, targets.carbs];') && workerSource.includes('const derivatives=values.map(') && workerSource.includes('let learningRate=1000;') && workerSource.includes('const allowedFoods = Object.keys(FOOD_CATALOG).filter(id => foodAllowedByPreferences(id, profile));'), 'portion and food-choice correction must use bounded catalog search without relaxing nutrition ranges');
 assert.ok(workerSource.includes('const rejectionDiagnostics = [];') && workerSource.includes('rejectionDiagnostics.slice(-3)'), 'the next fallback model must receive concrete rejection reasons from the previous model');
-assert.ok(workerSource.includes("const models = [...(clean(env.QWEN4_API_KEY, 500) ? [QWEN4_MODEL] : []), '@cf/qwen/qwen3.8-27b', '@cf/zai-org/glm-4.7-flash', MODEL];"), 'Qwen4 Max must be the optional primary model, with Cloudflare Qwen 3.8, GLM Flash and Gemma as fallbacks');
+assert.ok(workerSource.includes("const models = ['@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/zai-org/glm-4.7-flash', MODEL];"), 'Cloudflare Qwen 3.8 must be primary, followed by OpenAI GPT-OSS 120B and safe fallbacks');
 assert.ok(workerSource.includes('for (let move = 0; move < 12; move++)') && workerSource.includes('!foodFitsMeal(foodId, key)'), 'nutrition correction must search more composition changes and keep replacement foods compatible with their meal');
 assert.ok(workerSource.includes('rejectIfBusy: true'), 'Workers AI must skip a busy model queue and fall back instead of waiting until the request times out');
 assert.ok(workerSource.includes('const AI_MODEL_TIMEOUT_MS = 45000;') && workerSource.includes('Promise.race([') && workerSource.includes('runAiInferenceWithTimeout(env, model'), 'each plan-model inference must have a hard timeout so a stalled model cannot block fallbacks');
 assert.equal((workerSource.match(/const models = \['@cf\/zai-org\/glm-4\.7-flash', '@cf\/meta\/llama-3\.1-8b-instruct-fast', MODEL\];/g) || []).length, 1, 'the general chat fallback chain remains unchanged');
-assert.ok(workerSource.includes('max_completion_tokens: 6500') && workerSource.includes('QWEN_PLAN_TIMEOUT_MS = 90000'), 'Qwen and fallback plan models must use bounded output and a model-specific timeout');
+assert.ok(workerSource.includes('max_tokens: 6500') && workerSource.includes('max_completion_tokens: 6500') && workerSource.includes('QWEN_PLAN_TIMEOUT_MS = 90000'), 'each Workers AI plan model must use its documented token-limit parameter and bounded timeout');
+assert.ok(workerSource.includes("const isGptOss = model === '@cf/openai/gpt-oss-120b'") && workerSource.includes("response_format: { type: 'json_object' }"), 'GPT-OSS fallback must use supported JSON Mode');
+assert.ok(!workerSource.includes('QWEN4_API_KEY') && !workerSource.includes('qwen4-max'), 'paid QwenCloud integration must be absent from the Cloudflare-only model chain');
 assert.ok(workerSource.includes('function buildPlanResponseSchema(menuDays)') && workerSource.includes('minItems: menuDays') && workerSource.includes('maxItems: menuDays'), 'the reusable server schema helper must still describe exact plan length');
-assert.ok(workerSource.includes('reasoning_effort: null'), 'reasoning must be explicitly disabled for deterministic structured meal-plan generation');
+assert.ok(workerSource.includes("reasoning_effort: 'low'"), 'reasoning must be bounded to low for structured meal-plan generation');
 assert.ok(workerSource.includes('const aiOptions = {') && workerSource.includes('env.AI.run(model, aiOptions, { rejectIfBusy: true })'), 'the AI chat fallback must also disable reasoning before inference');
 assert.ok(workerSource.includes('week должен содержать РОВНО'), 'the model prompt must explicitly require the exact block length');
 assert.equal(proPlan.week.slice(0, 7).filter(day => day.trainingDay).length, 3);
@@ -228,7 +201,7 @@ const timeoutRecoveredPlan = await generateAiPlan(profile, 'Питание', { A
   }
 } });
 assert.equal(timeoutRecoveredPlan.week.length, 7, 'a timed-out first model must fall back to the next available model');
-assert.equal(timeoutFallbackModels[1], '@cf/zai-org/glm-4.7-flash', 'GLM Flash must be attempted after Qwen times out');
+assert.equal(timeoutFallbackModels[1], '@cf/openai/gpt-oss-120b', 'OpenAI GPT-OSS 120B must be attempted after Qwen 3.8 times out');
 let qwenModelInput = null;
 const qwenPrimaryPlan = await generateAiPlan(profile, 'Питание', { AI: {
   async run(model, input, options) {
@@ -242,6 +215,21 @@ assert.equal(qwenPrimaryPlan.week.length, 7);
 assert.equal(qwenModelInput.max_completion_tokens, 6500);
 assert.equal(qwenModelInput.reasoning_effort, 'low', 'Qwen reasoning must be bounded to low for structured meal-plan output');
 assert.equal(qwenModelInput.response_format, undefined, 'do not send unsupported Cloudflare JSON Mode parameters to Qwen');
+const qwenPrompt = qwenModelInput.messages[1].content;
+assert.ok(qwenPrompt.includes('"name":"Клиент"') && !qwenPrompt.includes('Тестовый клиент'), 'all Cloudflare AI models must receive an anonymized client name');
+let gptModelInput = null;
+const gptFallbackPlan = await generateAiPlan(profile, 'Питание', { AI: {
+  async run(model, input) {
+    if (model === '@cf/qwen/qwen3.8-27b') throw new Error('Qwen primary intentionally unavailable in this test');
+    assert.equal(model, '@cf/openai/gpt-oss-120b', 'GPT-OSS must be the first fallback after Qwen 3.8');
+    gptModelInput = input;
+    return makeAi(7).run(model, input);
+  }
+} });
+assert.equal(gptFallbackPlan.week.length, 7, 'GPT-OSS fallback must produce a complete server-validated seven-day plan');
+assert.equal(gptModelInput.max_tokens, 6500);
+assert.equal(gptModelInput.reasoning_effort, 'low');
+assert.equal(gptModelInput.response_format, undefined, 'do not send undocumented JSON Mode to GPT-OSS; validate its JSON response server-side');
 assert.ok(workerSource.includes('заменять или добавлять продукты') && workerSource.includes('Для углеводов используй подходящие крупи') === false && workerSource.includes('Для углеводов используй подходящие крупы'), 'AI fallback correction must be allowed to add catalog carbohydrate sources when needed');
 assert.ok(workerSource.includes('верни полный JSON') || workerSource.includes('Верни полный JSON'), 'correction prompt must request the complete plan JSON');
 const diagnosticSource = JSON.parse((await makeAi(7).run()).response);
@@ -260,7 +248,7 @@ const lowEnergyFallbackPlan = await generateAiPlan(profile, 'Питание', { 
     if (model === '@cf/qwen/qwen3.8-27b') {
       return makeAi(7, false, false, false, true).run(model, input);
     }
-    if (model === '@cf/zai-org/glm-4.7-flash') {
+    if (model === '@cf/openai/gpt-oss-120b') {
       lowEnergyCorrectionPrompt = input.messages.at(-1).content;
       return makeAi(7).run(model, input);
     }
@@ -383,7 +371,7 @@ const nutritionRetryAi = {
 const recoveredNutritionPlan = await generateAiPlan(profile, 'Питание', { AI: nutritionRetryAi });
 assert.equal(recoveredNutritionPlan.week.length, 7, 'a corrected fallback-model response must produce a complete plan');
 assert.equal(nutritionRetryCalls, 3, 'the plan generator must reach the third fallback after two invalid fast-model responses');
-assert.equal(nutritionRetryModels[2], '@cf/google/gemma-4-26b-a4b-it', 'the third attempt must use the configured Gemma fallback model');
+assert.equal(nutritionRetryModels[2], '@cf/zai-org/glm-4.7-flash', 'the third attempt must use the configured GLM fallback after Qwen 3.8 and GPT-OSS');
 
 const modelCalls = [];
 const fallbackText = await runAiTextWithFallback({

@@ -22,9 +22,10 @@ for (const page of ['oferta.html', 'privacy.html', 'delivery-refund.html', 'requ
 }
 assert.ok(html.includes('href="/oferta.html"'));
 assert.ok(html.includes('href="/privacy.html"'));
-assert.ok(html.includes('включая Cloudflare и QwenCloud'), 'the questionnaire must disclose external AI providers before consent');
-assert.ok(read('public/privacy.html').includes('QwenCloud (сервис моделей Qwen компании Alibaba)'), 'the privacy policy must identify the QwenCloud provider');
-assert.ok(read('public/privacy.html').includes('Frankfurt Global'), 'the privacy policy must disclose that global inference may run outside the EU');
+assert.ok(html.includes('Cloudflare Workers AI') && html.includes('OpenAI GPT-OSS'), 'the questionnaire must disclose the actual Cloudflare-hosted AI models before consent');
+assert.ok(read('public/privacy.html').includes('Cloudflare Workers AI') && read('public/privacy.html').includes('OpenAI GPT-OSS'), 'the privacy policy must identify the actual AI processing provider and model family');
+assert.ok(read('public/privacy.html').includes('Редакция от 23 ноября 2026 года.'), 'the privacy policy revision date must match the updated provider disclosure');
+assert.ok(read('public/privacy.html').includes('Прямое обращение к QwenCloud (Alibaba) или к OpenAI API для генерации планов не выполняется.'), 'the privacy policy must distinguish Cloudflare-hosted model inference from direct external APIs');
 assert.match(robokassaTest, /id="age" type="number" min="18" max="90"/,
   'the Robokassa test form must match the server-side adult-only age limit');
 assert.ok(worker.includes('pd_consent_at'));
@@ -86,7 +87,8 @@ assert.ok(app.includes("$('#chatTool').classList.toggle('is-hidden', !advancedFe
 assert.ok(html.includes('id="progressTool"'));
 assert.ok(html.includes('id="chatTool"'));
 assert.ok(worker.includes('trainingDay: includesTraining && source.trainingDay'), 'training-day flag must be normalized from the validated AI response');
-assert.ok(worker.includes("max_completion_tokens: 6500"), 'GLM/Gemma must retain their supported max_completion_tokens field');
+assert.ok(worker.includes("JSON.stringify({ ...profile, name: 'Клиент' })"), 'AI providers must not receive the customer name');
+assert.ok(worker.includes("max_completion_tokens: 6500"), 'Qwen/GLM/Gemma plan requests must use the documented max_completion_tokens field');
 assert.ok(worker.includes("const models = ['@cf/zai-org/glm-4.7-flash', '@cf/meta/llama-3.1-8b-instruct-fast', MODEL];"), 'the general AI chat must retain the supported GLM, Llama and Gemma fallback order');
 assert.ok(worker.includes("response_format: { type: 'json_object' }"));
 assert.ok(worker.includes("chat_template_kwargs: { enable_thinking: false }"));
