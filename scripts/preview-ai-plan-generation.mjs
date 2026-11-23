@@ -13,7 +13,10 @@ const expectedClaims = {
   event_name: 'pull_request',
   head_ref: 'fix/ai-plan-generation-three-day-chunks',
   base_ref: 'main',
-  sub: 'repo:vladimirdemenin5-pixel/fital-pro:pull_request'
+  sub: [
+    'repo:vladimirdemenin5-pixel/fital-pro:pull_request',
+    'repo:vladimirdemenin5-pixel@324070911/fital-pro@1354815283:pull_request'
+  ]
 };
 
 async function getOidcToken() {
@@ -76,8 +79,9 @@ for (const item of plans) {
   const oidcToken = await getOidcToken();
   const claims = readClaims(oidcToken);
   for (const [key, expected] of Object.entries(expectedClaims)) {
-    const actual = Array.isArray(claims[key]) ? claims[key].join(',') : claims[key];
-    if (actual !== expected) {
+    const actual = claims[key];
+    const allowed = Array.isArray(expected) ? expected : [expected];
+    if (!allowed.includes(actual)) {
       throw new Error('OIDC claim ' + key + ' does not match the restricted preview workflow.');
     }
   }
