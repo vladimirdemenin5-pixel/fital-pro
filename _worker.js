@@ -778,11 +778,11 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
         temperature: 0.2,
         ...(isGptOss ? {
           // GPT-OSS uses max_tokens; keep JSON enforcement in the prompt and validate server-side.
-          max_tokens: 6500,
+          max_tokens: 4200,
           reasoning_effort: 'low'
         } : {
           // Qwen/GLM/Gemma use max_completion_tokens in Workers AI.
-          max_completion_tokens: 6500,
+          max_completion_tokens: 4200,
           ...(isQwen ? { reasoning_effort: 'low' } : {})
         })
       };
@@ -839,10 +839,10 @@ async function generateAiPlan(profile, planKey, env) {
   let intro = '';
   const tips = [];
 
-  // Generate at most seven days per model call. This keeps 14- and 30-day plans
-  // within model output limits and lets the server validate every block.
-  for (let offset = 0; offset < totalDays; offset += 7) {
-    const chunkDays = Math.min(7, totalDays - offset);
+  // Generate at most three days per model call. Short blocks reduce inference latency
+  // and keep structured JSON output manageable for Qwen and GPT-OSS fallbacks.
+  for (let offset = 0; offset < totalDays; offset += 3) {
+    const chunkDays = Math.min(3, totalDays - offset);
     const trainingSchedule = Array.from({ length: Math.ceil(chunkDays / 7) }, (_, weekIndex) =>
       expectedTrainingDaysInBlock(chunkDays, weekIndex, profile.days)
     );
