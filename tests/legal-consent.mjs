@@ -111,7 +111,7 @@ assert.ok(worker.includes('function extractAiText(result)'));
 assert.ok(worker.includes("result?.choices?.[0]?.message?.content"));
 assert.ok(worker.includes("messages,"));
 assert.ok(worker.includes("'@cf/zai-org/glm-4.7-flash'"));
-assert.ok(worker.includes('runPlanModel(env, prompt, profile, planKey, chunkDays)'));
+assert.ok(worker.includes('runPlanModel(env, prompt, profile, planKey, chunkDays, offset + 1)'));
 assert.ok(worker.includes('normalizeAndValidatePlanWeek(parsed, profile, planKey, chunkDays, targets, offset + 1)'), 'the server must validate every chunk using its absolute start day and calculated nutrition targets');
 assert.ok(worker.includes('day.trainingDay === isScheduledTrainingDay(startDay + index, profile.days)'), 'training schedule must be checked by the server across chunk boundaries');
 assert.ok(worker.includes('function buildShoppingList(week)'), 'shopping quantities must be derived from exact ingredients in the saved plan');
