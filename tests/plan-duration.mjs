@@ -205,7 +205,7 @@ assert.equal(premiumPlan.week[29].day, 'День 30');
 const premiumTrainingCounts = Array.from({ length: 5 }, (_, index) =>
   premiumPlan.week.slice(index * 7, Math.min((index + 1) * 7, 30)).filter(day => day.trainingDay).length
 );
-assert.deepEqual(premiumTrainingCounts, [3, 3, 3, 3, 1], 'Premium training schedule must cover all 30 days, including the final two-day block');
+assert.deepEqual(premiumTrainingCounts, [3, 3, 3, 3, 0], 'Premium training schedule must preserve the three-sessions-per-seven-days cadence without adding a workout to the final two-day partial week');
 const nutritionPlan = await generateAiPlan(profile, 'Питание', { AI: makeAi(7) });
 const timeoutFallbackModels = [];
 const timeoutRecoveredPlan = await generateAiPlan(profile, 'Питание', { AI: {
