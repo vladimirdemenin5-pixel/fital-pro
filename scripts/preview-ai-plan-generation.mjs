@@ -99,7 +99,7 @@ for (const item of plans) {
   const result = await response.json().catch(() => ({}));
   if (!response.ok || result.ok !== true) {
     throw new Error(item.key + ': preview AI generation failed (HTTP ' + response.status + '): ' +
-      (result.error || 'unknown error'));
+      (result.error || 'unknown error') + (result.diagnostic ? ' [' + result.diagnostic + ']' : ''));
   }
   if (result.plan !== item.key || result.menuDays !== item.days ||
       result.durationDays !== item.days || !Array.isArray(result.days) ||
