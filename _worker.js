@@ -1276,7 +1276,17 @@ async function checkout(request, env, forceTestMode = false) {
   try {
     plan = await generateAiPlan(profile, planKey, env);
   } catch (error) {
-    return json({ error: clean(error.message, 240) || 'Не удалось подготовить план.' }, 502);
+    // Last-resort protection at the checkout boundary: quota/provider errors
+    // must never prevent order creation when the validated local planner works.
+    console.error('Fital Pro AI plan generation escaped its fallback; using final catalog fallback:', clean(error?.message, 240));
+    try {
+      plan = generateCatalogFallbackPlan(profile, planKey, nutritionTargets(profile), error);
+    } catch (fallbackError) {
+      console.error('Fital Pro final catalog fallback failed:', clean(fallbackError?.message, 240));
+      return json({
+        error: 'Не удалось подготовить проверенный план для указанных ограничений. Уточните пищевые предпочтения и повторите попытку.'
+      }, 422);
+    }
   }
 
   const clientRef = crypto.randomUUID().replaceAll('-', '');
@@ -1330,6 +1340,7 @@ async function checkout(request, env, forceTestMode = false) {
     confirmation_url: 'https://auth.robokassa.ru/Merchant/Index.aspx?' + params.toString(),
     preview: {
       intro: plan.intro,
+      generationMode: plan.generationMode,
       calories: plan.calories,
       protein: plan.protein,
       firstDay: plan.week[0],

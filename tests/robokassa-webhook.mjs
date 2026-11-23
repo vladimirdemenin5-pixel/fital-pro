@@ -358,6 +358,44 @@ const flowProfile = {
   days: 3,
   preferences: 'Без ограничений'
 };
+// Regression: when Cloudflare Workers AI returns its exhausted daily
+// allocation error, the real checkout route must still build a validated
+// local plan, persist the pending order and return a Robokassa payment URL.
+const quotaDb = new MockD1();
+const quotaEnv = {
+  ...flowEnv,
+  DB: quotaDb,
+  AI: {
+    async run() {
+      throw new Error('4006: you have used up your daily free allocation of 10,000 neurons');
+    }
+  }
+};
+const quotaCheckoutResponse = await worker.fetch(new Request('https://fitalpro.test/api/checkout-test', {
+  method: 'POST',
+  headers: {
+    'content-type': 'application/json',
+    'X-Fital-Test-Key': quotaEnv.ROBOKASSA_TEST_ACCESS_KEY
+  },
+  body: JSON.stringify({
+    plan: 'Питание',
+    contact: 'quota-test@example.invalid',
+    profile: flowProfile,
+    pd_consent: true,
+    offer_accepted: true
+  })
+}), quotaEnv);
+assert.equal(quotaCheckoutResponse.status, 200,
+  'daily Cloudflare AI quota exhaustion must not block checkout');
+const quotaCheckoutPayload = await quotaCheckoutResponse.json();
+assert.equal(quotaCheckoutPayload.ok, true);
+assert.equal(quotaCheckoutPayload.preview.generationMode, 'catalog-fallback');
+assert.match(quotaCheckoutPayload.confirmation_url, /^https:\/\/auth\.robokassa\.ru\//);
+assert.equal(quotaDb.orders.size, 1, 'a pending order must be saved when the AI quota is exhausted');
+const quotaOrder = [...quotaDb.orders.values()][0];
+assert.equal(quotaOrder.status, 'pending');
+assert.equal(JSON.parse(quotaOrder.plan_json).generationMode, 'catalog-fallback');
+
 const checkoutResponse = await worker.fetch(new Request('https://fitalpro.test/api/checkout-test', {
   method: 'POST',
   headers: {
