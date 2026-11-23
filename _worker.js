@@ -1139,7 +1139,11 @@ async function aiPlanDiagnostic(request, env) {
     // This diagnostic path deliberately does not call checkout, rateLimit, or any D1 write.
     plan = await generateAiPlan(profile, planKey, env);
   } catch (error) {
-    return json({ ok: false, error: clean(error.message, 240) || 'Не удалось проверить генерацию.' }, 502);
+    return json({
+      ok: false,
+      error: clean(error.message, 240) || 'Не удалось проверить генерацию.',
+      diagnostic: clean(error?.cause?.message, 900) || undefined
+    }, 502);
   }
 
   return json({
