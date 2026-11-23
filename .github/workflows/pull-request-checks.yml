@@ -26,3 +26,49 @@ jobs:
 
       - name: Run syntax and regression checks
         run: npm run check
+
+  cloudflare-preview:
+    if: github.event.pull_request.number == 53 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'design/tilda-inspired-bold-redesign'
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out PR source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Publish isolated Cloudflare Worker Preview
+        id: preview
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "Cloudflare deployment credentials are not configured for this repository." >&2
+            exit 1
+          fi
+          npx wrangler preview --name fital-pro-redesign --message "Fital Pro PR #53 visual redesign" 2>&1 | tee "$RUNNER_TEMP/fitalpro-preview.log"
+          preview_url="$(grep -Eo 'https://[a-zA-Z0-9.-]+workers\.dev' "$RUNNER_TEMP/fitalpro-preview.log" | tail -n 1 || true)"
+          if [ -z "$preview_url" ]; then
+            echo "Wrangler completed without returning a workers.dev Preview URL." >&2
+            exit 1
+          fi
+          echo "url=$preview_url" >> "$GITHUB_OUTPUT"
+          echo "FITALPRO_PREVIEW_URL=$preview_url" >> "$GITHUB_ENV"
+
+      - name: Verify Preview homepage and service health
+        run: |
+          set -euo pipefail
+          health="$(curl --fail --silent --show-error --retry 8 --retry-delay 3 --retry-all-errors --max-time 20 "$FITALPRO_PREVIEW_URL/health")"
+          printf '%s' "$health" | node --input-type=module -e 'let s=""; for await (const c of process.stdin) s+=c; const d=JSON.parse(s); if (d.ok!==true || d.ai!==true || d.db!==true) throw new Error("Preview health check failed: AI or D1 binding is missing"); console.log("PASS: Preview Worker, AI, and D1 bindings are available")'
+          page="$(curl --fail --silent --show-error --retry 5 --retry-delay 2 --retry-all-errors --max-time 20 "$FITALPRO_PREVIEW_URL/")"
+          printf '%s' "$page" | node --input-type=module -e 'let s=""; for await (const c of process.stdin) s+=c; if (!s.includes("<html") || !s.includes("Fital")) throw new Error("Preview homepage did not load"); console.log("PASS: redesigned Fital Pro homepage is served")'
+          echo "Cloudflare Preview: $FITALPRO_PREVIEW_URL"
