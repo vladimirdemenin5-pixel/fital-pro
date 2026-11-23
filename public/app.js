@@ -4,6 +4,7 @@ const REF_KEY = 'fitalpro_payment_ref';
 const prices = { 'Питание': '990 ₽', 'PRO': '1 990 ₽', 'Premium': '3 990 ₽' };
 let selectedPlan = 'PRO';
 let checkoutData = null;
+let intakeRevision = 0;
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, function (char) {
@@ -35,8 +36,20 @@ async function api(path, options) {
   return data;
 }
 
+function invalidateCheckout() {
+  intakeRevision++;
+  if (checkoutData) {
+    checkoutData = null;
+    $('#planPreview').classList.add('is-hidden');
+    $('#paymentError').textContent = '';
+    $('#formError').textContent = 'Анкета или тариф изменились. Создайте персональный план повторно перед оплатой.';
+  }
+  return intakeRevision;
+}
+
 function choosePlan(plan) {
   if (!prices[plan]) return;
+  if (selectedPlan !== plan) invalidateCheckout();
   selectedPlan = plan;
   $('#selectedPlanLabel').textContent = plan;
   document.querySelectorAll('[data-card-plan]').forEach(function (card) {
@@ -51,6 +64,11 @@ document.querySelectorAll('[data-plan]').forEach(function (button) {
   });
 });
 
+const intakeForm = $('#intakeForm');
+['input', 'change'].forEach(function (eventName) {
+  intakeForm.addEventListener(eventName, invalidateCheckout);
+});
+
 $('#intakeForm').addEventListener('submit', async function (event) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -60,6 +78,8 @@ $('#intakeForm').addEventListener('submit', async function (event) {
   button.disabled = true;
   button.textContent = 'ИИ составляет ваш план…';
   const fields = new FormData(form);
+  const requestPlan = selectedPlan;
+  const requestRevision = invalidateCheckout();
   const profile = {
     name: fields.get('name'),
     sex: fields.get('sex'),
@@ -73,10 +93,15 @@ $('#intakeForm').addEventListener('submit', async function (event) {
     preferences: fields.get('preferences')
   };
   try {
-    checkoutData = await api('/api/checkout', {
+    const generatedCheckout = await api('/api/checkout', {
       method: 'POST',
-      body: JSON.stringify({ plan: selectedPlan, contact: fields.get('contact'), profile: profile, pd_consent: fields.get('pd_consent') === 'on', offer_accepted: fields.get('offer_accepted') === 'on' })
+      body: JSON.stringify({ plan: requestPlan, contact: fields.get('contact'), profile: profile, pd_consent: fields.get('pd_consent') === 'on', offer_accepted: fields.get('offer_accepted') === 'on' })
     });
+    if (requestRevision !== intakeRevision || requestPlan !== selectedPlan) {
+      errorBox.textContent = 'Анкета или тариф изменились во время генерации. Создайте план повторно.';
+      return;
+    }
+    checkoutData = generatedCheckout;
     $('#previewCalories').textContent = Number(checkoutData.preview.calories).toLocaleString('ru-RU');
     $('#previewProtein').textContent = String(checkoutData.preview.protein);
     $('#previewFat').textContent = String(checkoutData.preview.fat);
@@ -98,16 +123,16 @@ $('#intakeForm').addEventListener('submit', async function (event) {
       Number(actual.fat || 0).toLocaleString('ru-RU') + ' г жиров · ' +
       Number(actual.carbs || 0).toLocaleString('ru-RU') + ' г углеводов.';
     $('#previewWorkout').textContent = day.workout;
-    $('#previewDescription').textContent = selectedPlan === 'Питание'
+    $('#previewDescription').textContent = requestPlan === 'Питание'
       ? 'Меню на 7 дней, список покупок и сохранение программы в личном кабинете.'
-      : selectedPlan === 'Premium'
+      : requestPlan === 'Premium'
         ? 'Меню и тренировки на 30 дней, доступ на 30 дней и еженедельный ИИ-разбор.'
         : 'Меню и тренировки на 14 дней, доступ к ИИ-консультанту и дневнику прогресса.';
-    $('#paymentButton').textContent = 'Оплатить ' + prices[selectedPlan] + ' ↗';
+    $('#paymentButton').textContent = 'Оплатить ' + prices[requestPlan] + ' ↗';
     $('#planPreview').classList.remove('is-hidden');
     $('#planPreview').scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (error) {
-    errorBox.textContent = error.message;
+    if (requestRevision === intakeRevision) errorBox.textContent = error.message;
   } finally {
     button.disabled = false;
     button.innerHTML = 'Создать мой план с ИИ <span>↗</span>';
