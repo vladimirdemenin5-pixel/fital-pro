@@ -342,13 +342,53 @@ const MAX_MEAL_INGREDIENT_GRAMS = Object.freeze({
   cheddar:50, orange:200, peanut_butter:25
 });
 
-function rebalanceDayNutrition(day, targets) {
-  const items = MEAL_KEYS.flatMap(key => day[key + 'Ingredients']);
-  const original = items.map(item => item.grams);
-  const bounds = items.map(item => ({
-    min: 5,
-    max: MAX_MEAL_INGREDIENT_GRAMS[item.foodId] || 250
-  }));
+function foodAllowedByPreferences(foodId, profile) {
+  const preferences = clean(profile?.preferences, 700).toLowerCase();
+  if (!preferences || /без ограничений|нет ограничений|всеядн/.test(preferences)) return true;
+  const groups = {
+    oats_dry: ['gluten'], pasta_dry: ['gluten'], wholegrain_bread: ['gluten'],
+    chicken_raw: ['meat', 'poultry'], turkey_raw: ['meat', 'poultry'],
+    salmon_raw: ['fish'], cod_raw: ['fish'], egg_raw: ['eggs'],
+    greek_yogurt: ['dairy'], cottage_cheese: ['dairy'], milk_2pct: ['dairy'], cheddar: ['dairy'],
+    almonds: ['nuts'], walnuts: ['nuts'], peanut_butter: ['nuts', 'peanuts'],
+    tofu: ['soy'], lentils_dry: ['legumes'], chickpeas_dry: ['legumes']
+  };
+  const blocked = new Set();
+  if (/веган|строг(ий|ая)\s+пост|только\s+растительн/.test(preferences)) {
+    ['chicken_raw','turkey_raw','salmon_raw','cod_raw','egg_raw','greek_yogurt','cottage_cheese','milk_2pct','cheddar'].forEach(id=>blocked.add(id));
+  } else if (/вегетариан|без\s+мяса/.test(preferences)) {
+    ['chicken_raw','turkey_raw','salmon_raw','cod_raw'].forEach(id=>blocked.add(id));
+  }
+  if (/глютен|целиак|пшениц/.test(preferences)) ['oats_dry','pasta_dry','wholegrain_bread'].forEach(id=>blocked.add(id));
+  if (/лактоз|молочн|молоко|молочк/.test(preferences)) ['greek_yogurt','cottage_cheese','milk_2pct','cheddar'].forEach(id=>blocked.add(id));
+  if (/орех/.test(preferences)) ['almonds','walnuts','peanut_butter'].forEach(id=>blocked.add(id));
+  if (/арахис/.test(preferences)) blocked.add('peanut_butter');
+  if (/рыб|морепродукт/.test(preferences)) ['salmon_raw','cod_raw'].forEach(id=>blocked.add(id));
+  if (/яйц/.test(preferences)) blocked.add('egg_raw');
+  if (/соя/.test(preferences)) blocked.add('tofu');
+  if (/бобов|чечевиц|нут/.test(preferences)) ['lentils_dry','chickpeas_dry'].forEach(id=>blocked.add(id));
+  if (/куриц/.test(preferences)) blocked.add('chicken_raw');
+  if (/индейк/.test(preferences)) blocked.add('turkey_raw');
+  if (/банан/.test(preferences)) blocked.add('banana');
+  if (/авокад/.test(preferences)) blocked.add('avocado');
+  if (/групп/.test(preferences)) { /* keep explicit product checks below */ }
+  const foodName = FOOD_CATALOG[foodId]?.name?.toLowerCase() || '';
+  const directExclusion = /(?:без|не ем|не люблю|исключить|аллерг(?:ия|ен)? на)\s+[^.;,]{0,30}/g;
+  for (const match of preferences.matchAll(directExclusion)) {
+    const phrase = match[0];
+    if (phrase.includes('арахис') && foodId === 'peanut_butter') return false;
+    if (phrase.includes('орех') && ['almonds','walnuts','peanut_butter'].includes(foodId)) return false;
+    if ((phrase.includes('молоч') || phrase.includes('лактоз')) && groups[foodId]?.includes('dairy')) return false;
+    if ((phrase.includes('рыб') || phrase.includes('морепродукт')) && groups[foodId]?.includes('fish')) return false;
+    if (foodName && phrase.includes(foodName)) return false;
+  }
+  return !blocked.has(foodId);
+}
+
+function rebalanceDayNutrition(day, targets, profile) {
+  const originalIngredients = Object.fromEntries(MEAL_KEYS.map(key => [
+    key, day[key + 'Ingredients'].map(item => ({...item}))
+  ]));
   const nutrientTargets = [targets.calories, targets.protein, targets.fat, targets.carbs];
   const nutrientScales = [
     Math.max(1, targets.calories * 0.2),
@@ -356,89 +396,135 @@ function rebalanceDayNutrition(day, targets) {
     Math.max(1, targets.fat * 0.3),
     Math.max(1, targets.carbs * 0.3)
   ];
-  const deviationWeight = 0.0001;
-
-  // Use unrounded nutrient totals during optimization. Rounding is only for
-  // the final displayed daily nutrition, so the search does not stall on decimals.
-  const nutrientTotals = () => {
-    const totals = [0, 0, 0, 0];
-    for (const item of items) {
+  const totals = () => {
+    const result = [0,0,0,0];
+    for (const key of MEAL_KEYS) for (const item of day[key + 'Ingredients']) {
       const food = FOOD_CATALOG[item.foodId];
-      totals[0] += food.kcal * item.grams / 100;
-      totals[1] += food.protein * item.grams / 100;
-      totals[2] += food.fat * item.grams / 100;
-      totals[3] += food.carbs * item.grams / 100;
-    }
-    return totals;
-  };
-
-  const score = () => {
-    const totals = nutrientTotals();
-    let result = 0;
-    for (let index = 0; index < totals.length; index++) {
-      const normalized = (totals[index] - nutrientTargets[index]) / nutrientScales[index];
-      result += normalized * normalized;
-    }
-    for (let index = 0; index < items.length; index++) {
-      const divisor = Math.max(20, original[index]);
-      const delta = (items[index].grams - original[index]) / divisor;
-      result += deviationWeight * delta * delta;
+      result[0] += food.kcal * item.grams / 100;
+      result[1] += food.protein * item.grams / 100;
+      result[2] += food.fat * item.grams / 100;
+      result[3] += food.carbs * item.grams / 100;
     }
     return result;
   };
+  const score = () => {
+    const values = totals();
+    return values.reduce((sum,value,index) => {
+      const delta = (value - nutrientTargets[index]) / nutrientScales[index];
+      return sum + delta * delta;
+    },0);
+  };
+  const allowedFoods = Object.keys(FOOD_CATALOG).filter(id => foodAllowedByPreferences(id, profile));
+  if (!allowedFoods.length) return false;
 
+  // First change the food composition, not just the grams. Greedy bounded
+  // substitutions/additions use only the existing catalog and client-safe foods.
+  for (let move = 0; move < 4; move++) {
+    const currentScore = score();
+    let best = null;
+    for (const key of MEAL_KEYS) {
+      const ingredients = day[key + 'Ingredients'];
+      for (let index = 0; index < ingredients.length; index++) {
+        const item = ingredients[index];
+        for (const foodId of allowedFoods) {
+          if (foodId === item.foodId || ingredients.some((other,i)=>i!==index&&other.foodId===foodId)) continue;
+          const previous = {...item};
+          item.foodId = foodId;
+          item.name = FOOD_CATALOG[foodId].name;
+          item.grams = Math.min(item.grams, MAX_MEAL_INGREDIENT_GRAMS[foodId] || 250);
+          const candidateScore = score();
+          if (candidateScore < currentScore - 1e-8 && (!best || candidateScore < best.score)) {
+            best = {type:'replace',key,index,item:{...item},score:candidateScore};
+          }
+          Object.assign(item,previous);
+        }
+      }
+      if (ingredients.length < 6) {
+        const additions = allowedFoods.filter(id => !ingredients.some(item=>item.foodId===id));
+        for (const foodId of additions) {
+          const food = FOOD_CATALOG[foodId];
+          const portions = food.carbs >= 20 && food.protein <= 18 ? [30,50,70] :
+            food.fat >= 10 ? [10,15,20] : [];
+          for (const grams of portions) {
+            ingredients.push({foodId,name:food.name,grams});
+            const candidateScore = score();
+            if (candidateScore < currentScore - 1e-8 && (!best || candidateScore < best.score)) {
+              best = {type:'add',key,item:{foodId,name:food.name,grams},score:candidateScore};
+            }
+            ingredients.pop();
+          }
+        }
+      }
+    }
+    if (!best) break;
+    if (best.type === 'replace') Object.assign(day[best.key + 'Ingredients'][best.index],best.item);
+    else day[best.key + 'Ingredients'].push(best.item);
+  }
+
+  const items = MEAL_KEYS.flatMap(key => day[key + 'Ingredients']);
+  const original = items.map(item => item.grams);
+  const bounds = items.map(item => ({min:5,max:MAX_MEAL_INGREDIENT_GRAMS[item.foodId]||250}));
+  const nutrientTotals = totals;
+  const portionScore = () => {
+    const values = nutrientTotals();
+    let result = 0;
+    for (let index=0;index<values.length;index++) {
+      const normalized=(values[index]-nutrientTargets[index])/nutrientScales[index];
+      result += normalized*normalized;
+    }
+    for (let index=0;index<items.length;index++) {
+      const divisor=Math.max(20,original[index]);
+      const delta=(items[index].grams-original[index])/divisor;
+      result += 0.0001*delta*delta;
+    }
+    return result;
+  };
   const withinTargets = () => {
     day.nutrition = calculateDayNutrition(day);
-    return nutritionWithinTargets(day.nutrition, targets);
+    return nutritionWithinTargets(day.nutrition,targets);
   };
   if (withinTargets()) return true;
 
-  // Projected gradient descent changes all food portions together. This avoids
-  // the local dead ends of one-food-at-a-time corrections when protein must
-  // decrease while carbohydrate and calorie totals must rise.
-  const maxIterations = 120;
-  for (let iteration = 0; iteration < maxIterations; iteration++) {
-    const totals = nutrientTotals();
-    const nutrientDerivatives = totals.map((value, index) =>
-      2 * (value - nutrientTargets[index]) / (nutrientScales[index] * nutrientScales[index])
-    );
-    const gradients = items.map((item, index) => {
-      const food = FOOD_CATALOG[item.foodId];
-      const nutrientGradient =
-        nutrientDerivatives[0] * food.kcal / 100 +
-        nutrientDerivatives[1] * food.protein / 100 +
-        nutrientDerivatives[2] * food.fat / 100 +
-        nutrientDerivatives[3] * food.carbs / 100;
-      const divisor = Math.max(20, original[index]);
-      return nutrientGradient + 2 * deviationWeight *
-        (item.grams - original[index]) / (divisor * divisor);
+  for (let iteration=0;iteration<120;iteration++) {
+    const values=nutrientTotals();
+    const derivatives=values.map((value,index)=>2*(value-nutrientTargets[index])/(nutrientScales[index]*nutrientScales[index]));
+    const gradients=items.map((item,index)=>{
+      const food=FOOD_CATALOG[item.foodId];
+      const nutrientGradient=derivatives[0]*food.kcal/100+derivatives[1]*food.protein/100+
+        derivatives[2]*food.fat/100+derivatives[3]*food.carbs/100;
+      const divisor=Math.max(20,original[index]);
+      return nutrientGradient+2*0.0001*(item.grams-original[index])/(divisor*divisor);
     });
-
-    const currentScore = score();
-    let learningRate = 1000;
-    let improved = false;
-    while (learningRate >= 0.001) {
-      const previous = items.map(item => item.grams);
-      for (let index = 0; index < items.length; index++) {
-        const candidate = Math.round(items[index].grams - learningRate * gradients[index]);
-        items[index].grams = Math.max(bounds[index].min, Math.min(bounds[index].max, candidate));
+    const currentScore=portionScore();
+    let learningRate=1000;
+    let improved=false;
+    while (learningRate>=0.001) {
+      const previous=items.map(item=>item.grams);
+      for(let index=0;index<items.length;index++) {
+        const candidate=Math.round(items[index].grams-learningRate*gradients[index]);
+        items[index].grams=Math.max(bounds[index].min,Math.min(bounds[index].max,candidate));
       }
-      const candidateScore = score();
-      if (candidateScore < currentScore - 1e-12 || withinTargets()) {
-        improved = true;
-        break;
-      }
-      items.forEach((item, index) => { item.grams = previous[index]; });
-      learningRate /= 2;
+      if(portionScore()<currentScore-1e-12||withinTargets()){improved=true;break;}
+      items.forEach((item,index)=>{item.grams=previous[index];});
+      learningRate/=2;
     }
-
-    if (!improved) break;
-    if (withinTargets()) return true;
+    if(!improved) break;
+    if(withinTargets()) break;
   }
+  if (!withinTargets()) return false;
 
-  return withinTargets();
+  for (const key of MEAL_KEYS) {
+    const before = originalIngredients[key].map(item=>item.foodId).join('|');
+    const after = day[key+'Ingredients'].map(item=>item.foodId).join('|');
+    if (before !== after) {
+      const names = day[key+'Ingredients'].map(item=>item.name).filter(Boolean).slice(0,4);
+      day[key] = ('Сбалансированное блюдо: ' + names.join(', ')).slice(0,120);
+      day[key+'Recipe'] = ('Состав скорректирован по нормам БЖУ: ' + names.join(', ') +
+        '. Приготовь продукты до готовности и подай вместе.').slice(0,300);
+    }
+  }
+  return true;
 }
-
 function normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, targets) {
   if (!Array.isArray(parsed.week) || parsed.week.length !== menuDays) return null;
   const includesTraining = planKey !== 'Питание';
@@ -466,7 +552,7 @@ function normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, target
     if (MEAL_KEYS.some(key => !day[key] || !day[key + 'Ingredients'] || day[key + 'Recipe'].length < 15)) return null;
     if (!day.workout || (includesTraining && day.trainingDay && !hasWorkoutPrescription(day.workout))) return null;
     day.nutrition = calculateDayNutrition(day);
-    if (!nutritionWithinTargets(day.nutrition, targets) && !rebalanceDayNutrition(day, targets)) return null;
+    if (!nutritionWithinTargets(day.nutrition, targets) && !rebalanceDayNutrition(day, targets, profile)) return null;
     week.push(day);
   }
   if (includesTraining) {
