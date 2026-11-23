@@ -685,13 +685,13 @@ const flowDiagnosticDenied = await aiDataFlowDiagnostic(new Request('https://fit
 assert.equal(flowDiagnosticDenied.status, 404, 'D1 and cabinet integration diagnostic must reject an incorrect test key');
 assert.ok(workerSource.includes("url.pathname === '/api/ai-data-flow-diagnostic'"), 'protected D1 and cabinet diagnostic route must be registered');
 assert.ok(workerSource.includes('await saveMemberPlan(env, accessToken, profile, plan)'), 'integration diagnostic must save the generated plan and profile to D1');
-assert.ok(workerSource.includes('verifyGitHubActionsOidc(request)'), 'live diagnostic must authenticate GitHub Actions using OIDC');
+assert.ok(workerSource.includes('verifyGitHubActionsOidc(request, env, diagnosticMode)'), 'live diagnostic must authenticate GitHub Actions using production or restricted Preview OIDC');
 assert.ok(workerSource.includes("claims.aud !== 'fitalpro-ai-data-flow'"), 'OIDC authorization must restrict the token audience');
 assert.ok(workerSource.includes("claims.ref === 'refs/heads/main'") && workerSource.includes("(mode === 'production' ? !productionWorkflow : !previewWorkflow)"), 'D1 integration OIDC must remain restricted to the production workflow');
-assert.ok(workerSource.includes("env?.FITALPRO_PREVIEW_CI === '1'") && workerSource.includes("claims.ref === 'refs/pull/47/merge'"), 'AI-only preview OIDC must require the isolated preview flag and exact PR merge ref');
-assert.ok(workerSource.includes("claims.head_ref === 'fix/ai-plan-generation-three-day-chunks'") && workerSource.includes("claims.base_ref === 'main'"), 'AI-only preview OIDC must restrict the exact source and target branches');
-assert.ok(workerSource.includes("preview-ai-generation.yml@refs/pull/47/merge"), 'AI-only preview OIDC must restrict the dedicated preview workflow');
-assert.ok(workerSource.includes("verifyGitHubActionsOidc(request, env, 'preview')"), 'only the no-write AI diagnostic may accept the restricted preview OIDC token');
+assert.ok(workerSource.includes("env?.FITALPRO_PREVIEW_CI === '1'") && workerSource.includes("claims.ref === 'refs/pull/53/merge'"), 'Preview OIDC must require the explicit preview flag and exact PR merge ref');
+assert.ok(workerSource.includes("claims.head_ref === 'design/tilda-inspired-bold-redesign'") && workerSource.includes("claims.base_ref === 'main'"), 'Preview OIDC must restrict the exact source and target branches');
+assert.ok(workerSource.includes("pull-request-checks.yml@refs/pull/53/merge"), 'Preview OIDC must restrict the dedicated PR workflow');
+assert.ok(workerSource.includes("verifyGitHubActionsOidc(request, env, 'preview')") && workerSource.includes("verifyGitHubActionsOidc(request, env, diagnosticMode)"), 'AI and D1 diagnostics must accept only the restricted Preview OIDC token');
 assert.ok(workerSource.includes('vladimirdemenin5-pixel@324070911/fital-pro@1354815283:ref:refs/heads/main'), 'OIDC authorization must accept the repository immutable subject claim');
 assert.ok(workerSource.includes('env.FITALPRO_CI_TEST_KEY || env.ROBOKASSA_TEST_ACCESS_KEY'), 'integration diagnostic must support the temporary CI-only key without changing the Robokassa test key');
 assert.ok(workerSource.includes("personalizedPlan(new Request('https://fitalpro.internal/api/plan'"), 'integration diagnostic must read the saved plan through the personal-cabinet API');
