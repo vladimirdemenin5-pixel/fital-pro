@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 
 const MODEL = '@cf/google/gemma-4-26b-a4b-it';
 const AI_MODEL_TIMEOUT_MS = 45000;
-const QWEN_PLAN_TIMEOUT_MS = 90000;
+const QWEN_PLAN_TIMEOUT_MS = 60000;
+const GPT_OSS_PLAN_TIMEOUT_MS = 45000;
 const PLANS = {
   'Питание': { amount: '990.00', label: 'Fital Pro — Питание, 7 дней', days: 7, menuDays: 7 },
   'PRO': { amount: '1990.00', label: 'Fital Pro PRO — питание + тренировки, 14 дней', days: 14, menuDays: 14 },
@@ -779,7 +780,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
       };
       const result = await runAiInferenceWithTimeout(
         env, model, modelInput,
-        isQwen || isGptOss ? QWEN_PLAN_TIMEOUT_MS : AI_MODEL_TIMEOUT_MS
+        isQwen ? QWEN_PLAN_TIMEOUT_MS : (isGptOss ? GPT_OSS_PLAN_TIMEOUT_MS : AI_MODEL_TIMEOUT_MS)
       );
       const text = extractAiText(result);
       const normalized = text.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
@@ -834,8 +835,8 @@ async function generateAiPlan(profile, planKey, env) {
   // for Qwen 3.8 and keep structured JSON output manageable for fallback models.
   // Generate two independent two-day chunks concurrently while retaining full
   // per-chunk nutrition and workout-prescription validation.
-  for (let batchOffset = 0; batchOffset < totalDays; batchOffset += 4) {
-    const batch = await Promise.all([0, 2]
+  for (let batchOffset = 0; batchOffset < totalDays; batchOffset += 12) {
+    const batch = await Promise.all([0, 2, 4, 6, 8, 10]
       .filter(delta => batchOffset + delta < totalDays)
       .map(async delta => {
     const offset = batchOffset + delta;
