@@ -380,9 +380,9 @@ function rebalanceDayNutrition(day, targets) {
   for (const stepSize of stepSizes) {
     for (let iteration = 0; iteration < 100; iteration++) {
       let bestScore = score();
-      let bestItem = -1;
-      let bestGrams = 0;
+      let bestMoves = null;
 
+      // Evaluate every single-food change.
       for (let i = 0; i < items.length; i++) {
         for (const direction of [-1, 1]) {
           const candidate = items[i].grams + direction * stepSize;
@@ -393,24 +393,14 @@ function rebalanceDayNutrition(day, targets) {
           items[i].grams = previous;
           if (candidateScore < bestScore - 1e-9) {
             bestScore = candidateScore;
-            bestItem = i;
-            bestGrams = candidate;
+            bestMoves = [{ index: i, grams: candidate }];
           }
         }
       }
 
-      if (bestItem >= 0) {
-        items[bestItem].grams = bestGrams;
-        day.nutrition = calculateDayNutrition(day);
-        if (nutritionWithinTargets(day.nutrition, targets)) return true;
-        continue;
-      }
-
-      // One-at-a-time changes can get trapped when correcting excess protein
-      // requires simultaneously adding a carbohydrate source. Try bounded
-      // two-food moves only after no single-food move improves the score.
-      let bestPair = null;
-      bestScore = score();
+      // Also evaluate paired changes on every iteration. This lets the search
+      // reduce excess protein while increasing carbohydrates (or vice versa)
+      // without requiring an unhelpful intermediate single-food step.
       for (let i = 0; i < items.length; i++) {
         for (let j = i + 1; j < items.length; j++) {
           for (const directionI of [-1, 1]) {
@@ -428,15 +418,18 @@ function rebalanceDayNutrition(day, targets) {
               items[j].grams = previousJ;
               if (candidateScore < bestScore - 1e-9) {
                 bestScore = candidateScore;
-                bestPair = { i, gramsI, j, gramsJ };
+                bestMoves = [
+                  { index: i, grams: gramsI },
+                  { index: j, grams: gramsJ }
+                ];
               }
             }
           }
         }
       }
-      if (!bestPair) break;
-      items[bestPair.i].grams = bestPair.gramsI;
-      items[bestPair.j].grams = bestPair.gramsJ;
+
+      if (!bestMoves) break;
+      for (const move of bestMoves) items[move.index].grams = move.grams;
       day.nutrition = calculateDayNutrition(day);
       if (nutritionWithinTargets(day.nutrition, targets)) return true;
     }
