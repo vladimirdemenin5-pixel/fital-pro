@@ -429,7 +429,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
 
   // Bound each inference. A stalled model must not block every fallback
   // until the browser or CI client gives up on the entire plan request.
-  for ( (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < 2; attempt++) {
     if (attempt === 1 && !correctionModel) break;
     const currentMessages = attempt === 0
       ? messages
