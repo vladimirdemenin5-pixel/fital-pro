@@ -42,7 +42,7 @@ for (const item of plans) {
         Authorization: 'Bearer ' + oidcToken
       },
       body: JSON.stringify({ plan: item.key }),
-      signal: AbortSignal.timeout(240000)
+      signal: AbortSignal.timeout(Math.max(240000, item.days * 30000 + 120000))
     });
     result = await response.json().catch(() => ({}));
     if (response.status !== 404 || result.error !== 'Диагностический доступ не настроен или ключ неверен.' ||
