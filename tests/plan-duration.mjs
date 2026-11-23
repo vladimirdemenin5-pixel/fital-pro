@@ -215,6 +215,8 @@ assert.equal(qwenPrimaryPlan.week.length, 7);
 assert.equal(qwenModelInput.max_completion_tokens, 6500);
 assert.equal(qwenModelInput.reasoning_effort, 'low', 'Qwen reasoning must be bounded to low for structured meal-plan output');
 assert.equal(qwenModelInput.response_format, undefined, 'do not send unsupported Cloudflare JSON Mode parameters to Qwen');
+const qwenPrompt = qwenModelInput.messages[1].content;
+assert.ok(qwenPrompt.includes('"name":"Клиент"') && !qwenPrompt.includes('Тестовый клиент'), 'all Cloudflare AI models must receive an anonymized client name');
 let gptModelInput = null;
 const gptFallbackPlan = await generateAiPlan(profile, 'Питание', { AI: {
   async run(model, input) {
