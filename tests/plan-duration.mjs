@@ -180,7 +180,7 @@ const oversizedIngredientPlan = await generateAiPlan(profile, 'Питание', 
     const result = await makeAi(7).run(model, input);
     const parsed = JSON.parse(result.response);
     for (const day of parsed.week) {
-      day.dinnerIngredients.find(item => item.foodId === 'olive_oil').grams = 501;
+      day.dinnerIngredients.find(item => item.foodId === 'olive_oil').grams = 25;
     }
     return { response: JSON.stringify(parsed) };
   }
@@ -192,7 +192,20 @@ assert.ok(oversizedIngredientPlan.week.every(day => {
     day.nutrition.calories <= oversizedIngredientPlan.calories * 1.2 &&
     day.nutrition.fat >= oversizedIngredientPlan.fat * 0.7 &&
     day.nutrition.fat <= oversizedIngredientPlan.fat * 1.3;
-}), 'out-of-range AI ingredient grams must be clamped to the product-specific limit and the resulting full day must still pass strict nutrition validation');
+}), 'a globally valid ingredient portion above its product-specific ceiling must be clamped and the resulting full day must still pass strict nutrition validation');
+await assert.rejects(
+  () => generateAiPlan(profile, 'Питание', { AI: {
+    async run(model, input) {
+      const result = await makeAi(7).run(model, input);
+      const parsed = JSON.parse(result.response);
+      parsed.week[0].breakfastIngredients[0].grams = 501;
+      return { response: JSON.stringify(parsed) };
+    }
+  } }),
+  /временно не смог подготовить проверенный план/,
+  'AI portions outside the global 5–500g input range must be rejected rather than silently normalized'
+);
+
 
 const wrongModelTrainingFlagsPlan = await generateAiPlan(profile, 'PRO', { AI: {
   async run(model, input) {
