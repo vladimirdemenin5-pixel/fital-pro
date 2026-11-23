@@ -67,4 +67,11 @@ jobs:
             echo "Isolated Cloudflare remote preview did not become ready."
             exit 1
           fi
-          node scripts/preview-ai-plan-generation.mjs
+          if node scripts/preview-ai-plan-generation.mjs; then
+            :
+          else
+            status=$?
+            echo "Wrangler remote preview runtime log:"
+            cat "$RUNNER_TEMP/fitalpro-preview.log"
+            exit "$status"
+          fi
