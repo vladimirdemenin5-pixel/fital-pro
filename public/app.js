@@ -222,7 +222,7 @@ function renderPremiumReviewItem(item) {
   const observations = Array.isArray(review.observations) ? review.observations : [];
   const recommendations = Array.isArray(review.recommendations) ? review.recommendations : [];
   return '<article class="premium-review-output">' +
-    '<div class="premium-review-meta">РАЗБОР ЗА НЕДЕЛЮ · ' + escapeHtml(formatReviewDate(item.createdAt)) + '</div>' +
+    '<div class="premium-review-meta">' + (review.reviewMode === 'diary-summary' ? 'СВОДКА ПО ДНЕВНИКУ · БЕЗ ИИ · ' : 'ИИ-РАЗБОР ЗА НЕДЕЛЮ · ') + escapeHtml(formatReviewDate(item.createdAt)) + '</div>' +
     '<h4>' + escapeHtml(review.headline || 'Ваш недельный разбор') + '</h4>' +
     '<p>' + escapeHtml(review.summary || '') + '</p>' +
     '<div class="premium-review-metrics">' + metrics.map(value => '<span>' + escapeHtml(value) + '</span>').join('') + '</div>' +
@@ -240,7 +240,7 @@ function renderPremiumReviews(data) {
   button.disabled = !data.canGenerate;
   button.textContent = current
     ? 'Разбор этой недели готов'
-    : data.progressEntries >= 2 ? 'Подготовить разбор недели ↗' : 'Добавьте записи в дневник';
+    : data.progressEntries >= 2 ? 'Подготовить недельную сводку ↗' : 'Добавьте записи в дневник';
   $('#premiumReviewMessage').textContent = current
     ? 'Разбор за текущую неделю сохранён. Новый отчёт станет доступен на следующей неделе.'
     : 'Записей за эту неделю: ' + Number(data.progressEntries || 0) + ' из 2 необходимых для разбора.';
@@ -474,7 +474,7 @@ $('#progressForm').addEventListener('submit', async function (event) {
 $('#premiumReviewButton').addEventListener('click', async function () {
   const button = $('#premiumReviewButton');
   button.disabled = true;
-  button.textContent = 'ИИ анализирует дневник…';
+  button.textContent = 'Готовим недельную сводку…';
   $('#premiumReviewMessage').textContent = '';
   try {
     await api('/api/premium/review', { method: 'POST', body: JSON.stringify({}) });
@@ -483,7 +483,7 @@ $('#premiumReviewButton').addEventListener('click', async function () {
   } catch (error) {
     $('#premiumReviewMessage').textContent = error.message;
     button.disabled = false;
-    button.textContent = 'Подготовить разбор недели ↗';
+    button.textContent = 'Подготовить недельную сводку ↗';
   }
 });
 
@@ -494,7 +494,7 @@ $('#chatForm').addEventListener('submit', async function (event) {
   reply.textContent = 'Fital AI готовит ответ…';
   try {
     const data = await api('/api/chat', { method: 'POST', body: JSON.stringify({ message: input.value }) });
-    reply.textContent = data.reply || 'Ответ не получен.';
+    reply.textContent = data.replyMode === 'saved-plan' ? 'Ответ по сохранённому плану:\n' + (data.reply || '') : (data.reply || 'Ответ не получен.');
     input.value = '';
   } catch (error) {
     reply.textContent = error.message;
