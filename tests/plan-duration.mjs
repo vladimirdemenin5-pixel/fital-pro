@@ -207,12 +207,16 @@ const premiumTrainingCounts = Array.from({ length: 5 }, (_, index) =>
 );
 assert.deepEqual(premiumTrainingCounts, [3, 3, 3, 3, 0], 'Premium training schedule must preserve the three-sessions-per-seven-days cadence without adding a workout to the final two-day partial week');
 const nutritionPlan = await generateAiPlan(profile, 'Питание', { AI: makeAi(7) });
-const timeoutFallbackModels = [];
+const timeoutFallbackModelsByBlock = new Map();
 const timeoutRecoveredPlan = await generateAiPlan(profile, 'Питание', { AI: {
   async run(model, input, options) {
-    timeoutFallbackModels.push(model);
+    const prompt = input?.messages?.[1]?.content || '';
+    const startDay = Number(prompt.match(/БЛОК: дни (\\d+)–/)?.[1] || 0);
+    const models = timeoutFallbackModelsByBlock.get(startDay) || [];
+    models.push(model);
+    timeoutFallbackModelsByBlock.set(startDay, models);
     assert.ok(options?.signal instanceof AbortSignal, 'each Workers AI plan call must receive an abort signal');
-    if (timeoutFallbackModels.length === 1) {
+    if (startDay === 1 && model === '@cf/qwen/qwen3.8-27b') {
       const error = new Error('simulated model timeout');
       error.name = 'TimeoutError';
       throw error;
@@ -221,7 +225,8 @@ const timeoutRecoveredPlan = await generateAiPlan(profile, 'Питание', { A
   }
 } });
 assert.equal(timeoutRecoveredPlan.week.length, 7, 'a timed-out first model must fall back to the next available model');
-assert.equal(timeoutFallbackModels[1], '@cf/openai/gpt-oss-120b', 'OpenAI GPT-OSS 120B must be attempted after Qwen 3.8 times out');
+assert.equal(timeoutFallbackModelsByBlock.get(1)?.[1], '@cf/openai/gpt-oss-120b', 'the same three-day block must fall back from Qwen 3.8 to OpenAI GPT-OSS 120B');
+assert.equal(timeoutFallbackModelsByBlock.get(4)?.[0], '@cf/qwen/qwen3.8-27b', 'the second concurrent block must keep its own independent Qwen primary call');
 let qwenModelInput = null;
 const qwenPrimaryPlan = await generateAiPlan(profile, 'Питание', { AI: {
   async run(model, input, options) {
