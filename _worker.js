@@ -840,8 +840,6 @@ async function generateAiPlan(profile, planKey, env) {
       .map(async delta => {
     const offset = batchOffset + delta;
     const chunkDays = Math.min(2, totalDays - offset);
-    const trainingDays = Array.from({ length: chunkDays }, (_, index) => offset + index + 1)
-      .filter(day => isScheduledTrainingDay(day, profile.days));
     const mealCalorieTargets = [
       ['завтрак', 0.25],
       ['обед', 0.30],
