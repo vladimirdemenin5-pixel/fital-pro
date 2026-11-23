@@ -1,10 +1,12 @@
 import { request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
 
 const endpoint = process.env.FITALPRO_WORKER_URL || 'http://127.0.0.1:8787';
 
 function postJson(url, body, headers, timeoutMs) {
   return new Promise((resolve, reject) => {
-    const request = httpRequest(url, { method: 'POST', headers }, response => {
+    const requestClient = new URL(url).protocol === 'https:' ? httpsRequest : httpRequest;
+    const request = requestClient(url, { method: 'POST', headers }, response => {
       let text = '';
       response.setEncoding('utf8');
       response.on('data', chunk => { text += chunk; });
