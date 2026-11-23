@@ -263,12 +263,12 @@ function buildPlanResponseSchema(menuDays) {
   const dayProperties = {
     day: { type: 'string' },
     trainingDay: { type: 'boolean' },
-    workout: { type: 'string' }
+    workout: { type: 'string', minLength: 1, maxLength: 400 }
   };
   const requiredDayFields = ['day', 'trainingDay', 'workout'];
   for (const key of MEAL_KEYS) {
-    dayProperties[key] = { type: 'string' };
-    dayProperties[key + 'Recipe'] = { type: 'string' };
+    dayProperties[key] = { type: 'string', minLength: 2, maxLength: 120 };
+    dayProperties[key + 'Recipe'] = { type: 'string', minLength: 15, maxLength: 300 };
     dayProperties[key + 'Ingredients'] = {
       type: 'array',
       minItems: 1,
@@ -481,48 +481,78 @@ function diagnosePlanWeekFailure(parsed, profile, planKey, menuDays, targets) {
   if (!Array.isArray(parsed?.week)) return 'week-not-array';
   if (parsed.week.length !== menuDays) return 'week-length-' + parsed.week.length + '-expected-' + menuDays;
   const includesTraining = planKey !== 'Питание';
-  const week = [];
+  const issues = [];
+  const trainingFlags = [];
+
   for (let index = 0; index < parsed.week.length; index++) {
     const source = parsed.week[index];
     const dayLabel = 'day-' + (index + 1);
-    if (typeof source?.trainingDay !== 'boolean') return dayLabel + '-trainingDay-not-boolean';
-    const day = { trainingDay: includesTraining && source.trainingDay };
+    if (typeof source?.trainingDay !== 'boolean') {
+      issues.push(dayLabel + '-trainingDay-not-boolean');
+    } else {
+      trainingFlags.push(source.trainingDay);
+    }
+
+    const day = {};
+    let ingredientsValid = true;
     for (const key of MEAL_KEYS) {
-      if (!clean(source?.[key], 120)) return dayLabel + '-' + key + '-title-missing';
-      if (clean(source?.[key + 'Recipe'], 300).length < 15) return dayLabel + '-' + key + '-recipe-short-or-missing';
+      if (clean(source?.[key], 120).length < 2) issues.push(dayLabel + '-' + key + '-title-missing');
+      if (clean(source?.[key + 'Recipe'], 300).length < 15) {
+        issues.push(dayLabel + '-' + key + '-recipe-short-or-missing');
+      }
       const rawIngredients = source?.[key + 'Ingredients'];
       const ingredientIssue = diagnoseMealIngredients(rawIngredients);
-      if (ingredientIssue) return dayLabel + '-' + key + '-' + ingredientIssue;
-      day[key + 'Ingredients'] = normalizeMealIngredients(rawIngredients);
+      if (ingredientIssue) {
+        issues.push(dayLabel + '-' + key + '-' + ingredientIssue);
+        ingredientsValid = false;
+      } else {
+        day[key + 'Ingredients'] = normalizeMealIngredients(rawIngredients);
+      }
     }
-    day.workout = clean(source?.workout, 400);
-    if (!day.workout) return dayLabel + '-workout-missing';
-    if (includesTraining && day.trainingDay && !hasWorkoutPrescription(day.workout)) return dayLabel + '-workout-prescription-missing';
-    day.nutrition = calculateDayNutrition(day);
-    const nutritionIssues = [];
-    if (day.nutrition.calories < targets.calories * 0.8 || day.nutrition.calories > targets.calories * 1.2) {
-      nutritionIssues.push('calories=' + day.nutrition.calories + ' allowed=' + Math.round(targets.calories * 0.8) + '-' + Math.round(targets.calories * 1.2));
+
+    const workout = clean(source?.workout, 400);
+    if (!workout) issues.push(dayLabel + '-workout-missing');
+    if (includesTraining && source?.trainingDay === true && !hasWorkoutPrescription(workout)) {
+      issues.push(dayLabel + '-workout-prescription-missing');
     }
-    if (day.nutrition.protein < targets.protein * 0.8 || day.nutrition.protein > targets.protein * 1.2) {
-      nutritionIssues.push('protein=' + day.nutrition.protein + ' allowed=' + (Math.round(targets.protein * 0.8 * 10) / 10) + '-' + (Math.round(targets.protein * 1.2 * 10) / 10));
+
+    // Even if a recipe is short, still calculate macros from valid ingredients.
+    if (ingredientsValid) {
+      day.nutrition = calculateDayNutrition(day);
+      const n = day.nutrition;
+      if (n.calories < targets.calories * 0.8 || n.calories > targets.calories * 1.2) {
+        issues.push(dayLabel + '-calories=' + n.calories + '-allowed=' +
+          Math.round(targets.calories * 0.8) + '-' + Math.round(targets.calories * 1.2));
+      }
+      if (n.protein < targets.protein * 0.8 || n.protein > targets.protein * 1.2) {
+        issues.push(dayLabel + '-protein=' + n.protein + '-allowed=' +
+          (Math.round(targets.protein * 0.8 * 10) / 10) + '-' + (Math.round(targets.protein * 1.2 * 10) / 10));
+      }
+      if (targets.fat > 0 && (n.fat < targets.fat * 0.7 || n.fat > targets.fat * 1.3)) {
+        issues.push(dayLabel + '-fat=' + n.fat + '-allowed=' +
+          (Math.round(targets.fat * 0.7 * 10) / 10) + '-' + (Math.round(targets.fat * 1.3 * 10) / 10));
+      }
+      if (targets.carbs > 0 && (n.carbs < targets.carbs * 0.7 || n.carbs > targets.carbs * 1.3)) {
+        issues.push(dayLabel + '-carbs=' + n.carbs + '-allowed=' +
+          (Math.round(targets.carbs * 0.7 * 10) / 10) + '-' + (Math.round(targets.carbs * 1.3 * 10) / 10));
+      }
     }
-    if (targets.fat > 0 && (day.nutrition.fat < targets.fat * 0.7 || day.nutrition.fat > targets.fat * 1.3)) {
-      nutritionIssues.push('fat=' + day.nutrition.fat + ' allowed=' + (Math.round(targets.fat * 0.7 * 10) / 10) + '-' + (Math.round(targets.fat * 1.3 * 10) / 10));
-    }
-    if (targets.carbs > 0 && (day.nutrition.carbs < targets.carbs * 0.7 || day.nutrition.carbs > targets.carbs * 1.3)) {
-      nutritionIssues.push('carbs=' + day.nutrition.carbs + ' allowed=' + (Math.round(targets.carbs * 0.7 * 10) / 10) + '-' + (Math.round(targets.carbs * 1.3 * 10) / 10));
-    }
-    if (nutritionIssues.length) return dayLabel + '-nutrition-out-of-range-' + nutritionIssues.join(',');
-    week.push(day);
   }
-  if (includesTraining) {
+
+  if (includesTraining && trainingFlags.length === menuDays) {
     const counts = Array.from({ length: Math.ceil(menuDays / 7) }, (_, index) =>
-      week.slice(index * 7, (index + 1) * 7).filter(day => day.trainingDay).length
+      trainingFlags.slice(index * 7, (index + 1) * 7).filter(Boolean).length
     );
-    const invalidBlock = counts.findIndex((count, index) => count !== expectedTrainingDaysInBlock(menuDays, index, profile.days));
-    if (invalidBlock >= 0) return 'training-block-' + (invalidBlock + 1) + '-count-' + counts[invalidBlock] + '-expected-' + expectedTrainingDaysInBlock(menuDays, invalidBlock, profile.days);
+    const invalidBlock = counts.findIndex((count, index) =>
+      count !== expectedTrainingDaysInBlock(menuDays, index, profile.days)
+    );
+    if (invalidBlock >= 0) {
+      issues.push('training-block-' + (invalidBlock + 1) + '-count-' + counts[invalidBlock] +
+        '-expected-' + expectedTrainingDaysInBlock(menuDays, invalidBlock, profile.days));
+    }
   }
-  return 'plan-validation-failed-without-specific-rule';
+
+  return issues.length ? issues.slice(0, 12).join(' | ') : 'plan-validation-failed-without-specific-rule';
 }
 
 function buildShoppingList(week) {
@@ -581,7 +611,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
       ? messages
       : [...messages, {
           role: 'user',
-          content: 'ПРЕДЫДУЩИЙ JSON ОТКЛОНЁН ПРОВЕРКОЙ СЕРВЕРА. Исправь именно перечисленные ошибки, сохранив ВСЕ ' + menuDays + ' дней, четыре приёма пищи в каждом дне, рецепты, ингредиенты и остальные поля структуры. Верни полный JSON, не один примерный день и не сокращённый фрагмент. Причины отказа проверки: ' + validationDiagnostics.slice(-3).join(' | ') + '. Если причина связана с калориями или БЖУ, меняй граммовки существующих ингредиентов небольшими шагами по справочнику. Не ослабляй ограничения калорий и БЖУ.'
+          content: 'ПРЕДЫДУЩИЙ JSON ОТКЛОНЁН ПРОВЕРКОЙ СЕРВЕРА. Исправь ВСЕ перечисленные ошибки, сохрани ровно ' + menuDays + ' дней, четыре приёма пищи в каждом дне и все обязательные поля. Верни полный JSON. Причины отказа: ' + validationDiagnostics.slice(-3).join(' | ') + '. Для каждого блюда рецепт — конкретные 1–2 шага длиной не менее 15 символов. Цели на день: ' + JSON.stringify(nutritionTargets(profile)) + '. Допуски сервера: калории и белок ±20%, жиры и углеводы ±30%. Для исправления калорий и БЖУ разрешается менять граммовки, заменять или добавлять продукты ТОЛЬКО из переданного справочника, соблюдая предпочтения и аллергии клиента. При нехватке углеводов используй подходящие крупы, картофель, хлеб или фрукты из справочника; не компенсируй всё дополнительным мясом, рыбой, творогом или маслом. Проверь сумму каждого дня по справочнику. Не ослабляй серверные допуски и не пропускай поля.'
         }];
     const attemptModels = attempt === 0 ? models : [correctionModel];
 
@@ -669,10 +699,11 @@ async function generateAiPlan(profile, planKey, env) {
       'Верни только корректный JSON без Markdown, без комментариев и без текста до или после JSON.',
       'КРИТИЧЕСКИ ВАЖНО: массив week должен содержать РОВНО ' + chunkDays + ' дней этого блока. Верни все дни от День ' + (offset + 1) + ' до День ' + (offset + chunkDays) + '. Не сокращай план до 3 дней, не объединяй дни и не пропускай дни.',
       'Структура JSON: {"intro":"короткое персональное объяснение","week":[{"day":"День ' + (offset + 1) + '","trainingDay":true,"breakfast":"название блюда","breakfastRecipe":"короткий способ приготовления","breakfastIngredients":[{"foodId":"oats_dry","grams":60}],"lunch":"название блюда","lunchRecipe":"короткий способ приготовления","lunchIngredients":[{"foodId":"chicken_raw","grams":120}],"snack":"название блюда","snackRecipe":"короткий способ подачи или приготовления","snackIngredients":[{"foodId":"greek_yogurt","grams":150}],"dinner":"название блюда","dinnerRecipe":"короткий способ приготовления","dinnerIngredients":[{"foodId":"salmon_raw","grams":120}],"workout":"план тренировки или восстановления"}],"tips":["практичный совет"]}. trainingDay — строго boolean. Для каждого приёма пищи обязательны ingredients-массивы.',
-      'Для каждого приёма пищи обязательно заполни отдельное поле: breakfastRecipe, lunchRecipe, snackRecipe или dinnerRecipe соответственно. Это 1 короткая, конкретная инструкция по приготовлению (1–2 шага, до 300 символов); не повторяй список ингредиентов и не пиши общие фразы. Каждый ingredients-массив содержит 1–6 объектов вида {"foodId":"oats_dry","grams":60}. В каждом объекте обязательны ровно два поля: foodId и grams. Используй ТОЛЬКО точные foodId из справочника ниже. grams — целое число от 5 до 500 съедобных граммов ДО приготовления: мясо, рыба, овощи и фрукты — сырые очищенные части; крупы, макароны и бобовые — сухой вес; яйца — без скорлупы. Не используй готовый вес. Масло и орехи учитывай, если добавляешь их в блюдо. Не добавляй в название блюда продукты, которых нет в его ingredients.',
+      'Для каждого приёма пищи обязательно заполни отдельное поле: breakfastRecipe, lunchRecipe, snackRecipe или dinnerRecipe соответственно. Это 1 короткая, конкретная инструкция по приготовлению (1–2 шага, от 15 до 300 символов); не повторяй список ингредиентов и не пиши общие фразы. Каждый ingredients-массив содержит 1–6 объектов вида {"foodId":"oats_dry","grams":60}. В каждом объекте обязательны ровно два поля: foodId и grams. Используй ТОЛЬКО точные foodId из справочника ниже. grams — целое число от 5 до 500 съедобных граммов ДО приготовления: мясо, рыба, овощи и фрукты — сырые очищенные части; крупы, макароны и бобовые — сухой вес; яйца — без скорлупы. Не используй готовый вес. Масло и орехи учитывай, если добавляешь их в блюдо. Не добавляй в название блюда продукты, которых нет в его ingredients.',
       'Пиши краткое название блюда без граммов. Полный состав и вес продуктов будут показаны отдельно. shopping не возвращай: список покупок сервер рассчитает сам по всем ингредиентам.',
       'Целевые ориентиры КАЖДОГО дня: ' + targets.calories + ' ккал, белок ' + targets.protein + ' г, жиры ' + targets.fat + ' г, углеводы ' + targets.carbs + ' г. Допуск сервера: калории и белок ±20%, жиры и углеводы ±30%. Значит калорийность каждого дня должна быть не ниже ' + Math.round(targets.calories * 0.8) + ' и не выше ' + Math.round(targets.calories * 1.2) + ' ккал.',
       'Целевые калории по приёмам пищи: ' + mealCalorieTargets + '. Не делай маленькие порции и не оставляй значительную часть дневной нормы нераспределённой. Если сумма калорий ниже цели, увеличь граммовки подходящих продуктов из справочника и перепроверь сумму каждого дня.',
+      'Не делай рацион преимущественно белковым: распределяй нужное количество сложных углеводов по завтраку, обеду и ужину. Для источников углеводов выбирай подходящие по предпочтениям продукты из овсянки, риса, гречки, макарон, киноа, картофеля, батата, цельнозернового хлеба, бобовых и фруктов. При цели углеводов от 150 г в сутки используй несколько таких источников в течение дня, а не только овощи.',
       'Перед выдачей проверь каждый день отдельно: сложи калории и БЖУ всех ингредиентов по справочнику. Не возвращай день, если калории, белок, жиры или углеводы выходят за указанные допуски.',
       'СПРАВОЧНИК ПРОДУКТОВ НА 100 г (ккал, белки г, жиры г, углеводы г): ' + JSON.stringify(Object.entries(FOOD_CATALOG).map(([id,food])=>[id,food.name,food.kcal,food.protein,food.fat,food.carbs])),
       includesTraining
@@ -1529,4 +1560,4 @@ export default {
   }
 };
 
-export { buildRobokassaPaymentSignature, robokassaResultSignature, verifyRobokassaResultSignature, robokassaWebhook, paymentStatus, testCheckout, aiPlanDiagnostic, aiDataFlowDiagnostic, generateAiPlan, runAiTextWithFallback, runAiInferenceWithTimeout, FOOD_CATALOG, buildPlanResponseSchema };
+export { buildRobokassaPaymentSignature, robokassaResultSignature, verifyRobokassaResultSignature, robokassaWebhook, paymentStatus, testCheckout, aiPlanDiagnostic, aiDataFlowDiagnostic, generateAiPlan, runAiTextWithFallback, runAiInferenceWithTimeout, FOOD_CATALOG, buildPlanResponseSchema, diagnosePlanWeekFailure };

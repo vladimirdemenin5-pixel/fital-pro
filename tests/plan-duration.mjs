@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { generateAiPlan, runAiTextWithFallback, runAiInferenceWithTimeout, aiPlanDiagnostic, aiDataFlowDiagnostic, FOOD_CATALOG, buildPlanResponseSchema } from '../_worker.js';
+import { generateAiPlan, runAiTextWithFallback, runAiInferenceWithTimeout, aiPlanDiagnostic, aiDataFlowDiagnostic, FOOD_CATALOG, buildPlanResponseSchema, diagnosePlanWeekFailure } from '../_worker.js';
 import { readFile } from 'node:fs/promises';
 
 const workerSource = await readFile(new URL('../_worker.js', import.meta.url), 'utf8');
@@ -153,8 +153,20 @@ assert.deepEqual(breakfastIngredientSchema.items.properties.foodId.enum, Object.
 assert.equal(breakfastIngredientSchema.items.properties.grams.minimum, 5);
 assert.equal(breakfastIngredientSchema.items.properties.grams.maximum, 500);
 assert.ok(breakfastIngredientSchema.items.required.includes('foodId') && breakfastIngredientSchema.items.required.includes('grams'));
+assert.equal(sevenDaySchema.properties.week.items.properties.breakfastRecipe.minLength, 15, 'each recipe must be long enough to contain a real preparation instruction');
+assert.equal(sevenDaySchema.properties.week.items.properties.dinnerRecipe.maxLength, 300);
+assert.ok(workerSource.includes('разрешается менять граммовки, заменять или добавлять продукты'), 'AI correction must be allowed to add a suitable catalog carbohydrate source when needed');
+assert.ok(workerSource.includes('верни полный JSON') || workerSource.includes('Верни полный JSON'), 'correction prompt must request the complete plan JSON');
 assert.equal(fastLlamaModelInput.reasoning_effort, undefined, 'fast Llama should not receive parameters absent from its model input schema');
 assert.equal(fastLlamaModelInput.chat_template_kwargs, undefined, 'fast Llama should not receive unsupported chat-template options');
+const diagnosticSource = JSON.parse((await makeAi(7).run()).response);
+diagnosticSource.week[0].snackRecipe = 'Смешать.';
+const multiFailureReason = diagnosePlanWeekFailure(diagnosticSource, profile, 'Питание', 7, {
+  calories: 2600, protein: 150, fat: 100, carbs: 350
+});
+assert.ok(multiFailureReason.includes('day-1-snack-recipe-short-or-missing'), 'diagnostics must preserve recipe-length errors');
+assert.ok(multiFailureReason.includes('day-1-calories=') && multiFailureReason.includes('day-1-carbs='), 'diagnostics must also include macro errors even when the recipe is invalid');
+
 const correctedPortionPlan = await generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, false, false, false, 0.7) });
 const severelyUnderPortionedPlan = await generateAiPlan(profile, 'Питание', { AI: makeAi(7, false, false, false, false, 0.4) });
 const severelyOverProteinPlan = await generateAiPlan(profile, 'Питание', { AI: makeAi(7, false, false, false, false, 1.4) });
