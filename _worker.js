@@ -165,7 +165,7 @@ function hasWorkoutPrescription(value) {
 
 async function runAiTextWithFallback(env, options, purpose, validate = () => true) {
   // Prefer the low-latency Flash model for chat; keep the stronger models as fallbacks.
-  const models = ['@cf/zai-org/glm-4.7-flash', '@cf/qwen/qwen3.8-27b', MODEL];
+  const models = ['@cf/zai-org/glm-4.7-flash', '@cf/meta/llama-3.1-8b-instruct-fast', MODEL];
   const aiOptions = {
     ...(options || {}),
     reasoning_effort: null,
@@ -464,7 +464,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
     { role: 'system', content: 'Ты Fital Pro. Отвечай только валидным JSON без Markdown и пояснений.' },
     { role: 'user', content: prompt }
   ];
-  const models = ['@cf/zai-org/glm-4.7-flash', '@cf/qwen/qwen3.8-27b', MODEL];
+  const models = ['@cf/zai-org/glm-4.7-flash', '@cf/meta/llama-3.1-8b-instruct-fast', MODEL];
   const diagnostics = [];
   const validationDiagnostics = [];
   let correctionModel = null;
