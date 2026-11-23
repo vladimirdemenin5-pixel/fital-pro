@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 const MODEL = '@cf/google/gemma-4-26b-a4b-it';
 const AI_MODEL_TIMEOUT_MS = 45000;
 const QWEN_PLAN_TIMEOUT_MS = 90000;
+const QWEN4_API_TIMEOUT_MS = 90000;
 const PLANS = {
   'Питание': { amount: '990.00', label: 'Fital Pro — Питание, 7 дней', days: 7, menuDays: 7 },
   'PRO': { amount: '1990.00', label: 'Fital Pro PRO — питание + тренировки, 14 дней', days: 14, menuDays: 14 },
@@ -481,7 +482,7 @@ function rebalanceDayNutrition(day, targets, profile) {
 
   // First change the food composition, not just the grams. Greedy bounded
   // substitutions/additions use only the existing catalog and client-safe foods.
-  for (let move = 0; move < 4; move++) {
+  for (let move = 0; move < 12; move++) {
     const currentScore = score();
     let best = null;
     for (const key of MEAL_KEYS) {
@@ -489,7 +490,7 @@ function rebalanceDayNutrition(day, targets, profile) {
       for (let index = 0; index < ingredients.length; index++) {
         const item = ingredients[index];
         for (const foodId of allowedFoods) {
-          if (foodId === item.foodId || !foodCanReplaceFood(item.foodId, foodId) || ingredients.some((other,i)=>i!==index&&other.foodId===foodId)) continue;
+          if (foodId === item.foodId || !foodFitsMeal(foodId, key) || ingredients.some((other,i)=>i!==index&&other.foodId===foodId)) continue;
           const previous = {...item};
           item.foodId = foodId;
           item.name = FOOD_CATALOG[foodId].name;
@@ -750,13 +751,58 @@ async function runAiInferenceWithTimeout(env, model, inputs, timeoutMs = AI_MODE
   }
 }
 
+const QWEN4_MODEL = 'qwencloud:qwen4-max';
+const QWEN4_REGION_HOSTS = Object.freeze({
+  'ap-southeast-1': 'ap-southeast-1.maas.qwencloudapi.com',
+  'eu-central-1': 'eu-central-1.maas.qwencloudapi.com',
+  'cn-beijing': 'cn-beijing.maas.qwencloudapi.com',
+  'cn-hongkong': 'cn-hongkong.maas.qwencloudapi.com',
+  'ap-northeast-1': 'ap-northeast-1.maas.qwencloudapi.com',
+  'us-east-1': 'us-east-1.maas.qwencloudapi.com'
+});
+
+async function runQwen4PlanInference(env, messages) {
+  const apiKey = clean(env.QWEN4_API_KEY, 500);
+  if (!apiKey) throw new Error('QWEN4_API_KEY is not configured.');
+  const region = clean(env.QWEN4_REGION, 32) || 'ap-southeast-1';
+  const host = QWEN4_REGION_HOSTS[region];
+  if (!host) throw new Error('Unsupported QWEN4_REGION. Use a documented QwenCloud region ID.');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), QWEN4_API_TIMEOUT_MS);
+  try {
+    const response = await fetch('https://' + host + '/compatible-mode/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'qwen4-max',
+        messages: messages.map(message => message.role === 'user'
+          ? { role: 'user', content: [{ type: 'text', text: String(message.content || '') }] }
+          : { role: message.role, content: String(message.content || '') }),
+        temperature: 0.2,
+        max_tokens: 6500
+      }),
+      signal: controller.signal
+    });
+    if (!response.ok) {
+      const detail = clean(await response.text(), 260);
+      throw new Error('QwenCloud HTTP ' + response.status + (detail ? ': ' + detail : ''));
+    }
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function runPlanModel(env, prompt, profile, planKey, menuDays) {
   const messages = [
     { role: 'system', content: 'Ты Fital Pro. Отвечай только валидным JSON без Markdown и пояснений.' },
     { role: 'user', content: prompt }
   ];
   // Qwen 3.8 is the primary meal-plan model; smaller/other models remain fallbacks.
-  const models = ['@cf/qwen/qwen3.8-27b', '@cf/zai-org/glm-4.7-flash', MODEL];
+  const models = [...(clean(env.QWEN4_API_KEY, 500) ? [QWEN4_MODEL] : []), '@cf/qwen/qwen3.8-27b', '@cf/zai-org/glm-4.7-flash', MODEL];
   const diagnostics = [];
   const rejectionDiagnostics = [];
 
@@ -771,6 +817,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
         }]
       : messages;
     try {
+      const isQwen4 = model === QWEN4_MODEL;
       const isQwen = model === '@cf/qwen/qwen3.8-27b';
       const modelInput = {
         messages: currentMessages,
@@ -787,9 +834,11 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
           chat_template_kwargs: { enable_thinking: false }
         })
       };
-      const result = await runAiInferenceWithTimeout(
-        env, model, modelInput, isQwen ? QWEN_PLAN_TIMEOUT_MS : AI_MODEL_TIMEOUT_MS
-      );
+      const result = isQwen4
+        ? await runQwen4PlanInference(env, currentMessages)
+        : await runAiInferenceWithTimeout(
+            env, model, modelInput, isQwen ? QWEN_PLAN_TIMEOUT_MS : AI_MODEL_TIMEOUT_MS
+          );
       const text = extractAiText(result);
       const normalized = text.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
       const match = normalized.match(/\{[\s\S]*\}/);
