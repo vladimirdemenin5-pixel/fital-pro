@@ -90,7 +90,7 @@ $('#intakeForm').addEventListener('submit', async function (event) {
   const errorBox = $('#formError');
   errorBox.textContent = '';
   button.disabled = true;
-  button.textContent = 'ИИ составляет ваш план…';
+  button.textContent = 'Считаем персональный план…';
   const fields = new FormData(form);
   const requestPlan = selectedPlan;
   const requestRevision = invalidateCheckout(false);
@@ -116,6 +116,12 @@ $('#intakeForm').addEventListener('submit', async function (event) {
       return;
     }
     checkoutData = generatedCheckout;
+    const previewFallback = checkoutData.preview.generationMode === 'catalog-fallback';
+    const previewNotice = $('#previewGenerationNotice');
+    previewNotice.textContent = previewFallback
+      ? (checkoutData.preview.intro || 'План рассчитан сервером Fital Pro по вашей анкете, без генеративной модели.')
+      : '';
+    previewNotice.classList.toggle('is-hidden', !previewFallback);
     $('#previewCalories').textContent = Number(checkoutData.preview.calories).toLocaleString('ru-RU');
     $('#previewProtein').textContent = String(checkoutData.preview.protein);
     $('#previewFat').textContent = String(checkoutData.preview.fat);
@@ -141,7 +147,7 @@ $('#intakeForm').addEventListener('submit', async function (event) {
       ? 'Меню на 7 дней, список покупок и сохранение программы в личном кабинете.'
       : requestPlan === 'Premium'
         ? 'Меню и тренировки на 30 дней, доступ на 30 дней и еженедельный разбор дневника с ИИ при доступности модели и резервной сводкой по записям.'
-        : 'Меню и тренировки на 14 дней, доступ к ИИ-консультанту и дневнику прогресса.';
+        : 'Меню и тренировки на 14 дней, доступ к консультанту Fital Pro и дневнику прогресса; генеративные ответы — при доступности модели.';
     $('#paymentButton').textContent = 'Оплатить ' + prices[requestPlan] + ' ↗';
     $('#planPreview').classList.remove('is-hidden');
     $('#planPreview').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -149,7 +155,7 @@ $('#intakeForm').addEventListener('submit', async function (event) {
     if (requestRevision === intakeRevision) errorBox.textContent = error.message;
   } finally {
     button.disabled = false;
-    button.innerHTML = 'Создать мой план с ИИ <span>↗</span>';
+    button.innerHTML = 'Создать мой персональный план <span>↗</span>';
   }
 });
 
@@ -326,7 +332,10 @@ function renderFullPlan(plan, targetSelector) {
       (hasFullMacros ? ' · жиры ' + Number(average.fat).toLocaleString('ru-RU') + ' г · углеводы ' + Number(average.carbs).toLocaleString('ru-RU') + ' г' : ' · жиры и углеводы не рассчитаны в сохранённой старой версии') +
       '.</p>'
     : '<p class="nutrition-summary">Эта программа создана до обновления расчёта по ингредиентам. Чтобы получить проверяемые порции, калории и список покупок, пересоберите план в анкете.</p>';
-  target.innerHTML = nutritionSummary + days.map(function (day) {
+  const generationNotice = plan.generationMode === 'catalog-fallback'
+    ? '<p class="tool-message">' + escapeHtml(plan.intro || 'Программа рассчитана сервером Fital Pro по вашей анкете без генеративной модели.') + '</p>'
+    : '';
+  target.innerHTML = generationNotice + nutritionSummary + days.map(function (day) {
     const nutrition = day.nutrition || {};
     return '<article class="day-card">' +
       '<h3>' + escapeHtml(day.day) + '</h3>' +
