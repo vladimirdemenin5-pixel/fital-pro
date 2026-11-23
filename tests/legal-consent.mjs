@@ -105,7 +105,8 @@ assert.ok(worker.includes("SELECT plan_json FROM weekly_plans WHERE access_token
 
 assert.ok(worker.includes('function isScheduledTrainingDay(absoluteDay, weeklyTarget)'), 'training cadence must be calculated consistently across all plan chunks');
 assert.ok(worker.includes(".filter(day => isScheduledTrainingDay(day, profile.days))"), 'each chunk prompt must receive its exact scheduled training day numbers');
-assert.ok(worker.includes("'тренировочные дни: ' + (trainingDays.length ? trainingDays.join(', ') : 'нет')"), 'the AI prompt must specify exact training dates for each block');
+assert.ok(worker.includes('РАСПИСАНИЕ ЗАДАНО СЕРВЕРОМ И НЕ ПОДЛЕЖИТ ИЗМЕНЕНИЮ'), 'the AI prompt must clearly state that the server owns the workout schedule');
+assert.ok(worker.includes("return 'День ' + absoluteDay + ': trainingDay='"), 'the AI prompt must list the exact server-calculated training or recovery status for every day');
 assert.ok(worker.includes('parsed.week.length !== menuDays'), 'AI generation must validate the tariff menu duration');
 assert.ok(worker.includes('function extractAiText(result)'));
 assert.ok(worker.includes("result?.choices?.[0]?.message?.content"));
