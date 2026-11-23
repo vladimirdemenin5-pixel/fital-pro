@@ -158,7 +158,7 @@ await assert.rejects(
   /Дневной бесплатный лимит ИИ Cloudflare исчерпан/,
   'an exhausted Workers AI quota must return an actionable error instead of hiding it behind generic model fallback failure'
 );
-assert.equal(quotaAttemptedModels.length, 4, 'the four independent plan chunks must each make one initial model request');
+assert.equal(quotaAttemptedModels.length, 1, 'generation must stop after the first block detects exhausted quota');
 assert.ok(quotaAttemptedModels.every(model => model === '@cf/qwen/qwen3.8-27b'), 'an exhausted quota must stop every chunk before it calls any fallback model');
 
 const proPlan = await generateAiPlan(profile, 'PRO', { AI: makeAi(14) });
@@ -238,14 +238,14 @@ const concurrentPlan = await generateAiPlan(profile, 'PRO', { AI: {
     }
   }
 } });
-assert.equal(concurrentPlan.week.length, 14, 'concurrent chunk generation must still assemble every PRO day');
-assert.equal(maxConcurrentPlanCalls, 4, 'four independent two-day chunks must generate concurrently, with a bounded concurrency of four');
+assert.equal(concurrentPlan.week.length, 14, 'sequential chunk generation must still assemble every PRO day');
+assert.equal(maxConcurrentPlanCalls, 1, 'AI plan blocks must never run concurrently');
 assert.ok(proPlan.shopping.includes('Овсяные хлопья, сухие — 1,12 кг'));
 assert.ok(proPlan.shopping.includes('Молоко 2% — 2,8 кг'));
 assert.ok(!proPlan.shopping.includes('Продукты на весь период'));
 assert.ok(proPlan.nutritionSource.includes('USDA FoodData Central'));
 assert.ok(workerSource.includes('fdcId:173904'), 'oats reference must retain its USDA food record identifier');
-assert.ok(workerSource.includes('for (let batchOffset = 0; batchOffset < totalDays; batchOffset += 8)') && workerSource.includes('Promise.all([0, 2, 4, 6]') && workerSource.includes('const chunkDays = Math.min(2, totalDays - offset)'), 'long plans must be generated in parallel batches of validated two-day blocks');
+assert.ok(workerSource.includes('for (let offset = 0; offset < totalDays; offset += 2)') && workerSource.includes('const chunkDays = Math.min(2, totalDays - offset)') && !workerSource.includes('Promise.all([0, 2, 4, 6]'), 'long plans must be generated as sequential validated two-day blocks');
 assert.ok(workerSource.includes('MAX_MEAL_INGREDIENT_GRAMS') && workerSource.includes('min:5,max:') && workerSource.includes('for (let iteration=0;iteration<120;iteration++)') && workerSource.includes('const nutrientTargets = [targets.calories, targets.protein, targets.fat, targets.carbs];') && workerSource.includes('const derivatives=values.map(') && workerSource.includes('let learningRate=1000;') && workerSource.includes('const allowedFoods = Object.keys(FOOD_CATALOG).filter(id => foodAllowedByPreferences(id, profile));'), 'portion and food-choice correction must use bounded catalog search without relaxing nutrition ranges');
 assert.ok(workerSource.includes('const rejectionDiagnostics = [];') && workerSource.includes('rejectionDiagnostics.slice(-3)'), 'the next fallback model must receive concrete rejection reasons from the previous model');
 assert.ok(workerSource.includes("const models = ['@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b', '@cf/zai-org/glm-4.7-flash', MODEL];"), 'Cloudflare Qwen 3.8 must be primary, followed by GPT-OSS 120B, lower-latency 20B and safe fallbacks');
@@ -293,7 +293,7 @@ const timeoutRecoveredPlan = await generateAiPlan(profile, 'Питание', { A
 } });
 assert.equal(timeoutRecoveredPlan.week.length, 7, 'a timed-out first model must fall back to the next available model');
 assert.equal(timeoutFallbackModelsByBlock.get(1)?.[1], '@cf/openai/gpt-oss-120b', 'the same two-day block must fall back from Qwen 3.8 to OpenAI GPT-OSS 120B');
-assert.equal(timeoutFallbackModelsByBlock.get(3)?.[0], '@cf/qwen/qwen3.8-27b', 'the second concurrent two-day block must keep its own independent Qwen primary call');
+assert.equal(timeoutFallbackModelsByBlock.get(3)?.[0], '@cf/qwen/qwen3.8-27b', 'the next two-day block must start with its own Qwen primary call');
 let qwenModelInput = null;
 const qwenPrimaryPlan = await generateAiPlan(profile, 'Питание', { AI: {
   async run(model, input, options) {
@@ -505,7 +505,7 @@ const recoveredNutritionPlan = await generateAiPlan(profile, 'Питание', {
 assert.equal(recoveredNutritionPlan.week.length, 7, 'a corrected fallback-model response must produce a complete plan');
 assert.equal(nutritionRetryCalls, 6, 'four two-day-or-final-day chunks must keep independent model attempts');
 assert.deepEqual(nutritionRetryModelsByBlock.get(1), ['@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'], 'one invalid block must use GPT-OSS 20B as a lower-cost corrective model after GPT-OSS 120B fails validation');
-assert.deepEqual(nutritionRetryModelsByBlock.get(3), ['@cf/qwen/qwen3.8-27b'], 'the other concurrent two-day block must not inherit the first block\'s fallback state');
+assert.deepEqual(nutritionRetryModelsByBlock.get(3), ['@cf/qwen/qwen3.8-27b'], 'the next two-day block must start with a fresh Qwen request after the previous block is validated');
 assert.deepEqual(nutritionRetryModelsByBlock.get(5), ['@cf/qwen/qwen3.8-27b'], 'the third two-day block must start with its own Qwen request');
 assert.deepEqual(nutritionRetryModelsByBlock.get(7), ['@cf/qwen/qwen3.8-27b'], 'the final one-day block must also start with its own Qwen request');
 
