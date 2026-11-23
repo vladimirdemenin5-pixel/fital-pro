@@ -147,18 +147,19 @@ await assert.rejects(
 );
 assert.equal(timeoutSignalCapture.signal.aborted, true, 'a model timeout must also abort the underlying AI call');
 
-let quotaRejectedCalls = 0;
+const quotaAttemptedModels = [];
 await assert.rejects(
   () => generateAiPlan(profile, 'Питание', { AI: {
-    async run() {
-      quotaRejectedCalls++;
+    async run(model) {
+      quotaAttemptedModels.push(model);
       throw new Error('4006: you have used up your daily free allocation of 10,000 neurons');
     }
   } }),
   /Дневной бесплатный лимит ИИ Cloudflare исчерпан/,
   'an exhausted Workers AI quota must return an actionable error instead of hiding it behind generic model fallback failure'
 );
-assert.equal(quotaRejectedCalls, 1, 'an exhausted Workers AI quota must stop the fallback chain immediately');
+assert.equal(quotaAttemptedModels.length, 4, 'the four independent plan chunks must each make one initial model request');
+assert.ok(quotaAttemptedModels.every(model => model === '@cf/qwen/qwen3.8-27b'), 'an exhausted quota must stop every chunk before it calls any fallback model');
 
 const proPlan = await generateAiPlan(profile, 'PRO', { AI: makeAi(14) });
 assert.equal(proPlan.week.length, 14, 'PRO must contain 14 complete menu days');
