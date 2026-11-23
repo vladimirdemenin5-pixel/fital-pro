@@ -3,7 +3,7 @@ name: Fital Pro preview AI generation (14 and 30 days)
 on:
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened]
+    types: [opened, reopened, edited]
 
 permissions:
   contents: read
@@ -18,7 +18,12 @@ jobs:
     if: >-
       github.event.pull_request.number == 47 &&
       github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.head.ref == 'fix/ai-plan-generation-three-day-chunks'
+      github.event.pull_request.head.ref == 'fix/ai-plan-generation-three-day-chunks' &&
+      (
+        github.event.action == 'opened' ||
+        github.event.action == 'reopened' ||
+        (github.event.action == 'edited' && contains(github.event.pull_request.title, '[RUN AI PREVIEW]'))
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 55
     env:
