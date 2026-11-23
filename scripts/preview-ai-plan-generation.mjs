@@ -1,4 +1,28 @@
+import { request as httpRequest } from 'node:http';
+
 const endpoint = process.env.FITALPRO_WORKER_URL || 'http://127.0.0.1:8787';
+
+function postJson(url, body, headers, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const request = httpRequest(url, { method: 'POST', headers }, response => {
+      let text = '';
+      response.setEncoding('utf8');
+      response.on('data', chunk => { text += chunk; });
+      response.on('end', () => {
+        let data = {};
+        try { data = JSON.parse(text); } catch {}
+        const status = response.statusCode || 0;
+        resolve({ ok: status >= 200 && status < 300, status, json: async () => data });
+      });
+    });
+    request.setTimeout(timeoutMs, () => {
+      request.destroy(new Error('Cloudflare preview did not respond within ' + timeoutMs + ' ms.'));
+    });
+    request.on('error', reject);
+    request.write(JSON.stringify(body));
+    request.end();
+  });
+}
 const oidcRequestUrl = process.env.ACTIONS_ID_TOKEN_REQUEST_URL;
 const oidcRequestToken = process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
 if (!oidcRequestUrl || !oidcRequestToken) {
@@ -87,15 +111,15 @@ for (const item of plans) {
   }
 
   console.log('LIVE PREVIEW AI: starting ' + item.key + ' (' + item.days + ' days).');
-  const response = await fetch(endpoint + '/api/ai-diagnostic', {
-    method: 'POST',
-    headers: {
+  const response = await postJson(
+    endpoint + '/api/ai-diagnostic',
+    { plan: item.key, profile },
+    {
       'Content-Type': 'application/json',
       Authorization: 'Bearer ' + oidcToken
     },
-    body: JSON.stringify({ plan: item.key, profile }),
-    signal: AbortSignal.timeout(40 * 60 * 1000)
-  });
+    40 * 60 * 1000
+  );
   const result = await response.json().catch(() => ({}));
   if (!response.ok || result.ok !== true) {
     throw new Error(item.key + ': preview AI generation failed (HTTP ' + response.status + '): ' +
