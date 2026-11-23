@@ -1624,7 +1624,7 @@ async function verifyGitHubActionsOidc(request, env, mode = 'production') {
       claims.workflow_ref === productionWorkflowRef &&
       claims.event_name === 'push' &&
       ['repo:' + repository + ':ref:refs/heads/main', 'repo:vladimirdemenin5-pixel@324070911/fital-pro@1354815283:ref:refs/heads/main'].includes(claims.sub);
-    // Preview OIDC is accepted only in an explicitly remote-dev Worker session.
+    // Preview OIDC is accepted only in the explicitly configured PR 53 Preview.
     // Production does not define FITALPRO_PREVIEW_CI, so a PR token cannot invoke
     // the AI-only diagnostic route on the live Worker.
     const previewWorkflowRef = repository + '/.github/workflows/pull-request-checks.yml@refs/pull/53/merge';
