@@ -262,19 +262,23 @@ assert.equal(qwenModelInput.response_format, undefined, 'do not send unsupported
 const qwenPrompt = qwenModelInput.messages[1].content;
 assert.ok(qwenPrompt.includes('"name":"Клиент"') && !qwenPrompt.includes('Тестовый клиент'), 'all Cloudflare AI models must receive an anonymized client name');
 let gptModelInput = null;
-let gptRepairAttempts = 0;
+const gptRepairAttemptsByStart = new Map();
 const gptRepairPlan = await generateAiPlan(profile, 'Питание', { AI: {
   async run(model, input) {
     if (model === '@cf/qwen/qwen3.8-27b') throw new Error('Qwen unavailable for repair regression');
     assert.equal(model, '@cf/openai/gpt-oss-120b');
-    gptRepairAttempts++;
-    if (gptRepairAttempts === 1) return makeAi(7, true).run(model, input);
-    assert.ok(input.messages.at(-1).content.includes('week-length-'));
+    const prompt = input.messages[1].content;
+    const startDay = Number(prompt.match(/БЛОК: дни (\\d+)–/)?.[1] || 0);
+    const attempts = (gptRepairAttemptsByStart.get(startDay) || 0) + 1;
+    gptRepairAttemptsByStart.set(startDay, attempts);
+    if (startDay === 1 && attempts === 1) return makeAi(7, true).run(model, input);
+    if (startDay === 1) assert.ok(input.messages.at(-1).content.includes('week-length-'));
     return makeAi(7).run(model, input);
   }
 } });
 assert.equal(gptRepairPlan.week.length, 7);
-assert.equal(gptRepairAttempts, 2, 'GPT-OSS must receive one corrective retry with exact server rejection reasons before slower fallback models');
+assert.equal(gptRepairAttemptsByStart.get(1), 2, 'GPT-OSS must receive one corrective retry with exact server rejection reasons before slower fallback models');
+assert.equal(gptRepairAttemptsByStart.get(3), 1, 'valid GPT-OSS output must not trigger an unnecessary retry');
 
 const gptFallbackPlan = await generateAiPlan(profile, 'Питание', { AI: {
   async run(model, input) {
