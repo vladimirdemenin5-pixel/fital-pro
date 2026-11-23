@@ -32,7 +32,8 @@ function makeAi(menuDays, wrongLength = false, invalidMeal = false, invalidWorko
         const chunkStartMatch = prompt.match(/от День (\d+)/);
         const chunkStartDay = chunkStartMatch ? Number(chunkStartMatch[1]) : 1;
         const dayInWeek = (chunkStartDay - 1 + index) % 7;
-        const trainingDay = dayInWeek === 0 || dayInWeek === 2 || dayInWeek === 4;
+        const sessions = Math.max(0, Math.min(7, Math.round(Number(profile.days) || 0)));
+        const trainingDay = Math.floor((dayInWeek + 1) * sessions / 7) > Math.floor(dayInWeek * sessions / 7);
         const tiny = invalidNutrition;
         const portion = grams => Math.max(5, Math.round(grams * portionScale));
         return {
