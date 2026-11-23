@@ -158,7 +158,9 @@ assert.ok(worker.includes("SELECT plan_json FROM weekly_plans WHERE access_token
 assert.ok(app.includes("$('#premiumReviewTool').classList.toggle('is-hidden', !premiumFeatures)"));
 assert.ok(app.includes("api('/api/premium/review')"));
 assert.ok(html.includes('id="premiumReviewTool"'));
-assert.ok(html.includes('Еженедельный ИИ-разбор дневника'));
-assert.ok(offer.includes('автоматизированный ИИ-разбор дневника'));
+assert.ok(html.includes('Еженедельный разбор дневника'));
+assert.ok(html.includes('сервис показывает фактическую сводку по сохранённым отметкам'));
+assert.ok(offer.includes('автоматизированный разбор дневника'));
+assert.ok(offer.includes('фактическую сводку по сохранённым отметкам'));
 
 console.log('PASS: legal/payment protections, AI plans, and Premium weekly review');
