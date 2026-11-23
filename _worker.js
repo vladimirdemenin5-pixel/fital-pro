@@ -509,7 +509,7 @@ function rebalanceDayNutrition(day, targets, profile) {
             role === 'dairy' || role === 'egg' || role === 'poultry' || role === 'fish' ? [30,50,75] :
             role === 'fat' || role === 'nuts' ? [5,10,15] : [];
           for (const grams of portions) {
-            ingredients.push({foodId,name:food.name,grams});
+            ingredients.push({foodId,name:FOOD_CATALOG[foodId].name,grams});
             const candidateScore = score();
             if (candidateScore < currentScore - 1e-8 && (!best || candidateScore < best.score)) {
               best = {type:'add',key,item:{foodId,name:food.name,grams},score:candidateScore};
