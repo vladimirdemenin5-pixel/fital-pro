@@ -824,9 +824,12 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
       const finishReason = result?.choices?.[0]?.finish_reason || result?.result?.choices?.[0]?.finish_reason || null;
       console.error('Fital Pro AI plan rejected:', model, diagnostics[diagnostics.length - 1], 'finishReason=' + (finishReason || 'none'), 'elapsedMs=' + (Date.now() - modelStartedAt));
     } catch (error) {
-      const detail = clean(error?.message, 180) || 'unknown model error';
+      const detail = clean(error?.message, 240) || 'unknown model error';
       diagnostics.push(model + ': request-error=' + detail);
       console.error('Fital Pro AI model failed:', model, detail, 'elapsedMs=' + (Date.now() - modelStartedAt));
+      if (/(?:\\b4006\\b|\\b3036\\b|daily free allocation|used up your daily free allocation)/i.test(detail)) {
+        throw new Error('Дневной бесплатный лимит ИИ Cloudflare исчерпан. Сейчас новый план создать нельзя; заказ и оплата не создаются. Попробуйте позже.', { cause: error });
+      }
     }
   }
   const diagnostic = new Error(diagnostics.join(' | ').slice(0, 1800));
