@@ -248,13 +248,13 @@ assert.ok(workerSource.includes('fdcId:173904'), 'oats reference must retain its
 assert.ok(workerSource.includes('for (let batchOffset = 0; batchOffset < totalDays; batchOffset += 8)') && workerSource.includes('Promise.all([0, 2, 4, 6]') && workerSource.includes('const chunkDays = Math.min(2, totalDays - offset)'), 'long plans must be generated in parallel batches of validated two-day blocks');
 assert.ok(workerSource.includes('MAX_MEAL_INGREDIENT_GRAMS') && workerSource.includes('min:5,max:') && workerSource.includes('for (let iteration=0;iteration<120;iteration++)') && workerSource.includes('const nutrientTargets = [targets.calories, targets.protein, targets.fat, targets.carbs];') && workerSource.includes('const derivatives=values.map(') && workerSource.includes('let learningRate=1000;') && workerSource.includes('const allowedFoods = Object.keys(FOOD_CATALOG).filter(id => foodAllowedByPreferences(id, profile));'), 'portion and food-choice correction must use bounded catalog search without relaxing nutrition ranges');
 assert.ok(workerSource.includes('const rejectionDiagnostics = [];') && workerSource.includes('rejectionDiagnostics.slice(-3)'), 'the next fallback model must receive concrete rejection reasons from the previous model');
-assert.ok(workerSource.includes("const models = ['@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-120b', '@cf/zai-org/glm-4.7-flash', MODEL];"), 'Cloudflare Qwen 3.8 must be primary, followed by OpenAI GPT-OSS 120B and safe fallbacks');
+assert.ok(workerSource.includes("const models = ['@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b', '@cf/zai-org/glm-4.7-flash', MODEL];"), 'Cloudflare Qwen 3.8 must be primary, followed by GPT-OSS 120B, lower-latency 20B and safe fallbacks');
 assert.ok(workerSource.includes('for (let move = 0; move < 20; move++)') && workerSource.includes('!foodFitsMeal(foodId, key)'), 'nutrition correction must search more composition changes and keep replacement foods compatible with their meal');
 assert.ok(workerSource.includes('rejectIfBusy: true'), 'Workers AI must skip a busy model queue and fall back instead of waiting until the request times out');
 assert.ok(workerSource.includes('const AI_MODEL_TIMEOUT_MS = 45000;') && workerSource.includes('Promise.race([') && workerSource.includes('runAiInferenceWithTimeout(env, model'), 'each plan-model inference must have a hard timeout so a stalled model cannot block fallbacks');
 assert.equal((workerSource.match(/const models = \['@cf\/zai-org\/glm-4\.7-flash', '@cf\/meta\/llama-3\.1-8b-instruct-fast', MODEL\];/g) || []).length, 1, 'the general chat fallback chain remains unchanged');
 assert.ok(workerSource.includes('max_tokens: 4200') && workerSource.includes('max_completion_tokens: 4200') && workerSource.includes('QWEN_PLAN_TIMEOUT_MS = 75000') && workerSource.includes('GPT_OSS_PLAN_TIMEOUT_MS = 60000') && workerSource.includes('AI_PLAN_FALLBACK_TIMEOUT_MS = 60000'), 'each Workers AI plan model must use its documented token-limit parameter and bounded timeout');
-assert.ok(workerSource.includes("const isGptOss = model === '@cf/openai/gpt-oss-120b'") && workerSource.includes("response_format: { type: 'json_object' }"), 'GPT-OSS fallback must use supported JSON Mode');
+assert.ok(workerSource.includes("const isGptOss = model === '@cf/openai/gpt-oss-120b' || model === '@cf/openai/gpt-oss-20b'") && workerSource.includes("response_format: { type: 'json_object' }"), 'both GPT-OSS fallbacks must use supported token limits and JSON Mode');
 assert.ok(!workerSource.includes('QWEN4_API_KEY') && !workerSource.includes('qwen4-max'), 'paid QwenCloud integration must be absent from the Cloudflare-only model chain');
 assert.ok(workerSource.includes('function buildPlanResponseSchema(menuDays)') && workerSource.includes('minItems: menuDays') && workerSource.includes('maxItems: menuDays'), 'the reusable server schema helper must still describe exact plan length');
 assert.ok(workerSource.includes("reasoning_effort: 'low'"), 'reasoning must be bounded to low for structured meal-plan generation');
@@ -314,23 +314,35 @@ assert.ok(qwenPrompt.includes('белки') && qwenPrompt.includes('жиры') &
 assert.ok(qwenPrompt.includes('2–4 объекта') && qwenPrompt.includes('"olive_oil":20'),
   'the model must leave safe correction capacity and receive product-specific portion limits');
 let gptModelInput = null;
+let gpt20ModelInput = null;
 const gptRepairAttemptsByStart = new Map();
+const gptRepairModelsByStart = new Map();
 const gptRepairPlan = await generateAiPlan(profile, 'Питание', { AI: {
   async run(model, input) {
     if (model === '@cf/qwen/qwen3.8-27b') throw new Error('Qwen unavailable for repair regression');
-    assert.equal(model, '@cf/openai/gpt-oss-120b');
+    assert.ok(['@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'].includes(model));
     const prompt = input.messages[1].content;
     const startDay = Number(prompt.match(/БЛОК: дни ([0-9]+)[–-]/)?.[1] || 0);
     const attempts = (gptRepairAttemptsByStart.get(startDay) || 0) + 1;
     gptRepairAttemptsByStart.set(startDay, attempts);
-    if (startDay === 1 && attempts === 1) return makeAi(7, true).run(model, input);
-    if (startDay === 1) assert.ok(input.messages.at(-1).content.includes('week-length-'));
+    const models = gptRepairModelsByStart.get(startDay) || [];
+    models.push(model);
+    gptRepairModelsByStart.set(startDay, models);
+    if (startDay === 1 && model === '@cf/openai/gpt-oss-120b') return makeAi(7, true).run(model, input);
+    if (startDay === 1 && model === '@cf/openai/gpt-oss-20b') {
+      gpt20ModelInput = input;
+      assert.ok(input.messages.at(-1).content.includes('week-length-'));
+    }
+    if (model === '@cf/openai/gpt-oss-120b') gptModelInput = input;
     return makeAi(7).run(model, input);
   }
 } });
 assert.equal(gptRepairPlan.week.length, 7);
-assert.equal(gptRepairAttemptsByStart.get(1), 2, 'GPT-OSS must receive one corrective retry with exact server rejection reasons before slower fallback models');
-assert.equal(gptRepairAttemptsByStart.get(3), 1, 'valid GPT-OSS output must not trigger an unnecessary retry');
+assert.equal(gptRepairAttemptsByStart.get(1), 2, 'GPT-OSS 20B must receive the corrective rejection reasons after GPT-OSS 120B fails validation');
+assert.deepEqual(gptRepairModelsByStart.get(1), ['@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b']);
+assert.equal(gptRepairAttemptsByStart.get(3), 1, 'valid GPT-OSS 120B output must not trigger an unnecessary retry');
+assert.equal(gpt20ModelInput.max_tokens, 4200);
+assert.equal(gpt20ModelInput.reasoning_effort, 'low');
 
 const gptFallbackPlan = await generateAiPlan(profile, 'Питание', { AI: {
   async run(model, input) {
@@ -492,7 +504,7 @@ const nutritionRetryAi = {
 const recoveredNutritionPlan = await generateAiPlan(profile, 'Питание', { AI: nutritionRetryAi });
 assert.equal(recoveredNutritionPlan.week.length, 7, 'a corrected fallback-model response must produce a complete plan');
 assert.equal(nutritionRetryCalls, 6, 'four two-day-or-final-day chunks must keep independent model attempts');
-assert.deepEqual(nutritionRetryModelsByBlock.get(1), ['@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-120b'], 'one invalid block must use the bounded GPT-OSS correction attempt before moving to slower fallbacks');
+assert.deepEqual(nutritionRetryModelsByBlock.get(1), ['@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'], 'one invalid block must use GPT-OSS 20B as a lower-cost corrective model after GPT-OSS 120B fails validation');
 assert.deepEqual(nutritionRetryModelsByBlock.get(3), ['@cf/qwen/qwen3.8-27b'], 'the other concurrent two-day block must not inherit the first block\'s fallback state');
 assert.deepEqual(nutritionRetryModelsByBlock.get(5), ['@cf/qwen/qwen3.8-27b'], 'the third two-day block must start with its own Qwen request');
 assert.deepEqual(nutritionRetryModelsByBlock.get(7), ['@cf/qwen/qwen3.8-27b'], 'the final one-day block must also start with its own Qwen request');
