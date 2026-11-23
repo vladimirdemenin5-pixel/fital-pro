@@ -29,7 +29,7 @@
       "ROBOKASSA_PASSWORD2"
     ]
   },
-  "previews": {},
+  "previews": {\n    "ai": {\n      "binding": "AI"\n    }\n  },
   "observability": {
     "enabled": true
   },
