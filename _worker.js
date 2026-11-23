@@ -298,30 +298,40 @@ function rebalanceDayNutrition(day, targets) {
 
   day.nutrition = calculateDayNutrition(day);
   if (nutritionWithinTargets(day.nutrition, targets)) return true;
-  for (let iteration = 0; iteration < 500; iteration++) {
-    let bestScore = score();
-    let bestItem = -1;
-    let bestGrams = 0;
-    for (let i = 0; i < items.length; i++) {
-      for (const step of [-1, 1]) {
-        const candidate = items[i].grams + step;
-        if (candidate < bounds[i].min || candidate > bounds[i].max) continue;
-        const previous = items[i].grams;
-        items[i].grams = candidate;
-        const candidateScore = score();
-        items[i].grams = previous;
-        if (candidateScore < bestScore - 1e-9) {
-          bestScore = candidateScore;
-          bestItem = i;
-          bestGrams = candidate;
+
+  // Correct large deviations efficiently first, then refine to single grams.
+  // The old 1 g-only search could spend its entire budget on a large number
+  // of tiny moves even when the day simply needed a modest overall increase.
+  const stepSizes = [20, 5, 1];
+  for (const stepSize of stepSizes) {
+    for (let iteration = 0; iteration < 80; iteration++) {
+      let bestScore = score();
+      let bestItem = -1;
+      let bestGrams = 0;
+
+      for (let i = 0; i < items.length; i++) {
+        for (const direction of [-1, 1]) {
+          const candidate = items[i].grams + direction * stepSize;
+          if (candidate < bounds[i].min || candidate > bounds[i].max) continue;
+          const previous = items[i].grams;
+          items[i].grams = candidate;
+          const candidateScore = score();
+          items[i].grams = previous;
+          if (candidateScore < bestScore - 1e-9) {
+            bestScore = candidateScore;
+            bestItem = i;
+            bestGrams = candidate;
+          }
         }
       }
+
+      if (bestItem < 0) break;
+      items[bestItem].grams = bestGrams;
+      day.nutrition = calculateDayNutrition(day);
+      if (nutritionWithinTargets(day.nutrition, targets)) return true;
     }
-    if (bestItem < 0) break;
-    items[bestItem].grams = bestGrams;
-    day.nutrition = calculateDayNutrition(day);
-    if (nutritionWithinTargets(day.nutrition, targets)) return true;
   }
+
   day.nutrition = calculateDayNutrition(day);
   return nutritionWithinTargets(day.nutrition, targets);
 }
