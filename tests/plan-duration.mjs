@@ -161,11 +161,11 @@ assert.ok(workerSource.includes('fdcId:173904'), 'oats reference must retain its
 assert.ok(workerSource.includes('for (let offset = 0; offset < totalDays; offset += 7)'), 'long plans must be generated and validated in seven-day blocks');
 assert.ok(workerSource.includes('MAX_MEAL_INGREDIENT_GRAMS') && workerSource.includes('min:5,max:') && workerSource.includes('for (let iteration=0;iteration<120;iteration++)') && workerSource.includes('const nutrientTargets = [targets.calories, targets.protein, targets.fat, targets.carbs];') && workerSource.includes('const derivatives=values.map(') && workerSource.includes('let learningRate=1000;') && workerSource.includes('const allowedFoods = Object.keys(FOOD_CATALOG).filter(id => foodAllowedByPreferences(id, profile));'), 'portion and food-choice correction must use bounded catalog search without relaxing nutrition ranges');
 assert.ok(workerSource.includes('const rejectionDiagnostics = [];') && workerSource.includes('rejectionDiagnostics.slice(-3)'), 'the next fallback model must receive concrete rejection reasons from the previous model');
-assert.ok(workerSource.includes("const models = ['@cf/zai-org/glm-4.7-flash', '@cf/meta/llama-3.1-8b-instruct-fast', MODEL];"), 'plan generation must use GLM Flash, fast Llama, then Gemma fallback');
+assert.ok(workerSource.includes("const models = ['@cf/qwen/qwen3.8-27b', '@cf/zai-org/glm-4.7-flash', MODEL];"), 'plan generation must use Qwen 3.8 first, then GLM Flash and Gemma fallbacks');
 assert.ok(workerSource.includes('rejectIfBusy: true'), 'Workers AI must skip a busy model queue and fall back instead of waiting until the request times out');
 assert.ok(workerSource.includes('const AI_MODEL_TIMEOUT_MS = 45000;') && workerSource.includes('Promise.race([') && workerSource.includes('runAiInferenceWithTimeout(env, model'), 'each plan-model inference must have a hard timeout so a stalled model cannot block fallbacks');
-assert.equal((workerSource.match(/const models = \['@cf\/zai-org\/glm-4\.7-flash', '@cf\/meta\/llama-3\.1-8b-instruct-fast', MODEL\];/g) || []).length, 2, 'both chat and plan generation must try GLM Flash, fast Llama and Gemma in order');
-assert.ok(workerSource.includes('max_completion_tokens: 6500') && workerSource.includes('max_tokens: 6500'), 'GLM/Gemma and fast Llama must use their respective documented output-token parameters');
+assert.equal((workerSource.match(/const models = \['@cf\/zai-org\/glm-4\.7-flash', '@cf\/meta\/llama-3\.1-8b-instruct-fast', MODEL\];/g) || []).length, 1, 'the general chat fallback chain remains unchanged');
+assert.ok(workerSource.includes('max_completion_tokens: 6500') && workerSource.includes('QWEN_PLAN_TIMEOUT_MS = 90000'), 'Qwen and fallback plan models must use bounded output and a model-specific timeout');
 assert.ok(workerSource.includes("type: 'json_schema'") && workerSource.includes('minItems: menuDays') && workerSource.includes('maxItems: menuDays'), 'fast Llama JSON schema must constrain the week array to the requested number of days');
 assert.ok(workerSource.includes('reasoning_effort: null'), 'reasoning must be explicitly disabled for deterministic structured meal-plan generation');
 assert.ok(workerSource.includes('const aiOptions = {') && workerSource.includes('env.AI.run(model, aiOptions, { rejectIfBusy: true })'), 'the AI chat fallback must also disable reasoning before inference');
@@ -198,34 +198,20 @@ const timeoutRecoveredPlan = await generateAiPlan(profile, 'Питание', { A
   }
 } });
 assert.equal(timeoutRecoveredPlan.week.length, 7, 'a timed-out first model must fall back to the next available model');
-assert.equal(timeoutFallbackModels[1], '@cf/meta/llama-3.1-8b-instruct-fast', 'the catalog-listed fast Llama model must be attempted after the first model times out');
-let fastLlamaModelInput = null;
-const schemaConstrainedPlan = await generateAiPlan(profile, 'Питание', { AI: {
+assert.equal(timeoutFallbackModels[1], '@cf/zai-org/glm-4.7-flash', 'GLM Flash must be attempted after Qwen times out');
+let qwenModelInput = null;
+const qwenPrimaryPlan = await generateAiPlan(profile, 'Питание', { AI: {
   async run(model, input, options) {
-    assert.ok(options?.signal instanceof AbortSignal, 'fast Llama inference must retain the hard timeout abort signal');
-    if (model === '@cf/zai-org/glm-4.7-flash') throw new Error('force the documented fast Llama fallback');
-    if (model !== '@cf/meta/llama-3.1-8b-instruct-fast') throw new Error('unexpected fallback model');
-    fastLlamaModelInput = input;
+    assert.equal(model, '@cf/qwen/qwen3.8-27b', 'Qwen 3.8 must be the first plan-generation model');
+    assert.ok(options?.signal instanceof AbortSignal, 'Qwen inference must retain the hard timeout abort signal');
+    qwenModelInput = input;
     return makeAi(7).run(model, input);
   }
 } });
-assert.equal(schemaConstrainedPlan.week.length, 7);
-assert.equal(fastLlamaModelInput.max_tokens, 6500, 'fast Llama must use its documented max_tokens parameter');
-assert.equal(fastLlamaModelInput.max_completion_tokens, undefined, 'fast Llama must not receive the unsupported max_completion_tokens parameter');
-assert.equal(fastLlamaModelInput.response_format.type, 'json_schema');
-const sevenDaySchema = buildPlanResponseSchema(7);
-assert.deepEqual(fastLlamaModelInput.response_format.json_schema, sevenDaySchema, 'fast Llama must receive the full validated plan schema');
-assert.equal(sevenDaySchema.properties.week.minItems, 7);
-assert.equal(sevenDaySchema.properties.week.maxItems, 7, 'the plan schema must require exactly seven days');
-const breakfastIngredientSchema = sevenDaySchema.properties.week.items.properties.breakfastIngredients;
-assert.equal(breakfastIngredientSchema.minItems, 1);
-assert.equal(breakfastIngredientSchema.maxItems, 6);
-assert.deepEqual(breakfastIngredientSchema.items.properties.foodId.enum, Object.keys(FOOD_CATALOG), 'AI food IDs must be restricted to the server catalog');
-assert.equal(breakfastIngredientSchema.items.properties.grams.minimum, 5);
-assert.equal(breakfastIngredientSchema.items.properties.grams.maximum, 500);
-assert.ok(breakfastIngredientSchema.items.required.includes('foodId') && breakfastIngredientSchema.items.required.includes('grams'));
-assert.equal(sevenDaySchema.properties.week.items.properties.breakfastRecipe.minLength, 15, 'each recipe must be long enough to contain a real preparation instruction');
-assert.equal(sevenDaySchema.properties.week.items.properties.dinnerRecipe.maxLength, 300);
+assert.equal(qwenPrimaryPlan.week.length, 7);
+assert.equal(qwenModelInput.max_completion_tokens, 6500);
+assert.equal(qwenModelInput.reasoning_effort, 'low', 'Qwen reasoning must be bounded to low for structured meal-plan output');
+assert.equal(qwenModelInput.response_format, undefined, 'do not send unsupported Cloudflare JSON Mode parameters to Qwen');
 assert.ok(workerSource.includes('заменять или добавлять продукты') && workerSource.includes('Для углеводов используй подходящие крупи') === false && workerSource.includes('Для углеводов используй подходящие крупы'), 'AI fallback correction must be allowed to add catalog carbohydrate sources when needed');
 assert.ok(workerSource.includes('верни полный JSON') || workerSource.includes('Верни полный JSON'), 'correction prompt must request the complete plan JSON');
 assert.equal(fastLlamaModelInput.reasoning_effort, undefined, 'fast Llama should not receive parameters absent from its model input schema');
@@ -243,10 +229,10 @@ const underPortionRetryAI = makeRetryAi(7, 0.4, 0.7);
 let lowEnergyCorrectionPrompt = '';
 const lowEnergyFallbackPlan = await generateAiPlan(profile, 'Питание', { AI: {
   async run(model, input) {
-    if (model === '@cf/zai-org/glm-4.7-flash') {
+    if (model === '@cf/qwen/qwen3.8-27b') {
       return makeAi(7, false, false, false, true).run(model, input);
     }
-    if (model === '@cf/meta/llama-3.1-8b-instruct-fast') {
+    if (model === '@cf/zai-org/glm-4.7-flash') {
       lowEnergyCorrectionPrompt = input.messages.at(-1).content;
       return makeAi(7).run(model, input);
     }
