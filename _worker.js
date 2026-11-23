@@ -778,9 +778,20 @@ async function runQwen4PlanInference(env, messages) {
       },
       body: JSON.stringify({
         model: 'qwen4-max',
-        messages: messages.map(message => message.role === 'user'
-          ? { role: 'user', content: [{ type: 'text', text: String(message.content || '') }] }
-          : { role: message.role, content: String(message.content || '') }),
+        messages: messages.map(message => {
+          if (message.role !== 'user') return { role: message.role, content: String(message.content || '') };
+          // The client's name is not needed for nutrition generation; anonymize it before the external API call.
+          const content = String(message.content || '').replace(/ДАННЫЕ КЛИЕНТА:\\s*(\\{[^\\n]*\\})/, (_match, rawProfile) => {
+            try {
+              const anonymizedProfile = JSON.parse(rawProfile);
+              anonymizedProfile.name = 'Клиент';
+              return 'ДАННЫЕ КЛИЕНТА: ' + JSON.stringify(anonymizedProfile);
+            } catch {
+              return 'ДАННЫЕ КЛИЕНТА: [анонимизировано]';
+            }
+          });
+          return { role: 'user', content: [{ type: 'text', text: content }] };
+        }),
         temperature: 0.2,
         max_tokens: 6500
       }),
