@@ -56,6 +56,18 @@ function makeAi(menuDays, wrongLength = false, invalidMeal = false, invalidWorko
   };
 }
 
+function makeRetryAi(menuDays, firstScale, retryScale) {
+  let calls = 0;
+  return {
+    get calls() { return calls; },
+    async run(model, input) {
+      calls++;
+      const scale = calls <= 3 ? firstScale : retryScale;
+      return makeAi(menuDays, false, false, false, false, scale).run(model, input);
+    }
+  };
+}
+
 assert.ok(Object.keys(FOOD_CATALOG).every(id => foodRole(id)), 'every catalog item must have a meal role');
 assert.equal(foodCanReplaceFood('chicken_raw', 'turkey_raw'), true, 'poultry may be substituted with poultry');
 assert.equal(foodCanReplaceFood('chicken_raw', 'banana'), false, 'protein must not be replaced with fruit');
@@ -82,6 +94,18 @@ const macroCorrectionDay = {
   dinnerRecipe: 'Приготовь продукты до готовности и подай вместе.',
   dinnerIngredients: [{ foodId: 'cod_raw', name: FOOD_CATALOG.cod_raw.name, grams: 250 }]
 };
+const lowEnergyDay = {
+  ...macroCorrectionDay,
+  breakfastIngredients: [{ foodId:'oats_dry', name:FOOD_CATALOG.oats_dry.name, grams:5 }],
+  lunchIngredients: [{ foodId:'chicken_raw', name:FOOD_CATALOG.chicken_raw.name, grams:5 }],
+  snackIngredients: [{ foodId:'greek_yogurt', name:FOOD_CATALOG.greek_yogurt.name, grams:5 }],
+  dinnerIngredients: [{ foodId:'cod_raw', name:FOOD_CATALOG.cod_raw.name, grams:5 }]
+};
+const lowEnergyBefore = JSON.stringify(lowEnergyDay);
+assert.equal(rebalanceDayNutrition(lowEnergyDay, { calories:1800, protein:90, fat:58, carbs:225 }, profile), false,
+  'a severely incomplete low-energy draft must be rejected for AI retry instead of being fabricated from catalog foods');
+assert.equal(JSON.stringify(lowEnergyDay), lowEnergyBefore, 'the low-energy guard must not mutate the rejected draft');
+
 const originalMacroFoodIds = ['breakfast','lunch','snack','dinner'].flatMap(key => macroCorrectionDay[key + 'Ingredients'].map(item => item.foodId));
 const macroCorrectionSucceeded = rebalanceDayNutrition(macroCorrectionDay, {
   calories: 1800, protein: 90, fat: 58, carbs: 225
@@ -215,7 +239,9 @@ assert.ok(multiFailureReason.includes('day-1-snack-recipe-short-or-missing'), 'd
 assert.ok(multiFailureReason.includes('day-1-calories=') && multiFailureReason.includes('day-1-carbs='), 'diagnostics must also include macro errors even when the recipe is invalid');
 
 const correctedPortionPlan = await generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, false, false, false, 0.7) });
-const severelyUnderPortionedPlan = await generateAiPlan(profile, 'Питание', { AI: makeAi(7, false, false, false, false, 0.4) });
+const underPortionRetryAI = makeRetryAi(7, 0.4, 0.7);
+const severelyUnderPortionedPlan = await generateAiPlan(profile, 'Питание', { AI: underPortionRetryAI });
+assert.ok(underPortionRetryAI.calls >= 4, 'an under-50% AI draft must trigger a new model attempt before a corrected plan is accepted');
 const severelyOverProteinPlan = await generateAiPlan(profile, 'Питание', { AI: makeAi(7, false, false, false, false, 1.4) });
 const mixedMacroRecovery = await generateAiPlan(profile, 'Питание', { AI: {
   async run() {
