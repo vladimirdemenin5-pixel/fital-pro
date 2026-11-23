@@ -418,6 +418,27 @@ function expectedTrainingDaysInBlock(menuDays, weekIndex, weeklyTarget) {
   return Math.min(daysInBlock, Math.max(1, Math.round(weeklyTarget * daysInBlock / 7)));
 }
 
+async function runAiInferenceWithTimeout(env, model, inputs, timeoutMs = AI_MODEL_TIMEOUT_MS) {
+  const controller = new AbortController();
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error('Workers AI inference timed out after ' + timeoutMs + ' ms.');
+      error.name = 'TimeoutError';
+      controller.abort(error);
+      reject(error);
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([
+      env.AI.run(model, inputs, { rejectIfBusy: true, signal: controller.signal }),
+      timeout
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function runPlanModel(env, prompt, profile, planKey, menuDays) {
   const messages = [
     { role: 'system', content: 'Ты Fital Pro. Отвечай только валидным JSON без Markdown и пояснений.' },
@@ -442,16 +463,13 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
     for (const model of attemptModels) {
       const modelStartedAt = Date.now();
       try {
-        const result = await env.AI.run(model, {
+        const result = await runAiInferenceWithTimeout(env, model, {
           messages: currentMessages,
           max_completion_tokens: 6500,
           reasoning_effort: null,
           temperature: 0.2,
           response_format: { type: 'json_object' },
           chat_template_kwargs: { enable_thinking: false }
-        }, {
-          rejectIfBusy: true,
-          signal: AbortSignal.timeout(AI_MODEL_TIMEOUT_MS)
         });
         const text = extractAiText(result);
         const normalized = text.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
@@ -1375,4 +1393,4 @@ export default {
   }
 };
 
-export { buildRobokassaPaymentSignature, robokassaResultSignature, verifyRobokassaResultSignature, robokassaWebhook, paymentStatus, testCheckout, aiPlanDiagnostic, aiDataFlowDiagnostic, generateAiPlan, runAiTextWithFallback, FOOD_CATALOG };
+export { buildRobokassaPaymentSignature, robokassaResultSignature, verifyRobokassaResultSignature, robokassaWebhook, paymentStatus, testCheckout, aiPlanDiagnostic, aiDataFlowDiagnostic, generateAiPlan, runAiTextWithFallback, runAiInferenceWithTimeout, FOOD_CATALOG };
