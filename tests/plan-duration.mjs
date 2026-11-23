@@ -268,7 +268,7 @@ const gptRepairPlan = await generateAiPlan(profile, 'Питание', { AI: {
     if (model === '@cf/qwen/qwen3.8-27b') throw new Error('Qwen unavailable for repair regression');
     assert.equal(model, '@cf/openai/gpt-oss-120b');
     const prompt = input.messages[1].content;
-    const startDay = Number(prompt.match(/БЛОК: дни (\\d+)–/)?.[1] || 0);
+    const startDay = Number(prompt.match(/БЛОК: дни ([0-9]+)[–-]/)?.[1] || 0);
     const attempts = (gptRepairAttemptsByStart.get(startDay) || 0) + 1;
     gptRepairAttemptsByStart.set(startDay, attempts);
     if (startDay === 1 && attempts === 1) return makeAi(7, true).run(model, input);
