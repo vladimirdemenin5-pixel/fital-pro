@@ -27,7 +27,7 @@ function makeAi(menuDays, wrongLength = false, invalidMeal = false, invalidWorko
       const prompt = input?.messages?.[1]?.content || '';
       const block = prompt.match(/БЛОК: дни (\d+)–(\d+) из (\d+)/);
       const requestedDays = block ? Number(block[2]) - Number(block[1]) + 1 : menuDays;
-      const count = wrongLength ? 3 : requestedDays;
+      const count = wrongLength ? Math.max(0, requestedDays - 1) : requestedDays;
       const week = Array.from({ length: count }, (_, index) => {
         const dayInWeek = index % 7;
         const trainingDay = dayInWeek === 0 || dayInWeek === 2 || dayInWeek === 4;
@@ -158,7 +158,7 @@ assert.ok(proPlan.shopping.includes('Молоко 2% — 2,8 кг'));
 assert.ok(!proPlan.shopping.includes('Продукты на весь период'));
 assert.ok(proPlan.nutritionSource.includes('USDA FoodData Central'));
 assert.ok(workerSource.includes('fdcId:173904'), 'oats reference must retain its USDA food record identifier');
-assert.ok(workerSource.includes('for (let offset = 0; offset < totalDays; offset += 7)'), 'long plans must be generated and validated in seven-day blocks');
+assert.ok(workerSource.includes('for (let offset = 0; offset < totalDays; offset += 3)'), 'long plans must be generated and validated in three-day blocks');
 assert.ok(workerSource.includes('MAX_MEAL_INGREDIENT_GRAMS') && workerSource.includes('min:5,max:') && workerSource.includes('for (let iteration=0;iteration<120;iteration++)') && workerSource.includes('const nutrientTargets = [targets.calories, targets.protein, targets.fat, targets.carbs];') && workerSource.includes('const derivatives=values.map(') && workerSource.includes('let learningRate=1000;') && workerSource.includes('const allowedFoods = Object.keys(FOOD_CATALOG).filter(id => foodAllowedByPreferences(id, profile));'), 'portion and food-choice correction must use bounded catalog search without relaxing nutrition ranges');
 assert.ok(workerSource.includes('const rejectionDiagnostics = [];') && workerSource.includes('rejectionDiagnostics.slice(-3)'), 'the next fallback model must receive concrete rejection reasons from the previous model');
 assert.ok(workerSource.includes("const models = ['@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/zai-org/glm-4.7-flash', MODEL];"), 'Cloudflare Qwen 3.8 must be primary, followed by OpenAI GPT-OSS 120B and safe fallbacks');
@@ -166,7 +166,7 @@ assert.ok(workerSource.includes('for (let move = 0; move < 12; move++)') && work
 assert.ok(workerSource.includes('rejectIfBusy: true'), 'Workers AI must skip a busy model queue and fall back instead of waiting until the request times out');
 assert.ok(workerSource.includes('const AI_MODEL_TIMEOUT_MS = 45000;') && workerSource.includes('Promise.race([') && workerSource.includes('runAiInferenceWithTimeout(env, model'), 'each plan-model inference must have a hard timeout so a stalled model cannot block fallbacks');
 assert.equal((workerSource.match(/const models = \['@cf\/zai-org\/glm-4\.7-flash', '@cf\/meta\/llama-3\.1-8b-instruct-fast', MODEL\];/g) || []).length, 1, 'the general chat fallback chain remains unchanged');
-assert.ok(workerSource.includes('max_tokens: 6500') && workerSource.includes('max_completion_tokens: 6500') && workerSource.includes('QWEN_PLAN_TIMEOUT_MS = 90000'), 'each Workers AI plan model must use its documented token-limit parameter and bounded timeout');
+assert.ok(workerSource.includes('max_tokens: 4200') && workerSource.includes('max_completion_tokens: 4200') && workerSource.includes('QWEN_PLAN_TIMEOUT_MS = 90000'), 'each Workers AI plan model must use its documented token-limit parameter and bounded timeout');
 assert.ok(workerSource.includes("const isGptOss = model === '@cf/openai/gpt-oss-120b'") && workerSource.includes("response_format: { type: 'json_object' }"), 'GPT-OSS fallback must use supported JSON Mode');
 assert.ok(!workerSource.includes('QWEN4_API_KEY') && !workerSource.includes('qwen4-max'), 'paid QwenCloud integration must be absent from the Cloudflare-only model chain');
 assert.ok(workerSource.includes('function buildPlanResponseSchema(menuDays)') && workerSource.includes('minItems: menuDays') && workerSource.includes('maxItems: menuDays'), 'the reusable server schema helper must still describe exact plan length');
@@ -212,7 +212,7 @@ const qwenPrimaryPlan = await generateAiPlan(profile, 'Питание', { AI: {
   }
 } });
 assert.equal(qwenPrimaryPlan.week.length, 7);
-assert.equal(qwenModelInput.max_completion_tokens, 6500);
+assert.equal(qwenModelInput.max_completion_tokens, 4200);
 assert.equal(qwenModelInput.reasoning_effort, 'low', 'Qwen reasoning must be bounded to low for structured meal-plan output');
 assert.equal(qwenModelInput.response_format, undefined, 'do not send unsupported Cloudflare JSON Mode parameters to Qwen');
 const qwenPrompt = qwenModelInput.messages[1].content;
@@ -227,7 +227,7 @@ const gptFallbackPlan = await generateAiPlan(profile, 'Питание', { AI: {
   }
 } });
 assert.equal(gptFallbackPlan.week.length, 7, 'GPT-OSS fallback must produce a complete server-validated seven-day plan');
-assert.equal(gptModelInput.max_tokens, 6500);
+assert.equal(gptModelInput.max_tokens, 4200);
 assert.equal(gptModelInput.reasoning_effort, 'low');
 assert.equal(gptModelInput.response_format, undefined, 'do not send undocumented JSON Mode to GPT-OSS; validate its JSON response server-side');
 assert.ok(workerSource.includes('заменять или добавлять продукты') && workerSource.includes('Для углеводов используй подходящие крупи') === false && workerSource.includes('Для углеводов используй подходящие крупы'), 'AI fallback correction must be allowed to add catalog carbohydrate sources when needed');
