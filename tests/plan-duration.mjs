@@ -62,7 +62,7 @@ function makeRetryAi(menuDays, firstScale, retryScale) {
     get calls() { return calls; },
     async run(model, input) {
       calls++;
-      const scale = calls <= 3 ? firstScale : retryScale;
+      const scale = calls === 1 ? firstScale : retryScale;
       return makeAi(menuDays, false, false, false, false, scale).run(model, input);
     }
   };
@@ -160,7 +160,7 @@ assert.ok(proPlan.nutritionSource.includes('USDA FoodData Central'));
 assert.ok(workerSource.includes('fdcId:173904'), 'oats reference must retain its USDA food record identifier');
 assert.ok(workerSource.includes('for (let offset = 0; offset < totalDays; offset += 7)'), 'long plans must be generated and validated in seven-day blocks');
 assert.ok(workerSource.includes('MAX_MEAL_INGREDIENT_GRAMS') && workerSource.includes('min:5,max:') && workerSource.includes('for (let iteration=0;iteration<120;iteration++)') && workerSource.includes('const nutrientTargets = [targets.calories, targets.protein, targets.fat, targets.carbs];') && workerSource.includes('const derivatives=values.map(') && workerSource.includes('let learningRate=1000;') && workerSource.includes('const allowedFoods = Object.keys(FOOD_CATALOG).filter(id => foodAllowedByPreferences(id, profile));'), 'portion and food-choice correction must use bounded catalog search without relaxing nutrition ranges');
-assert.ok(workerSource.includes('const validationDiagnostics = [];') && workerSource.includes('validationDiagnostics.slice(-3)'), 'AI correction retry must retain actual validation failures instead of timeout noise');
+assert.ok(workerSource.includes('const rejectionDiagnostics = [];') && workerSource.includes('rejectionDiagnostics.slice(-3)'), 'the next fallback model must receive concrete rejection reasons from the previous model');
 assert.ok(workerSource.includes("const models = ['@cf/zai-org/glm-4.7-flash', '@cf/meta/llama-3.1-8b-instruct-fast', MODEL];"), 'plan generation must use GLM Flash, fast Llama, then Gemma fallback');
 assert.ok(workerSource.includes('rejectIfBusy: true'), 'Workers AI must skip a busy model queue and fall back instead of waiting until the request times out');
 assert.ok(workerSource.includes('const AI_MODEL_TIMEOUT_MS = 45000;') && workerSource.includes('Promise.race([') && workerSource.includes('runAiInferenceWithTimeout(env, model'), 'each plan-model inference must have a hard timeout so a stalled model cannot block fallbacks');
@@ -240,8 +240,24 @@ assert.ok(multiFailureReason.includes('day-1-calories=') && multiFailureReason.i
 
 const correctedPortionPlan = await generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, false, false, false, 0.7) });
 const underPortionRetryAI = makeRetryAi(7, 0.4, 0.7);
+let lowEnergyCorrectionPrompt = '';
+const lowEnergyFallbackPlan = await generateAiPlan(profile, 'Питание', { AI: {
+  async run(model, input) {
+    if (model === '@cf/zai-org/glm-4.7-flash') {
+      return makeAi(7, false, false, false, true).run(model, input);
+    }
+    if (model === '@cf/meta/llama-3.1-8b-instruct-fast') {
+      lowEnergyCorrectionPrompt = input.messages.at(-1).content;
+      return makeAi(7).run(model, input);
+    }
+    throw new Error('unexpected model after low-energy rejection');
+  }
+} });
+assert.equal(lowEnergyFallbackPlan.week.length, 7);
+assert.ok(lowEnergyCorrectionPrompt.includes('day-1-calories=') || lowEnergyCorrectionPrompt.includes('day-1-protein='), 'the next model must receive concrete server nutrition diagnostics');
+assert.ok(lowEnergyCorrectionPrompt.includes('ниже 50%') && lowEnergyCorrectionPrompt.includes('не пытайся исправлять'), 'the correction prompt must preserve the strict under-50% full-regeneration rule');
 const severelyUnderPortionedPlan = await generateAiPlan(profile, 'Питание', { AI: underPortionRetryAI });
-assert.ok(underPortionRetryAI.calls >= 4, 'an under-50% AI draft must trigger a new model attempt before a corrected plan is accepted');
+assert.ok(underPortionRetryAI.calls >= 2, 'an under-50% AI draft must be rejected and the next model must generate a complete replacement plan');
 const severelyOverProteinPlan = await generateAiPlan(profile, 'Питание', { AI: makeAi(7, false, false, false, false, 1.4) });
 const mixedMacroRecovery = await generateAiPlan(profile, 'Питание', { AI: {
   async run() {

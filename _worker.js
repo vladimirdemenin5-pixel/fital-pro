@@ -708,7 +708,7 @@ function diagnosePlanWeekFailure(parsed, profile, planKey, menuDays, targets) {
     }
   }
 
-  return issues.length ? issues.slice(0, 12).join(' | ') : 'plan-validation-failed-without-specific-rule';
+  return issues.length ? issues.slice(0, 32).join(' | ') : 'plan-validation-failed-without-specific-rule';
 }
 
 function buildShoppingList(week) {
@@ -756,76 +756,77 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
   ];
   const models = ['@cf/zai-org/glm-4.7-flash', '@cf/meta/llama-3.1-8b-instruct-fast', MODEL];
   const diagnostics = [];
-  const validationDiagnostics = [];
-  let correctionModel = null;
+  const rejectionDiagnostics = [];
 
-  // Bound each inference. A stalled model must not block every fallback
-  // until the browser or CI client gives up on the entire plan request.
-  for (let attempt = 0; attempt < 2; attempt++) {
-    if (attempt === 1 && !correctionModel) break;
-    const currentMessages = attempt === 0
-      ? messages
-      : [...messages, {
+  // Each fallback receives the previous model's concrete rejection reasons.
+  // A rejected draft is never repaired by weakening server-side validation.
+  for (const model of models) {
+    const modelStartedAt = Date.now();
+    const currentMessages = rejectionDiagnostics.length
+      ? [...messages, {
           role: 'user',
-          content: 'ПРЕДЫДУЩИЙ JSON ОТКЛОНЁН ПРОВЕРКОЙ СЕРВЕРА. Исправь ВСЕ перечисленные ошибки, сохрани ровно ' + menuDays + ' дней, четыре приёма пищи в каждом дне и все обязательные поля. Верни полный JSON. Причины отказа: ' + validationDiagnostics.slice(-3).join(' | ') + '. Для каждого блюда рецепт — конкретные 1–2 шага длиной не менее 15 символов. Цели на день: ' + JSON.stringify(nutritionTargets(profile)) + '. Допуски сервера: калории и белок ±20%, жиры и углеводы ±30%. Для исправления калорий и БЖУ разрешается менять граммовки, заменять или добавлять продукты ТОЛЬКО из переданного справочника, соблюдая предпочтения и аллергии клиента. При нехватке углеводов используй подходящие крупы, картофель, хлеб или фрукты из справочника; не компенсируй всё дополнительным мясом, рыбой, творогом или маслом. Проверь сумму каждого дня по справочнику. Не ослабляй серверные допуски и не пропускай поля.'
-        }];
-    const attemptModels = attempt === 0 ? models : [correctionModel];
-
-    for (const model of attemptModels) {
-      const modelStartedAt = Date.now();
-      try {
-        const isFastLlama = model === '@cf/meta/llama-3.1-8b-instruct-fast';
-        const modelInput = {
-          messages: currentMessages,
-          temperature: 0.2,
-          ...(isFastLlama ? {
-            max_tokens: 6500,
-            response_format: {
-              type: 'json_schema',
-              json_schema: buildPlanResponseSchema(menuDays)
-            }
-          } : {
-            max_completion_tokens: 6500,
-            reasoning_effort: null,
-            response_format: { type: 'json_object' },
-            chat_template_kwargs: { enable_thinking: false }
-          })
-        };
-        const result = await runAiInferenceWithTimeout(env, model, modelInput);
-        const text = extractAiText(result);
-        const normalized = text.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
-        const match = normalized.match(/\{[\s\S]*\}/);
-        if (!text) {
-          const resultKeys = result && typeof result === 'object' ? Object.keys(result).slice(0, 12).join(',') : typeof result;
-          diagnostics.push(model + ': empty-text; resultKeys=' + resultKeys);
-        } else if (!match) {
-          diagnostics.push(model + ': no-json-object; outputLength=' + text.length + '; preview=' + text.slice(0, 100).replace(/\s+/g, ' '));
-        } else {
-          try {
-            const parsed = JSON.parse(match[0]);
-            const week = normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, nutritionTargets(profile));
-            if (week) return text;
-            const reason = diagnosePlanWeekFailure(parsed, profile, planKey, menuDays, nutritionTargets(profile));
-            diagnostics.push(model + ': json-parsed-but-rejected; ' + reason + '; outputLength=' + text.length);
-            validationDiagnostics.push(model + ': ' + reason);
-            correctionModel = model;
-          } catch (error) {
-            diagnostics.push(model + ': json-parse-error=' + clean(error?.message, 140) + '; outputLength=' + text.length);
+          content: 'ПРЕДЫДУЩАЯ МОДЕЛЬ ВЕРНУЛА ПЛАН, ОТКЛОНЁННЫЙ СЕРВЕРНОЙ ПРОВЕРКОЙ. Создай НОВЫЙ ПОЛНЫЙ JSON-план с нуля, исправив ВСЕ перечисленные причины. Не повторяй ошибочный состав блюд и граммовки. Причины отказа предыдущей модели: ' + rejectionDiagnostics.slice(-3).join(' | ') + '. Требуется ровно ' + menuDays + ' дней и четыре приёма пищи в каждом дне со всеми обязательными полями. Для каждого блюда дай конкретный рецепт из 1–2 шагов длиной 15–300 символов. Цели на каждый день: ' + JSON.stringify(nutritionTargets(profile)) + '. Неизменные допуски сервера: калории и белок ±20%, жиры и углеводы ±30%. Используй только продукты из переданного справочника, соблюдай предпочтения и аллергии. Для углеводов используй подходящие крупы, картофель, хлеб, бобовые или фрукты; не компенсируй дефицит углеводов дополнительным мясом, рыбой, творогом или маслом. Проверь состав, граммовки, калории, белки, жиры и углеводы каждого дня по справочнику. КРИТИЧЕСКОЕ ПРАВИЛО: если исходная калорийность дня ниже 50% целевой, не пытайся исправлять её искусственным увеличением порций или добавлением продуктов — полностью пересоставь рацион этого дня как полноценный план. Сервер всё равно отклонит любой день вне допусков. Верни полный JSON, не ослабляй проверки и не пропускай поля.'
+        }]
+      : messages;
+    try {
+      const isFastLlama = model === '@cf/meta/llama-3.1-8b-instruct-fast';
+      const modelInput = {
+        messages: currentMessages,
+        temperature: 0.2,
+        ...(isFastLlama ? {
+          max_tokens: 6500,
+          response_format: {
+            type: 'json_schema',
+            json_schema: buildPlanResponseSchema(menuDays)
           }
+        } : {
+          max_completion_tokens: 6500,
+          reasoning_effort: null,
+          response_format: { type: 'json_object' },
+          chat_template_kwargs: { enable_thinking: false }
+        })
+      };
+      const result = await runAiInferenceWithTimeout(env, model, modelInput);
+      const text = extractAiText(result);
+      const normalized = text.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+      const match = normalized.match(/\{[\s\S]*\}/);
+      if (!text) {
+        const resultKeys = result && typeof result === 'object' ? Object.keys(result).slice(0, 12).join(',') : typeof result;
+        const reason = model + ': empty-text; resultKeys=' + resultKeys;
+        diagnostics.push(reason);
+        rejectionDiagnostics.push(reason);
+      } else if (!match) {
+        const reason = model + ': no-json-object; outputLength=' + text.length + '; preview=' + text.slice(0, 100).replace(/\s+/g, ' ');
+        diagnostics.push(reason);
+        rejectionDiagnostics.push(reason);
+      } else {
+        try {
+          const parsed = JSON.parse(match[0]);
+          // Re-run the complete server validation for every model response:
+          // meal titles, recipes, catalog IDs, gram ranges, preferences, calories and all macros.
+          const week = normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, nutritionTargets(profile));
+          if (week) return text;
+          const reason = diagnosePlanWeekFailure(parsed, profile, planKey, menuDays, nutritionTargets(profile));
+          const detail = model + ': json-parsed-but-rejected; ' + reason;
+          diagnostics.push(detail + '; outputLength=' + text.length);
+          rejectionDiagnostics.push(detail);
+        } catch (error) {
+          const reason = model + ': json-parse-error=' + clean(error?.message, 140);
+          diagnostics.push(reason + '; outputLength=' + text.length);
+          rejectionDiagnostics.push(reason);
         }
-        const finishReason = result?.choices?.[0]?.finish_reason || result?.result?.choices?.[0]?.finish_reason || null;
-        console.error('Fital Pro AI plan rejected:', model, 'attempt=' + (attempt + 1), diagnostics[diagnostics.length - 1], 'finishReason=' + (finishReason || 'none'), 'elapsedMs=' + (Date.now() - modelStartedAt));
-      } catch (error) {
-        const detail = clean(error?.message, 180) || 'unknown model error';
-        diagnostics.push(model + ': request-error=' + detail);
-        console.error('Fital Pro AI model failed:', model, 'attempt=' + (attempt + 1), detail, 'elapsedMs=' + (Date.now() - modelStartedAt));
       }
+      const finishReason = result?.choices?.[0]?.finish_reason || result?.result?.choices?.[0]?.finish_reason || null;
+      console.error('Fital Pro AI plan rejected:', model, diagnostics[diagnostics.length - 1], 'finishReason=' + (finishReason || 'none'), 'elapsedMs=' + (Date.now() - modelStartedAt));
+    } catch (error) {
+      const detail = clean(error?.message, 180) || 'unknown model error';
+      diagnostics.push(model + ': request-error=' + detail);
+      console.error('Fital Pro AI model failed:', model, detail, 'elapsedMs=' + (Date.now() - modelStartedAt));
     }
   }
-  const diagnostic = new Error(diagnostics.join(' | ').slice(0, 600));
-  throw new Error('Сервис ИИ временно не вернул текстовый ответ. Повторите отправку анкеты через минуту.', { cause: diagnostic });
+  const diagnostic = new Error(diagnostics.join(' | ').slice(0, 1800));
+  throw new Error('Сервис ИИ временно не смог подготовить проверенный план. Повторите отправку анкеты через минуту.', { cause: diagnostic });
 }
-
 async function generateAiPlan(profile, planKey, env) {
   if (!env.AI) throw new Error('Сервис ИИ пока не подключён. Оплата не создавалась.');
   const targets = nutritionTargets(profile);
