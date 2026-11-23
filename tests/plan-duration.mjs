@@ -24,8 +24,10 @@ const profile = {
 function makeAi(menuDays, wrongLength = false, invalidMeal = false, invalidWorkout = false, invalidNutrition = false, portionScale = 1) {
   return {
     async run(model, input) {
-      const prompt = input?.messages?.[1]?.content || '';
-      const block = prompt.match(/БЛОК: дни (\d+)–(\d+) из (\d+)/);
+      const prompt = Array.isArray(input?.messages)
+        ? input.messages.map(message => typeof message?.content === 'string' ? message.content : '').join('\n')
+        : '';
+      const block = prompt.match(/БЛОК: дни ([0-9]+)[–-]([0-9]+) из ([0-9]+)/);
       const requestedDays = block ? Number(block[2]) - Number(block[1]) + 1 : menuDays;
       const count = wrongLength ? Math.max(0, requestedDays - 1) : requestedDays;
       const week = Array.from({ length: count }, (_, index) => {
@@ -287,8 +289,8 @@ const severelyUnderPortionedPlan = await generateAiPlan(profile, 'Питание
 assert.ok(underPortionRetryAI.calls >= 2, 'an under-50% AI draft must be rejected and the next model must generate a complete replacement plan');
 const severelyOverProteinPlan = await generateAiPlan(profile, 'Питание', { AI: makeAi(7, false, false, false, false, 1.4) });
 const mixedMacroRecovery = await generateAiPlan(profile, 'Питание', { AI: {
-  async run() {
-    const response = await makeAi(7).run();
+  async run(model, input) {
+    const response = await makeAi(7).run(model, input);
     const parsed = JSON.parse(response.response);
     for (const day of parsed.week) {
       const setPortion = (meal, foodId, grams) => {
@@ -341,9 +343,9 @@ assert.ok(correctedPortionPlan.week.every(day =>
 ), 'server-corrected days must still satisfy strict calorie and macro ranges');
 await assert.rejects(
   () => generateAiPlan(profile, 'Питание', { AI: {
-    async run() {
+    async run(model, input) {
       const result = makeAi(7);
-      const response = await result.run();
+      const response = await result.run(model, input);
       const parsed = JSON.parse(response.response);
       parsed.week[0].breakfastRecipe = '';
       return { response: JSON.stringify(parsed) };
