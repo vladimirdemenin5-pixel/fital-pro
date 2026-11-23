@@ -369,7 +369,7 @@ const nutritionRetryAi = {
 const recoveredNutritionPlan = await generateAiPlan(profile, 'Питание', { AI: nutritionRetryAi });
 assert.equal(recoveredNutritionPlan.week.length, 7, 'a corrected fallback-model response must produce a complete plan');
 assert.equal(nutritionRetryCalls, 3, 'the plan generator must reach the third fallback after two invalid fast-model responses');
-assert.equal(nutritionRetryModels[2], '@cf/google/gemma-4-26b-a4b-it', 'the third attempt must use the configured Gemma fallback model');
+assert.equal(nutritionRetryModels[2], '@cf/zai-org/glm-4.7-flash', 'the third attempt must use the configured GLM fallback after Qwen 3.8 and GPT-OSS');
 
 const modelCalls = [];
 const fallbackText = await runAiTextWithFallback({
