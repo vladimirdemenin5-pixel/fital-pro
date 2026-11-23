@@ -274,8 +274,8 @@ function rebalanceDayNutrition(day, targets) {
   const items = MEAL_KEYS.flatMap(key => day[key + 'Ingredients']);
   const original = items.map(item => item.grams);
   const bounds = original.map(grams => ({
-    min: Math.max(5, Math.floor((grams * 0.5) / 5) * 5),
-    max: Math.min(500, Math.ceil((grams * 1.5) / 5) * 5)
+    min: Math.max(5, Math.floor(grams * 0.5)),
+    max: Math.min(500, Math.ceil(grams * 1.5))
   }));
   const score = () => {
     const n = calculateDayNutrition(day);
@@ -298,12 +298,12 @@ function rebalanceDayNutrition(day, targets) {
 
   day.nutrition = calculateDayNutrition(day);
   if (nutritionWithinTargets(day.nutrition, targets)) return true;
-  for (let iteration = 0; iteration < 160; iteration++) {
+  for (let iteration = 0; iteration < 500; iteration++) {
     let bestScore = score();
     let bestItem = -1;
     let bestGrams = 0;
     for (let i = 0; i < items.length; i++) {
-      for (const step of [-5, 5]) {
+      for (const step of [-1, 1]) {
         const candidate = items[i].grams + step;
         if (candidate < bounds[i].min || candidate > bounds[i].max) continue;
         const previous = items[i].grams;
@@ -385,10 +385,20 @@ function diagnosePlanWeekFailure(parsed, profile, planKey, menuDays, targets) {
     if (!day.workout) return dayLabel + '-workout-missing';
     if (includesTraining && day.trainingDay && !hasWorkoutPrescription(day.workout)) return dayLabel + '-workout-prescription-missing';
     day.nutrition = calculateDayNutrition(day);
-    if (day.nutrition.calories < targets.calories * 0.8 || day.nutrition.calories > targets.calories * 1.2) return dayLabel + '-calories-out-of-range-' + day.nutrition.calories;
-    if (day.nutrition.protein < targets.protein * 0.8 || day.nutrition.protein > targets.protein * 1.2) return dayLabel + '-protein-out-of-range-' + day.nutrition.protein;
-    if (targets.fat > 0 && (day.nutrition.fat < targets.fat * 0.7 || day.nutrition.fat > targets.fat * 1.3)) return dayLabel + '-fat-out-of-range-' + day.nutrition.fat;
-    if (targets.carbs > 0 && (day.nutrition.carbs < targets.carbs * 0.7 || day.nutrition.carbs > targets.carbs * 1.3)) return dayLabel + '-carbs-out-of-range-' + day.nutrition.carbs;
+    const nutritionIssues = [];
+    if (day.nutrition.calories < targets.calories * 0.8 || day.nutrition.calories > targets.calories * 1.2) {
+      nutritionIssues.push('calories=' + day.nutrition.calories + ' allowed=' + Math.round(targets.calories * 0.8) + '-' + Math.round(targets.calories * 1.2));
+    }
+    if (day.nutrition.protein < targets.protein * 0.8 || day.nutrition.protein > targets.protein * 1.2) {
+      nutritionIssues.push('protein=' + day.nutrition.protein + ' allowed=' + (Math.round(targets.protein * 0.8 * 10) / 10) + '-' + (Math.round(targets.protein * 1.2 * 10) / 10));
+    }
+    if (targets.fat > 0 && (day.nutrition.fat < targets.fat * 0.7 || day.nutrition.fat > targets.fat * 1.3)) {
+      nutritionIssues.push('fat=' + day.nutrition.fat + ' allowed=' + (Math.round(targets.fat * 0.7 * 10) / 10) + '-' + (Math.round(targets.fat * 1.3 * 10) / 10));
+    }
+    if (targets.carbs > 0 && (day.nutrition.carbs < targets.carbs * 0.7 || day.nutrition.carbs > targets.carbs * 1.3)) {
+      nutritionIssues.push('carbs=' + day.nutrition.carbs + ' allowed=' + (Math.round(targets.carbs * 0.7 * 10) / 10) + '-' + (Math.round(targets.carbs * 1.3 * 10) / 10));
+    }
+    if (nutritionIssues.length) return dayLabel + '-nutrition-out-of-range-' + nutritionIssues.join(',');
     week.push(day);
   }
   if (includesTraining) {
@@ -446,6 +456,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
   ];
   const models = ['@cf/zai-org/glm-4.7-flash', MODEL, '@cf/meta/llama-3.3-70b-instruct-fp8-fast'];
   const diagnostics = [];
+  const validationDiagnostics = [];
   let correctionModel = null;
 
   // Bound each inference. A stalled model must not block every fallback
@@ -456,7 +467,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
       ? messages
       : [...messages, {
           role: 'user',
-          content: 'ПРЕДЫДУЩИЙ JSON ОТКЛОНЁН СЕРВЕРНОЙ ПРОВЕРКОЙ. Исправь рацион, сохранив все обязательные поля и точное число дней. Пересчитай граммовки каждого ингредиента по справочнику, отдельно для каждого дня. Ошибки предыдущих вариантов: ' + diagnostics.slice(-2).join(' | ') + '. Не объясняй ошибки: верни заново только полный исправленный JSON. Не ослабляй ограничения калорий и БЖУ.'
+          content: 'ПРЕДЫДУЩИЙ JSON ОТКЛОНЁН ПРОВЕРКОЙ СЕРВЕРА. Исправь именно перечисленные ошибки, сохранив ВСЕ ' + menuDays + ' дней, четыре приёма пищи в каждом дне, рецепты, ингредиенты и остальные поля структуры. Верни полный JSON, не один примерный день и не сокращённый фрагмент. Причины отказа проверки: ' + validationDiagnostics.slice(-3).join(' | ') + '. Если причина связана с калориями или БЖУ, меняй граммовки существующих ингредиентов небольшими шагами по справочнику. Не ослабляй ограничения калорий и БЖУ.'
         }];
     const attemptModels = attempt === 0 ? models : [correctionModel];
 
@@ -486,6 +497,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays) {
             if (week) return text;
             const reason = diagnosePlanWeekFailure(parsed, profile, planKey, menuDays, nutritionTargets(profile));
             diagnostics.push(model + ': json-parsed-but-rejected; ' + reason + '; outputLength=' + text.length);
+            validationDiagnostics.push(model + ': ' + reason);
             correctionModel = model;
           } catch (error) {
             diagnostics.push(model + ': json-parse-error=' + clean(error?.message, 140) + '; outputLength=' + text.length);
