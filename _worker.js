@@ -345,98 +345,98 @@ const MAX_MEAL_INGREDIENT_GRAMS = Object.freeze({
 function rebalanceDayNutrition(day, targets) {
   const items = MEAL_KEYS.flatMap(key => day[key + 'Ingredients']);
   const original = items.map(item => item.grams);
-  // AI portions are starting estimates, not hard limits. Use independent
-  // food-specific bounds so a too-small AI portion does not cap its correction.
   const bounds = items.map(item => ({
     min: 5,
     max: MAX_MEAL_INGREDIENT_GRAMS[item.foodId] || 250
   }));
+  const nutrientTargets = [targets.calories, targets.protein, targets.fat, targets.carbs];
+  const nutrientScales = [
+    Math.max(1, targets.calories * 0.2),
+    Math.max(1, targets.protein * 0.2),
+    Math.max(1, targets.fat * 0.3),
+    Math.max(1, targets.carbs * 0.3)
+  ];
+  const deviationWeight = 0.0001;
+
+  // Use unrounded nutrient totals during optimization. Rounding is only for
+  // the final displayed daily nutrition, so the search does not stall on decimals.
+  const nutrientTotals = () => {
+    const totals = [0, 0, 0, 0];
+    for (const item of items) {
+      const food = FOOD_CATALOG[item.foodId];
+      totals[0] += food.kcal * item.grams / 100;
+      totals[1] += food.protein * item.grams / 100;
+      totals[2] += food.fat * item.grams / 100;
+      totals[3] += food.carbs * item.grams / 100;
+    }
+    return totals;
+  };
+
   const score = () => {
-    const n = calculateDayNutrition(day);
-    const distance = (value, target, tolerance) => {
-      const low = target * (1 - tolerance);
-      const high = target * (1 + tolerance);
-      return value < low ? (low - value) / (target * tolerance) :
-        value > high ? (value - high) / (target * tolerance) : 0;
-    };
-    let result = distance(n.calories, targets.calories, 0.2) ** 2 +
-      distance(n.protein, targets.protein, 0.2) ** 2 +
-      distance(n.fat, targets.fat, 0.3) ** 2 +
-      distance(n.carbs, targets.carbs, 0.3) ** 2;
-    for (let i = 0; i < items.length; i++) {
-      const delta = (items[i].grams - original[i]) / Math.max(20, original[i]);
-      result += 0.002 * delta * delta;
+    const totals = nutrientTotals();
+    let result = 0;
+    for (let index = 0; index < totals.length; index++) {
+      const normalized = (totals[index] - nutrientTargets[index]) / nutrientScales[index];
+      result += normalized * normalized;
+    }
+    for (let index = 0; index < items.length; index++) {
+      const divisor = Math.max(20, original[index]);
+      const delta = (items[index].grams - original[index]) / divisor;
+      result += deviationWeight * delta * delta;
     }
     return result;
   };
 
-  day.nutrition = calculateDayNutrition(day);
-  if (nutritionWithinTargets(day.nutrition, targets)) return true;
+  const withinTargets = () => {
+    day.nutrition = calculateDayNutrition(day);
+    return nutritionWithinTargets(day.nutrition, targets);
+  };
+  if (withinTargets()) return true;
 
-  // Correct large deviations efficiently first, then refine to single grams.
-  // AI output can be substantially under- or over-portioned; the bounded
-  // per-food ranges above let this optimizer repair amounts without changing foods.
-  const stepSizes = [40, 10, 2, 1];
-  for (const stepSize of stepSizes) {
-    for (let iteration = 0; iteration < 100; iteration++) {
-      let bestScore = score();
-      let bestMoves = null;
+  // Projected gradient descent changes all food portions together. This avoids
+  // the local dead ends of one-food-at-a-time corrections when protein must
+  // decrease while carbohydrate and calorie totals must rise.
+  const maxIterations = 120;
+  for (let iteration = 0; iteration < maxIterations; iteration++) {
+    const totals = nutrientTotals();
+    const nutrientDerivatives = totals.map((value, index) =>
+      2 * (value - nutrientTargets[index]) / (nutrientScales[index] * nutrientScales[index])
+    );
+    const gradients = items.map((item, index) => {
+      const food = FOOD_CATALOG[item.foodId];
+      const nutrientGradient =
+        nutrientDerivatives[0] * food.kcal / 100 +
+        nutrientDerivatives[1] * food.protein / 100 +
+        nutrientDerivatives[2] * food.fat / 100 +
+        nutrientDerivatives[3] * food.carbs / 100;
+      const divisor = Math.max(20, original[index]);
+      return nutrientGradient + 2 * deviationWeight *
+        (item.grams - original[index]) / (divisor * divisor);
+    });
 
-      // Evaluate every single-food change.
-      for (let i = 0; i < items.length; i++) {
-        for (const direction of [-1, 1]) {
-          const candidate = items[i].grams + direction * stepSize;
-          if (candidate < bounds[i].min || candidate > bounds[i].max) continue;
-          const previous = items[i].grams;
-          items[i].grams = candidate;
-          const candidateScore = score();
-          items[i].grams = previous;
-          if (candidateScore < bestScore - 1e-9) {
-            bestScore = candidateScore;
-            bestMoves = [{ index: i, grams: candidate }];
-          }
-        }
+    const currentScore = score();
+    let learningRate = 1000;
+    let improved = false;
+    while (learningRate >= 0.001) {
+      const previous = items.map(item => item.grams);
+      for (let index = 0; index < items.length; index++) {
+        const candidate = Math.round(items[index].grams - learningRate * gradients[index]);
+        items[index].grams = Math.max(bounds[index].min, Math.min(bounds[index].max, candidate));
       }
-
-      // Also evaluate paired changes on every iteration. This lets the search
-      // reduce excess protein while increasing carbohydrates (or vice versa)
-      // without requiring an unhelpful intermediate single-food step.
-      for (let i = 0; i < items.length; i++) {
-        for (let j = i + 1; j < items.length; j++) {
-          for (const directionI of [-1, 1]) {
-            const gramsI = items[i].grams + directionI * stepSize;
-            if (gramsI < bounds[i].min || gramsI > bounds[i].max) continue;
-            for (const directionJ of [-1, 1]) {
-              const gramsJ = items[j].grams + directionJ * stepSize;
-              if (gramsJ < bounds[j].min || gramsJ > bounds[j].max) continue;
-              const previousI = items[i].grams;
-              const previousJ = items[j].grams;
-              items[i].grams = gramsI;
-              items[j].grams = gramsJ;
-              const candidateScore = score();
-              items[i].grams = previousI;
-              items[j].grams = previousJ;
-              if (candidateScore < bestScore - 1e-9) {
-                bestScore = candidateScore;
-                bestMoves = [
-                  { index: i, grams: gramsI },
-                  { index: j, grams: gramsJ }
-                ];
-              }
-            }
-          }
-        }
+      const candidateScore = score();
+      if (candidateScore < currentScore - 1e-12 || withinTargets()) {
+        improved = true;
+        break;
       }
-
-      if (!bestMoves) break;
-      for (const move of bestMoves) items[move.index].grams = move.grams;
-      day.nutrition = calculateDayNutrition(day);
-      if (nutritionWithinTargets(day.nutrition, targets)) return true;
+      items.forEach((item, index) => { item.grams = previous[index]; });
+      learningRate /= 2;
     }
+
+    if (!improved) break;
+    if (withinTargets()) return true;
   }
 
-  day.nutrition = calculateDayNutrition(day);
-  return nutritionWithinTargets(day.nutrition, targets);
+  return withinTargets();
 }
 
 function normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, targets) {
