@@ -159,6 +159,23 @@ assert.equal(proPlan.dailyAverage.fat, 71);
 assert.equal(proPlan.dailyAverage.carbs, 237.1);
 assert.ok(proPlan.fat > 0 && proPlan.carbs > 0, 'daily fat and carbohydrate targets must be calculated');
 
+const wrongModelTrainingFlagsPlan = await generateAiPlan(profile, 'PRO', { AI: {
+  async run(model, input) {
+    const result = await makeAi(14).run(model, input);
+    const parsed = JSON.parse(result.response);
+    parsed.week.forEach(day => { day.trainingDay = !day.trainingDay; });
+    return { response: JSON.stringify(parsed) };
+  }
+} });
+assert.deepEqual(
+  wrongModelTrainingFlagsPlan.week.map(day => day.trainingDay),
+  wrongModelTrainingFlagsPlan.week.map((_, index) => Math.floor(((index + 1) % 7) * profile.days / 7) > Math.floor((index % 7) * profile.days / 7)),
+  'the server must override model-provided training flags and enforce the exact weekly schedule'
+);
+assert.ok(wrongModelTrainingFlagsPlan.week.every((day,index) =>
+  day.trainingDay ? day.workout.includes('3×10') : day.workout.includes('Восстановление')
+), 'scheduled training days must retain a full prescription and rest days must be normalized to recovery');
+
 let activePlanCalls = 0;
 let maxConcurrentPlanCalls = 0;
 const concurrentPlan = await generateAiPlan(profile, 'PRO', { AI: {
@@ -174,13 +191,13 @@ const concurrentPlan = await generateAiPlan(profile, 'PRO', { AI: {
   }
 } });
 assert.equal(concurrentPlan.week.length, 14, 'concurrent chunk generation must still assemble every PRO day');
-assert.equal(maxConcurrentPlanCalls, 2, 'two independent three-day chunks must generate concurrently, with a bounded concurrency of two');
+assert.equal(maxConcurrentPlanCalls, 2, 'two independent two-day chunks must generate concurrently, with a bounded concurrency of two');
 assert.ok(proPlan.shopping.includes('Овсяные хлопья, сухие — 1,12 кг'));
 assert.ok(proPlan.shopping.includes('Молоко 2% — 2,8 кг'));
 assert.ok(!proPlan.shopping.includes('Продукты на весь период'));
 assert.ok(proPlan.nutritionSource.includes('USDA FoodData Central'));
 assert.ok(workerSource.includes('fdcId:173904'), 'oats reference must retain its USDA food record identifier');
-assert.ok(workerSource.includes('for (let batchOffset = 0; batchOffset < totalDays; batchOffset += 6)') && workerSource.includes('Promise.all([0, 3]') && workerSource.includes('const chunkDays = Math.min(3, totalDays - offset)'), 'long plans must be generated in parallel batches of validated three-day blocks');
+assert.ok(workerSource.includes('for (let batchOffset = 0; batchOffset < totalDays; batchOffset += 4)') && workerSource.includes('Promise.all([0, 2]') && workerSource.includes('const chunkDays = Math.min(2, totalDays - offset)'), 'long plans must be generated in parallel batches of validated two-day blocks');
 assert.ok(workerSource.includes('MAX_MEAL_INGREDIENT_GRAMS') && workerSource.includes('min:5,max:') && workerSource.includes('for (let iteration=0;iteration<120;iteration++)') && workerSource.includes('const nutrientTargets = [targets.calories, targets.protein, targets.fat, targets.carbs];') && workerSource.includes('const derivatives=values.map(') && workerSource.includes('let learningRate=1000;') && workerSource.includes('const allowedFoods = Object.keys(FOOD_CATALOG).filter(id => foodAllowedByPreferences(id, profile));'), 'portion and food-choice correction must use bounded catalog search without relaxing nutrition ranges');
 assert.ok(workerSource.includes('const rejectionDiagnostics = [];') && workerSource.includes('rejectionDiagnostics.slice(-3)'), 'the next fallback model must receive concrete rejection reasons from the previous model');
 assert.ok(workerSource.includes("const models = ['@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/zai-org/glm-4.7-flash', MODEL];"), 'Cloudflare Qwen 3.8 must be primary, followed by OpenAI GPT-OSS 120B and safe fallbacks');
@@ -228,7 +245,7 @@ const timeoutRecoveredPlan = await generateAiPlan(profile, 'Питание', { A
 } });
 assert.equal(timeoutRecoveredPlan.week.length, 7, 'a timed-out first model must fall back to the next available model');
 assert.equal(timeoutFallbackModelsByBlock.get(1)?.[1], '@cf/openai/gpt-oss-120b', 'the same three-day block must fall back from Qwen 3.8 to OpenAI GPT-OSS 120B');
-assert.equal(timeoutFallbackModelsByBlock.get(4)?.[0], '@cf/qwen/qwen3.8-27b', 'the second concurrent block must keep its own independent Qwen primary call');
+assert.equal(timeoutFallbackModelsByBlock.get(3)?.[0], '@cf/qwen/qwen3.8-27b', 'the second concurrent two-day block must keep its own independent Qwen primary call');
 let qwenModelInput = null;
 const qwenPrimaryPlan = await generateAiPlan(profile, 'Питание', { AI: {
   async run(model, input, options) {
@@ -404,9 +421,10 @@ const nutritionRetryAi = {
 };
 const recoveredNutritionPlan = await generateAiPlan(profile, 'Питание', { AI: nutritionRetryAi });
 assert.equal(recoveredNutritionPlan.week.length, 7, 'a corrected fallback-model response must produce a complete plan');
-assert.equal(nutritionRetryCalls, 5, 'two concurrent three-day blocks and the final one-day block must keep independent model attempts');
+assert.equal(nutritionRetryCalls, 6, 'four two-day-or-final-day chunks must keep independent model attempts');
 assert.deepEqual(nutritionRetryModelsByBlock.get(1), ['@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/zai-org/glm-4.7-flash'], 'one invalid block must advance through Qwen, GPT-OSS and GLM before recovering');
-assert.deepEqual(nutritionRetryModelsByBlock.get(4), ['@cf/qwen/qwen3.8-27b'], 'the other concurrent block must not inherit the first block\'s fallback state');
+assert.deepEqual(nutritionRetryModelsByBlock.get(3), ['@cf/qwen/qwen3.8-27b'], 'the other concurrent two-day block must not inherit the first block\'s fallback state');
+assert.deepEqual(nutritionRetryModelsByBlock.get(5), ['@cf/qwen/qwen3.8-27b'], 'the third two-day block must start with its own Qwen request');
 assert.deepEqual(nutritionRetryModelsByBlock.get(7), ['@cf/qwen/qwen3.8-27b'], 'the final one-day block must also start with its own Qwen request');
 
 const modelCalls = [];
