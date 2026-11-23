@@ -226,7 +226,7 @@ assert.equal(breakfastIngredientSchema.items.properties.grams.maximum, 500);
 assert.ok(breakfastIngredientSchema.items.required.includes('foodId') && breakfastIngredientSchema.items.required.includes('grams'));
 assert.equal(sevenDaySchema.properties.week.items.properties.breakfastRecipe.minLength, 15, 'each recipe must be long enough to contain a real preparation instruction');
 assert.equal(sevenDaySchema.properties.week.items.properties.dinnerRecipe.maxLength, 300);
-assert.ok(workerSource.includes('разрешается менять граммовки, заменять или добавлять продукты'), 'AI correction must be allowed to add a suitable catalog carbohydrate source when needed');
+assert.ok(workerSource.includes('заменять или добавлять продукты') && workerSource.includes('подходящие крупы, картофель, хлеб, бобовые или фрукты'), 'AI fallback correction must be allowed to add catalog carbohydrate sources when needed');
 assert.ok(workerSource.includes('верни полный JSON') || workerSource.includes('Верни полный JSON'), 'correction prompt must request the complete plan JSON');
 assert.equal(fastLlamaModelInput.reasoning_effort, undefined, 'fast Llama should not receive parameters absent from its model input schema');
 assert.equal(fastLlamaModelInput.chat_template_kwargs, undefined, 'fast Llama should not receive unsupported chat-template options');
