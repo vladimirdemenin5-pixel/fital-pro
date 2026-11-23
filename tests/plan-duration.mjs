@@ -235,18 +235,21 @@ assert.ok(oversizedIngredientPlan.week.every(day => {
     day.nutrition.fat >= oversizedIngredientPlan.fat * 0.7 &&
     day.nutrition.fat <= oversizedIngredientPlan.fat * 1.3;
 }), 'a globally valid ingredient portion above its product-specific ceiling must be clamped and the resulting full day must still pass strict nutrition validation');
-await assert.rejects(
-  () => generateAiPlan(profile, 'Питание', { AI: {
-    async run(model, input) {
-      const result = await makeAi(7).run(model, input);
-      const parsed = JSON.parse(result.response);
-      parsed.week[0].breakfastIngredients[0].grams = 501;
-      return { response: JSON.stringify(parsed) };
-    }
-  } }),
-  /временно не смог подготовить проверенный план/,
-  'AI portions outside the global 5–500g input range must be rejected rather than silently normalized'
-);
+const invalidPortionFallback = await generateAiPlan(profile, 'Питание', { AI: {
+  async run(model, input) {
+    const result = await makeAi(7).run(model, input);
+    const parsed = JSON.parse(result.response);
+    parsed.week[0].breakfastIngredients[0].grams = 501;
+    return { response: JSON.stringify(parsed) };
+  }
+} });
+assert.equal(invalidPortionFallback.generationMode, 'catalog-fallback',
+  'an AI response with a portion outside the global 5–500g range must be replaced by a safe catalog plan');
+assert.ok(invalidPortionFallback.week.every(day =>
+  ['breakfast','lunch','snack','dinner'].every(key =>
+    day[key + 'Ingredients'].every(item => item.grams >= 5 && item.grams <= 500)
+  )
+));
 
 
 const wrongModelTrainingFlagsPlan = await generateAiPlan(profile, 'PRO', { AI: {
@@ -490,49 +493,47 @@ assert.ok(correctedPortionPlan.week.every(day =>
   day.nutrition.carbs >= correctedPortionPlan.carbs * 0.7 &&
   day.nutrition.carbs <= correctedPortionPlan.carbs * 1.3
 ), 'server-corrected days must still satisfy strict calorie and macro ranges');
-await assert.rejects(
-  () => generateAiPlan(profile, 'Питание', { AI: {
-    async run(model, input) {
-      const result = makeAi(7);
-      const response = await result.run(model, input);
-      const parsed = JSON.parse(response.response);
-      parsed.week[0].breakfastRecipe = '';
-      return { response: JSON.stringify(parsed) };
-    }
-  } }),
-  /временно не смог подготовить проверенный план/,
-  'plans without practical cooking instructions must be rejected'
-);
+const missingRecipeFallback = await generateAiPlan(profile, 'Питание', { AI: {
+  async run(model, input) {
+    const result = makeAi(7);
+    const response = await result.run(model, input);
+    const parsed = JSON.parse(response.response);
+    parsed.week[0].breakfastRecipe = '';
+    return { response: JSON.stringify(parsed) };
+  }
+} });
+assert.equal(missingRecipeFallback.generationMode, 'catalog-fallback');
+assert.ok(missingRecipeFallback.week.every(day =>
+  ['breakfast','lunch','snack','dinner'].every(key => day[key + 'Recipe'].length >= 15)
+), 'invalid AI recipes must be replaced by complete recipes built from the catalog ingredients');
 assert.equal(nutritionPlan.week.length, 7);
 assert.equal(nutritionPlan.menuDays, 7);
 assert.equal(nutritionPlan.durationDays, 7);
 
-await assert.rejects(
-  () => generateAiPlan(profile, 'PRO', { AI: makeAi(14, true) }),
-  /временно не смог подготовить проверенный план/,
-  'PRO must reject an AI response containing only seven days'
-);
-await assert.rejects(
-  () => generateAiPlan(profile, 'Premium', { AI: makeAi(30, true) }),
-  /временно не смог подготовить проверенный план/,
-  'Premium must reject a 14-day response and require all 30 days'
-);
+const wrongLengthProFallback = await generateAiPlan(profile, 'PRO', { AI: makeAi(14, true) });
+assert.equal(wrongLengthProFallback.generationMode, 'catalog-fallback');
+assert.equal(wrongLengthProFallback.week.length, 14,
+  'PRO must replace an incomplete AI response with a full 14-day catalog plan');
+const wrongLengthPremiumFallback = await generateAiPlan(profile, 'Premium', { AI: makeAi(30, true) });
+assert.equal(wrongLengthPremiumFallback.generationMode, 'catalog-fallback');
+assert.equal(wrongLengthPremiumFallback.week.length, 30,
+  'Premium must replace an incomplete AI response with a full 30-day catalog plan');
 
-await assert.rejects(
-  () => generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, true, false) }),
-  /временно не смог подготовить проверенный план/,
-  'plans without explicit meal portions must be rejected'
-);
-await assert.rejects(
-  () => generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, false, true) }),
-  /временно не смог подготовить проверенный план/,
-  'training days without sets or repetitions must be rejected'
-);
-await assert.rejects(
-  () => generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, false, false, true) }),
-  /временно не смог подготовить проверенный план/,
-  'days with implausibly low calculated calories and protein must be rejected'
-);
+const missingIngredientsFallback = await generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, true, false) });
+assert.equal(missingIngredientsFallback.generationMode, 'catalog-fallback');
+assert.ok(missingIngredientsFallback.week.every(day =>
+  ['breakfast','lunch','snack','dinner'].every(key => day[key + 'Ingredients'].length > 0)
+), 'missing AI portions must be replaced with complete catalog meals');
+const missingWorkoutFallback = await generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, false, true) });
+assert.equal(missingWorkoutFallback.generationMode, 'catalog-fallback');
+assert.ok(missingWorkoutFallback.week.every(day => !day.trainingDay || /\d+×\d+/.test(day.workout)),
+  'missing workout prescriptions must be replaced with a complete scheduled session');
+const lowNutritionFallback = await generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, false, false, true) });
+assert.equal(lowNutritionFallback.generationMode, 'catalog-fallback');
+assert.ok(lowNutritionFallback.week.every(day =>
+  day.nutrition.calories >= lowNutritionFallback.calories * 0.8 &&
+  day.nutrition.calories <= lowNutritionFallback.calories * 1.2
+), 'implausibly low AI nutrition must be replaced by a server-calculated plan that passes nutrition validation');
 
 let nutritionRetryCalls = 0;
 const nutritionRetryModelsByBlock = new Map();
