@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { generateAiPlan, runAiTextWithFallback, runAiInferenceWithTimeout, aiPlanDiagnostic, aiDataFlowDiagnostic, FOOD_CATALOG, buildPlanResponseSchema, diagnosePlanWeekFailure, rebalanceDayNutrition, foodAllowedByPreferences, foodRole, foodCanReplaceFood, foodFitsMeal } from '../_worker.js';
+import { generateAiPlan, runAiTextWithFallback, runAiInferenceWithTimeout, aiPlanDiagnostic, aiDataFlowDiagnostic, buildLocalPlanChatReply, buildLocalPremiumDiaryReview, FOOD_CATALOG, buildPlanResponseSchema, diagnosePlanWeekFailure, rebalanceDayNutrition, foodAllowedByPreferences, foodRole, foodCanReplaceFood, foodFitsMeal } from '../_worker.js';
 import { readFile } from 'node:fs/promises';
 
 const workerSource = await readFile(new URL('../_worker.js', import.meta.url), 'utf8');
@@ -213,6 +213,25 @@ assert.equal(proPlan.dailyAverage.calories, 1872);
 assert.equal(proPlan.dailyAverage.protein, 98.1);
 assert.equal(proPlan.dailyAverage.fat, 63);
 assert.equal(proPlan.dailyAverage.carbs, 237.1);
+const breakfastReply = buildLocalPlanChatReply('Что у меня на завтрак в день 2?', proPlan);
+assert.ok(breakfastReply.includes('День 2') && breakfastReply.includes('Состав:') && breakfastReply.includes('г'),
+  'offline consultant must return the actual saved breakfast with ingredient weights');
+const workoutReply = buildLocalPlanChatReply('Какая тренировка в день 1?', proPlan);
+assert.ok(workoutReply.includes('День 1:') && workoutReply.includes('3×10'),
+  'offline consultant must return the scheduled workout from the saved plan');
+const macroReply = buildLocalPlanChatReply('Сколько у меня калорий и БЖУ?', proPlan);
+assert.ok(macroReply.includes('1872 ккал') && macroReply.includes('98.1 г'),
+  'offline consultant must return the plan calorie and macro targets');
+const shoppingReply = buildLocalPlanChatReply('Покажи список покупок', proPlan);
+assert.ok(shoppingReply.includes('Список покупок') && shoppingReply.includes('Овсяные хлопья'),
+  'offline consultant must return the server-calculated shopping list');
+const localPremiumReview = buildLocalPremiumDiaryReview({
+  trackingDays: 3, nutritionDays: 2, workoutDays: 1, weightChangeKg: -0.4
+}, [{}, {}, {}]);
+assert.equal(localPremiumReview.reviewMode, 'diary-summary');
+assert.ok(localPremiumReview.summary.includes('не генеративный ИИ-разбор'));
+assert.equal(localPremiumReview.observations.length, 4);
+assert.equal(localPremiumReview.recommendations.length, 3);
 assert.ok(proPlan.week.every(day => day.dinnerIngredients.find(item => item.foodId === 'olive_oil')?.grams === 20),
   'server normalization must enforce the 20g olive-oil portion ceiling');
 assert.ok(proPlan.fat > 0 && proPlan.carbs > 0, 'daily fat and carbohydrate targets must be calculated');
