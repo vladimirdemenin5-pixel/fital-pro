@@ -32,6 +32,15 @@ assert.ok(worker.includes("const checkoutCookieName = 'fitalpro_checkout_' + ord
 assert.ok(worker.includes("checkoutCookies.find(item => item.startsWith(checkoutCookieName + '='))"), 'payment status must parse the matching per-order cookie');
 assert.ok(worker.includes("fitalpro_checkout_\u0024{clientRef}=\u0024{clientRef}"), 'checkout must set a distinct cookie for each order');
 assert.ok(worker.includes('checkoutCookie !== order.client_ref'));
+assert.ok(app.includes('function invalidateCheckout(showMessage = true) {'), 'editing the questionnaire must invalidate an earlier checkout');
+const invalidationStart = app.indexOf('function invalidateCheckout(showMessage = true) {');
+const invalidationEnd = app.indexOf('\n}\n\nfunction choosePlan', invalidationStart);
+const invalidationSource = app.slice(invalidationStart, invalidationEnd);
+assert.ok(invalidationSource.includes('intakeRevision++;') && invalidationSource.includes('checkoutData = null;') && invalidationSource.includes("$('#planPreview').classList.add('is-hidden')"), 'stale preview and payment URL must be cleared when the form changes');
+assert.ok(app.includes("['input', 'change'].forEach(function (eventName)"), 'both typing and select changes must invalidate the checkout');
+assert.ok(app.includes('if (requestRevision !== intakeRevision || requestPlan !== selectedPlan)'), 'a late AI response for an outdated questionnaire or tariff must be discarded');
+assert.ok(app.includes("const requestRevision = invalidateCheckout(false);"), 'creating a replacement plan must invalidate the prior payment request first');
+assert.ok(app.includes("if (!checkoutData || !checkoutData.confirmation_url)"), 'payment must not proceed without a current checkout result');
 assert.ok(worker.includes('order.status === \'paid\' && subscription?.status === \'active\''));
 assert.ok(worker.includes('INNER JOIN profiles p ON p.access_token=s.access_token'));
 assert.ok(worker.includes('INNER JOIN weekly_plans w ON w.access_token=s.access_token'));
