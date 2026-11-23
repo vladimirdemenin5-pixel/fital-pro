@@ -638,7 +638,6 @@ function diagnosePlanWeekFailure(parsed, profile, planKey, menuDays, targets, st
   if (parsed.week.length !== menuDays) return 'week-length-' + parsed.week.length + '-expected-' + menuDays;
   const includesTraining = planKey !== 'Питание';
   const issues = [];
-  const trainingFlags = [];
 
   for (let index = 0; index < parsed.week.length; index++) {
     const source = parsed.week[index];
@@ -646,7 +645,6 @@ function diagnosePlanWeekFailure(parsed, profile, planKey, menuDays, targets, st
     if (typeof source?.trainingDay !== 'boolean') {
       issues.push(dayLabel + '-trainingDay-not-boolean');
     } else {
-      trainingFlags.push(source.trainingDay);
       // The server owns the training schedule; model-provided flags are not authoritative.
     }
 
