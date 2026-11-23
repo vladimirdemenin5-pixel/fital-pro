@@ -440,7 +440,7 @@ const nutritionRetryAi = {
 const recoveredNutritionPlan = await generateAiPlan(profile, 'Питание', { AI: nutritionRetryAi });
 assert.equal(recoveredNutritionPlan.week.length, 7, 'a corrected fallback-model response must produce a complete plan');
 assert.equal(nutritionRetryCalls, 6, 'four two-day-or-final-day chunks must keep independent model attempts');
-assert.deepEqual(nutritionRetryModelsByBlock.get(1), ['@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/zai-org/glm-4.7-flash'], 'one invalid block must advance through Qwen, GPT-OSS and GLM before recovering');
+assert.deepEqual(nutritionRetryModelsByBlock.get(1), ['@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-120b'], 'one invalid block must use the bounded GPT-OSS correction attempt before moving to slower fallbacks');
 assert.deepEqual(nutritionRetryModelsByBlock.get(3), ['@cf/qwen/qwen3.8-27b'], 'the other concurrent two-day block must not inherit the first block\'s fallback state');
 assert.deepEqual(nutritionRetryModelsByBlock.get(5), ['@cf/qwen/qwen3.8-27b'], 'the third two-day block must start with its own Qwen request');
 assert.deepEqual(nutritionRetryModelsByBlock.get(7), ['@cf/qwen/qwen3.8-27b'], 'the final one-day block must also start with its own Qwen request');
