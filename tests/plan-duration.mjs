@@ -216,8 +216,8 @@ assert.equal(proPlan.dailyAverage.carbs, 237.1);
 const breakfastReply = buildLocalPlanChatReply('Что у меня на завтрак в день 2?', proPlan);
 assert.ok(breakfastReply.includes('День 2') && breakfastReply.includes('Состав:') && breakfastReply.includes('г'),
   'offline consultant must return the actual saved breakfast with ingredient weights');
-const workoutReply = buildLocalPlanChatReply('Какая тренировка в день 1?', proPlan);
-assert.ok(workoutReply.includes('День 1:') && workoutReply.includes('3×10'),
+const workoutReply = buildLocalPlanChatReply('Какая тренировка в день 3?', proPlan);
+assert.ok(workoutReply.includes('День 3:') && workoutReply.includes('3×10'),
   'offline consultant must return the scheduled workout from the saved plan');
 const macroReply = buildLocalPlanChatReply('Сколько у меня калорий и БЖУ?', proPlan);
 assert.ok(macroReply.includes('1872 ккал') && macroReply.includes('98.1 г'),
