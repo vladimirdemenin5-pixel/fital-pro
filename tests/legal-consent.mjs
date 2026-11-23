@@ -86,7 +86,7 @@ assert.ok(app.includes("$('#progressTool').classList.toggle('is-hidden', !advanc
 assert.ok(app.includes("$('#chatTool').classList.toggle('is-hidden', !advancedFeatures)"));
 assert.ok(html.includes('id="progressTool"'));
 assert.ok(html.includes('id="chatTool"'));
-assert.ok(worker.includes('trainingDay: includesTraining && source.trainingDay'), 'training-day flag must be normalized from the validated AI response');
+assert.ok(worker.includes('trainingDay: includesTraining && isScheduledTrainingDay(startDay + index, profile.days)'), 'training-day flag must be derived from the server-owned absolute schedule, not the AI response');
 assert.ok(worker.includes("JSON.stringify({ ...profile, name: 'Клиент' })"), 'AI providers must not receive the customer name');
 assert.ok(worker.includes("max_completion_tokens: 4200"), 'Qwen/GLM/Gemma plan requests must use the documented max_completion_tokens field and the bounded 4200-token plan output limit');
 assert.ok(worker.includes("const models = ['@cf/zai-org/glm-4.7-flash', '@cf/meta/llama-3.1-8b-instruct-fast', MODEL];"), 'the general AI chat must retain the supported GLM, Llama and Gemma fallback order');
