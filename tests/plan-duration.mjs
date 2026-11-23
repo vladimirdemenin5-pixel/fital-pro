@@ -166,7 +166,7 @@ assert.ok(workerSource.includes('for (let move = 0; move < 12; move++)') && work
 assert.ok(workerSource.includes('rejectIfBusy: true'), 'Workers AI must skip a busy model queue and fall back instead of waiting until the request times out');
 assert.ok(workerSource.includes('const AI_MODEL_TIMEOUT_MS = 45000;') && workerSource.includes('Promise.race([') && workerSource.includes('runAiInferenceWithTimeout(env, model'), 'each plan-model inference must have a hard timeout so a stalled model cannot block fallbacks');
 assert.equal((workerSource.match(/const models = \['@cf\/zai-org\/glm-4\.7-flash', '@cf\/meta\/llama-3\.1-8b-instruct-fast', MODEL\];/g) || []).length, 1, 'the general chat fallback chain remains unchanged');
-assert.ok(workerSource.includes('max_tokens: 6500') && workerSource.includes('QWEN_PLAN_TIMEOUT_MS = 90000'), 'Workers AI plan models must use the documented max_tokens parameter and bounded timeout');
+assert.ok(workerSource.includes('max_tokens: 6500') && workerSource.includes('max_completion_tokens: 6500') && workerSource.includes('QWEN_PLAN_TIMEOUT_MS = 90000'), 'each Workers AI plan model must use its documented token-limit parameter and bounded timeout');
 assert.ok(workerSource.includes("const isGptOss = model === '@cf/openai/gpt-oss-120b'") && workerSource.includes("response_format: { type: 'json_object' }"), 'GPT-OSS fallback must use supported JSON Mode');
 assert.ok(!workerSource.includes('QWEN4_API_KEY') && !workerSource.includes('qwen4-max'), 'paid QwenCloud integration must be absent from the Cloudflare-only model chain');
 assert.ok(workerSource.includes('function buildPlanResponseSchema(menuDays)') && workerSource.includes('minItems: menuDays') && workerSource.includes('maxItems: menuDays'), 'the reusable server schema helper must still describe exact plan length');
@@ -212,7 +212,7 @@ const qwenPrimaryPlan = await generateAiPlan(profile, 'Питание', { AI: {
   }
 } });
 assert.equal(qwenPrimaryPlan.week.length, 7);
-assert.equal(qwenModelInput.max_tokens, 6500);
+assert.equal(qwenModelInput.max_completion_tokens, 6500);
 assert.equal(qwenModelInput.reasoning_effort, 'low', 'Qwen reasoning must be bounded to low for structured meal-plan output');
 assert.equal(qwenModelInput.response_format, undefined, 'do not send unsupported Cloudflare JSON Mode parameters to Qwen');
 let gptModelInput = null;
@@ -227,7 +227,7 @@ const gptFallbackPlan = await generateAiPlan(profile, 'Питание', { AI: {
 assert.equal(gptFallbackPlan.week.length, 7, 'GPT-OSS fallback must produce a complete server-validated seven-day plan');
 assert.equal(gptModelInput.max_tokens, 6500);
 assert.equal(gptModelInput.reasoning_effort, 'low');
-assert.deepEqual(gptModelInput.response_format, { type: 'json_object' });
+assert.equal(gptModelInput.response_format, undefined, 'do not send undocumented JSON Mode to GPT-OSS; validate its JSON response server-side');
 assert.ok(workerSource.includes('заменять или добавлять продукты') && workerSource.includes('Для углеводов используй подходящие крупи') === false && workerSource.includes('Для углеводов используй подходящие крупы'), 'AI fallback correction must be allowed to add catalog carbohydrate sources when needed');
 assert.ok(workerSource.includes('верни полный JSON') || workerSource.includes('Верни полный JSON'), 'correction prompt must request the complete plan JSON');
 const diagnosticSource = JSON.parse((await makeAi(7).run()).response);
