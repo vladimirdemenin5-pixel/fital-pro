@@ -40,11 +40,29 @@ assert.ok(productionWorkflow.includes("if: github.event_name == 'workflow_dispat
 assert.ok(productionWorkflow.includes('run_live_ai:') && productionWorkflow.includes('type: boolean') && productionWorkflow.includes('default: false'),
   'manual live AI checks must default to off');
 assert.ok(liveIntegrationSource.includes("FITALPRO_PREVIEW_D1_ISOLATED !== 'true'"), 'live AI/payment/D1 integration must refuse to run while Preview shares Production D1');
+function getWorkflowStepCondition(source, stepName) {
+  const marker = `      - name: ${stepName}`;
+  const start = source.indexOf(marker);
+  if (start === -1) return '';
+  const nextStep = source.indexOf('\n      - name:', start + marker.length);
+  const stepBlock = source.slice(start, nextStep === -1 ? source.length : nextStep);
+  return stepBlock.match(/^\\s+if:\\s*(.+)$/m)?.[1] || '';
+}
+
+const liveAiCondition = getWorkflowStepCondition(
+  pullRequestWorkflow,
+  'Verify real AI plans for all three tariffs without database writes'
+);
+const livePaymentCondition = getWorkflowStepCondition(
+  pullRequestWorkflow,
+  'Verify Robokassa, D1 persistence, and member access for all tariffs'
+);
 assert.ok(pullRequestWorkflow.includes('types: [opened, synchronize, reopened, labeled]') &&
-  pullRequestWorkflow.includes("contains(github.event.pull_request.labels.*.name, 'run-live-ai-check')") &&
-  pullRequestWorkflow.includes("contains(github.event.pull_request.labels.*.name, 'run-live-payment-flow')") &&
-  pullRequestWorkflow.includes("if: github.event_name == 'pull_request'"),
-  'live AI plan and payment integration checks must remain explicitly label-gated on PR events');
+  liveAiCondition.includes("github.event_name == 'pull_request'") &&
+  liveAiCondition.includes("contains(github.event.pull_request.labels.*.name, 'run-live-ai-check')") &&
+  livePaymentCondition.includes("github.event_name == 'pull_request'") &&
+  livePaymentCondition.includes("contains(github.event.pull_request.labels.*.name, 'run-live-payment-flow')"),
+  'each live integration step must itself require a pull_request event and its own explicit PR label');
 assert.ok(Object.entries(FOOD_CATALOG).every(([id, food]) => Number.isFinite(food.kcal) && Number.isFinite(food.protein) && Number.isFinite(food.fat) && Number.isFinite(food.carbs)), 'every food must define calories, protein, fat and carbohydrates');
 
 function nutritionWithinTargetsForTest(n, t) {
