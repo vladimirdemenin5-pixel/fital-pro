@@ -458,8 +458,10 @@ const invalidPortionFallback = await generateAiPlan(profile, 'Питание', {
     return { response: JSON.stringify(parsed) };
   }
 } });
-assert.equal(invalidPortionFallback.generationMode, 'catalog-fallback',
-  'an AI response with a portion outside the global 5–500g range must be replaced by a safe catalog plan');
+assert.equal(invalidPortionFallback.generationMode, 'ai',
+  'an oversized but otherwise valid AI portion must be safely clamped instead of discarding the whole AI plan');
+assert.equal(invalidPortionFallback.week[0].breakfastIngredients[0].grams, 150,
+  'server normalization must clamp oversized oats to the product-specific maximum');
 assert.ok(invalidPortionFallback.week.every(day =>
   ['breakfast','lunch','snack','dinner'].every(key =>
     day[key + 'Ingredients'].every(item => item.grams >= 5 && item.grams <= 500)
