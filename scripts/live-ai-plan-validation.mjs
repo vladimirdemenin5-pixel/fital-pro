@@ -116,8 +116,13 @@ for (const item of plans) {
         )
       ) ||
       !day.calculatedNutrition ||
-      !['calories', 'protein', 'fat', 'carbs'].every(key =>
-        Number.isFinite(day.calculatedNutrition[key]) && day.calculatedNutrition[key] > 0
+      !Number.isFinite(result.targets?.calories) ||
+      result.targets.calories <= 0 ||
+      !Number.isFinite(day.calculatedNutrition.calories) ||
+      day.calculatedNutrition.calories < result.targets.calories * 0.90 ||
+      day.calculatedNutrition.calories > result.targets.calories * 1.10 ||
+      !['protein', 'fat', 'carbs'].every(key =>
+        Number.isFinite(day.calculatedNutrition[key]) && day.calculatedNutrition[key] >= 0
       )
     ) {
       throw new Error(`${item.key}: day ${index + 1} is missing a complete meal, recipe, ingredients, or calculated nutrition.`);
