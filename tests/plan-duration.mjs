@@ -266,6 +266,35 @@ try {
   globalThis.fetch = originalGroqRequiredFetch;
 }
 
+let groqCorrectionCalls = 0;
+let groqCorrectionCloudflareCalls = 0;
+try {
+  globalThis.fetch = async (_url, init) => {
+    groqCorrectionCalls++;
+    const payload = JSON.parse(init.body);
+    const draft = await makeAi(7, false, false, false, groqCorrectionCalls === 1)
+      .run(payload.model, { messages: payload.messages });
+    return new Response(JSON.stringify({
+      choices: [{ message: { content: draft.response }, finish_reason: 'stop' }]
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  const correctedGroqPlan = await generateAiPlan(profile, 'Питание', {
+    FITALPRO_REQUIRE_GROQ: '1',
+    GROQ_API_KEY: 'test-groq-key',
+    AI: { async run() { groqCorrectionCloudflareCalls++; throw new Error('Cloudflare fallback must remain disabled'); } }
+  });
+  assert.equal(correctedGroqPlan.generationMode, 'ai',
+    'Groq must recover from a nutritionally rejected first draft using its corrective retry');
+  assert.deepEqual(correctedGroqPlan.aiProviders, ['groq']);
+  assert.equal(correctedGroqPlan.week.length, 7);
+  assert.equal(groqCorrectionCalls, 4,
+    'Groq must retry only the rejected first block once, then generate the remaining two blocks');
+  assert.equal(groqCorrectionCloudflareCalls, 0,
+    'a Groq-only Preview must keep Workers AI disabled during corrective plan generation');
+} finally {
+  globalThis.fetch = originalGroqRequiredFetch;
+}
+
 assert.ok(quotaFallbackPlan.week.every(day => day.nutrition.calories >= quotaFallbackPlan.calories * 0.8 &&
   day.nutrition.calories <= quotaFallbackPlan.calories * 1.2 &&
   day.nutrition.protein >= quotaFallbackPlan.protein * 0.8 &&
