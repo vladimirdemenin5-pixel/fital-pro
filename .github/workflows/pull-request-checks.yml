@@ -78,15 +78,18 @@ jobs:
           printf '%s' "$page" | node --input-type=module -e 'let s=""; for await (const c of process.stdin) s+=c; if (!s.includes("<html") || !s.includes("Fital")) throw new Error("Preview homepage did not load"); console.log("PASS: redesigned Fital Pro homepage is served")'
           echo "Cloudflare Preview: $FITALPRO_PREVIEW_URL"
 
-      - name: Inject Groq API key into Preview Worker
-        if: ${{ secrets.GROQ_API_KEY != '' }}
+      - name: Inject Groq API key into Preview Worker when configured
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          printf '%s' "$GROQ_API_KEY" | npx wrangler secret put GROQ_API_KEY --name fital-pro-redesign
+          if [ -n "$GROQ_API_KEY" ]; then
+            printf '%s' "$GROQ_API_KEY" | npx wrangler secret put GROQ_API_KEY --name fital-pro-redesign
+          else
+            echo "GROQ_API_KEY is not configured as a repository secret; Preview will retain its existing provider configuration."
+          fi
 
       # Workers AI has a shared 10,000-neuron daily free allowance. Run this costly integration only on explicit PR label.
       - name: Verify real AI, Robokassa signatures, D1 persistence, and member access for all tariffs
