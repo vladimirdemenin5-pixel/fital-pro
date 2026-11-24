@@ -3,12 +3,14 @@ import { request as httpsRequest } from 'node:https';
 const endpoint = process.env.FITALPRO_WORKER_URL || '';
 if (!endpoint) throw new Error('FITALPRO_WORKER_URL must point to the dedicated PR Preview Worker.');
 const endpointUrl = new URL(endpoint);
-if (
-  endpointUrl.protocol !== 'https:' ||
-  !endpointUrl.hostname.startsWith('fital-pro-redesign-groq-ready-red-waterfall-2af8.') ||
-  !endpointUrl.hostname.endsWith('.workers.dev')
-) {
-  throw new Error('Refusing live AI plan check: only the PR #53 Preview Worker hostname is allowed.');
+const target = process.env.FITALPRO_AI_TARGET || 'preview';
+const allowedHostname = target === 'production'
+  ? endpointUrl.hostname === 'red-waterfall-2af8.vladimirdemenin5.workers.dev'
+  : target === 'preview' &&
+    endpointUrl.hostname.startsWith('fital-pro-redesign-groq-ready-red-waterfall-2af8.') &&
+    endpointUrl.hostname.endsWith('.workers.dev');
+if (endpointUrl.protocol !== 'https:' || !allowedHostname) {
+  throw new Error('Refusing live AI plan check: target must be the explicitly selected production Worker or PR #53 Preview Worker.');
 }
 
 function postJson(url, body, headers, timeoutMs) {

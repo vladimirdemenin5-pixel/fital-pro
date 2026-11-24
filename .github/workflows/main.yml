@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       run_live_ai:
-        description: 'Run real AI plan generation after deployment (uses Workers AI quota)'
+        description: 'Run real AI plan generation after deployment (uses the configured AI provider quota)'
         required: false
         type: boolean
         default: false
@@ -100,5 +100,8 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install
-      - name: Verify live AI generation, D1 storage, and personal-cabinet access
-        run: node scripts/live-ai-plans.mjs
+      - name: Verify real AI plans without database writes
+        env:
+          FITALPRO_AI_TARGET: production
+          FITALPRO_WORKER_URL: https://red-waterfall-2af8.vladimirdemenin5.workers.dev
+        run: node scripts/live-ai-plan-validation.mjs

@@ -9,7 +9,7 @@ if (!endpoint) throw new Error('FITALPRO_WORKER_URL must point to the dedicated 
 const endpointUrl = new URL(endpoint);
 if (
   endpointUrl.protocol !== 'https:' ||
-  !endpointUrl.hostname.startsWith('fital-pro-redesign-red-waterfall-2af8.') ||
+  !endpointUrl.hostname.startsWith('fital-pro-redesign-groq-ready-red-waterfall-2af8.') ||
   !endpointUrl.hostname.endsWith('.workers.dev')
 ) {
   throw new Error('Refusing live diagnostics: only the PR #53 Preview Worker hostname is allowed.');

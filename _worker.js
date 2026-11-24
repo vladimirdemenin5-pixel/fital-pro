@@ -904,13 +904,11 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
   if (groqRequired && !groqConfigured) {
     throw new Error('Preview requires GROQ_API_KEY; Cloudflare Workers AI fallback is disabled.');
   }
-  // Use three currently supported Groq models with independent model-level TPM buckets.
-  // All three keep the same strict structured output and full server-side nutrition validation.
-  const groqModels = preferredGroqModel === 'qwen/qwen3.8-27b'
-    ? ['groq:qwen/qwen3.8-27b', 'groq:openai/gpt-oss-20b', 'groq:openai/gpt-oss-120b']
-    : preferredGroqModel === 'openai/gpt-oss-120b'
-      ? ['groq:openai/gpt-oss-120b', 'groq:openai/gpt-oss-20b', 'groq:qwen/qwen3.8-27b']
-      : ['groq:openai/gpt-oss-20b', 'groq:openai/gpt-oss-120b', 'groq:qwen/qwen3.8-27b'];
+  // Keep plan generation on the two approved GPT-OSS Groq models only.
+  // Both use the same strict structured output and server-side nutrition validation.
+  const groqModels = preferredGroqModel === 'openai/gpt-oss-120b'
+    ? ['groq:openai/gpt-oss-120b', 'groq:openai/gpt-oss-20b']
+    : ['groq:openai/gpt-oss-20b', 'groq:openai/gpt-oss-120b'];
   const models = [
     ...(groqConfigured ? groqModels : []),
     ...(!groqRequired && env.AI ? [MODEL, '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'] : [])
@@ -935,7 +933,6 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
       const isGemma = model === MODEL;
       const isGptOss = model === '@cf/openai/gpt-oss-120b' || model === '@cf/openai/gpt-oss-20b';
       const isGroq = model.startsWith('groq:');
-      const isQwenGroq = model === 'groq:qwen/qwen3.8-27b';
       const groqModelId = model.startsWith('groq:') ? model.slice(5) : model;
       const scheduleGroqCorrection = () => {
         if (isGroq && !groqCorrectionScheduled) {
@@ -948,9 +945,8 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
             messages: currentMessages,
             temperature: 0.2,
             max_completion_tokens: 6200,
-            ...(isQwenGroq
-              ? { reasoning_effort: 'none' }
-              : { reasoning_effort: 'low', include_reasoning: false }),
+            reasoning_effort: 'low',
+            include_reasoning: false,
             response_format: {
               type: 'json_schema',
               json_schema: {
@@ -1554,7 +1550,8 @@ async function aiPlanDiagnostic(request, env) {
   const expectedKey = clean(env.ROBOKASSA_TEST_ACCESS_KEY, 256);
   const suppliedKey = clean(request.headers.get('X-Fital-Test-Key'), 256);
   const secretAuthorized = !!expectedKey && !!suppliedKey && sameHash(md5(expectedKey), md5(suppliedKey));
-  const oidcAuthorized = secretAuthorized ? false : await verifyGitHubActionsOidc(request, env, 'preview');
+  const diagnosticMode = env?.FITALPRO_PREVIEW_CI === '1' ? 'preview' : 'production';
+  const oidcAuthorized = secretAuthorized ? false : await verifyGitHubActionsOidc(request, env, diagnosticMode);
   if (!secretAuthorized && !oidcAuthorized) {
     return json({ error: 'Диагностический доступ не настроен или ключ неверен.' }, 404);
   }
@@ -1806,7 +1803,7 @@ async function verifyGitHubActionsOidc(request, env, mode = 'production') {
     const productionWorkflow =
       claims.ref === 'refs/heads/main' &&
       claims.workflow_ref === productionWorkflowRef &&
-      claims.event_name === 'push' &&
+      ['push', 'workflow_dispatch'].includes(claims.event_name) &&
       ['repo:' + repository + ':ref:refs/heads/main', 'repo:vladimirdemenin5-pixel@324070911/fital-pro@1354815283:ref:refs/heads/main'].includes(claims.sub);
     // Preview OIDC is accepted only in the explicitly configured PR 53 Preview.
     // Production does not define FITALPRO_PREVIEW_CI, so a PR token cannot invoke

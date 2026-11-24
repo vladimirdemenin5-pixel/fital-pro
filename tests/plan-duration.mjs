@@ -34,6 +34,15 @@ const htmlSource = await readFile(new URL('../public/index.html', import.meta.ur
 const productionWorkflow = await readFile(new URL('../.github/workflows/main.yml', import.meta.url), 'utf8');
 const pullRequestWorkflow = await readFile(new URL('../.github/workflows/pull-request-checks.yml', import.meta.url), 'utf8');
 const liveIntegrationSource = await readFile(new URL('../scripts/live-ai-plans.mjs', import.meta.url), 'utf8');
+const previewWorkerName = pullRequestWorkflow.match(/npx wrangler preview --name ([^\\s]+)/)?.[1];
+assert.ok(previewWorkerName &&
+  liveIntegrationSource.includes(`hostname.startsWith('${previewWorkerName}-red-waterfall-2af8.')`),
+  'the full Preview integration script must accept the exact Worker Preview name published by the PR workflow');
+assert.ok(productionWorkflow.includes('FITALPRO_AI_TARGET: production') &&
+  productionWorkflow.includes('FITALPRO_WORKER_URL: https://red-waterfall-2af8.vladimirdemenin5.workers.dev') &&
+  productionWorkflow.includes('node scripts/live-ai-plan-validation.mjs') &&
+  !productionWorkflow.includes('node scripts/live-ai-plans.mjs'),
+  'the optional production AI check must target the existing production Worker and use the no-D1-write AI diagnostic');
 assert.ok(Object.entries(FOOD_CATALOG).length >= 30, 'food reference catalog must remain populated');
 assert.ok(productionWorkflow.includes("if: github.event_name == 'workflow_dispatch' && inputs.run_live_ai == true"),
   'live AI generation must require an explicit manual workflow dispatch so ordinary production deployments do not consume Workers AI quota');
@@ -562,16 +571,17 @@ assert.ok(workerSource.includes('function aiFailureDiagnostic(error, maxLength =
   'nested AI provider errors must reach authenticated Preview diagnostics without leaking into public checkout responses');
 assert.ok(workerSource.includes('const rejectionDiagnostics = [];') && workerSource.includes('rejectionDiagnostics.slice(-3)'), 'the next fallback model must receive concrete rejection reasons from the previous model');
 assert.ok(workerSource.includes("const groqRequired = env.FITALPRO_REQUIRE_GROQ === '1';") &&
-  workerSource.includes("const groqModels = preferredGroqModel === 'qwen/qwen3.8-27b'") &&
-  workerSource.includes("'groq:qwen/qwen3.8-27b'") &&
-  workerSource.includes("const isQwenGroq = model === 'groq:qwen/qwen3.8-27b'") &&
-  workerSource.includes("reasoning_effort: 'none'") &&
-  workerSource.includes("preferredGroqModel === 'openai/gpt-oss-120b'") &&
+  workerSource.includes("const groqModels = preferredGroqModel === 'openai/gpt-oss-120b'") &&
+  workerSource.includes("['groq:openai/gpt-oss-120b', 'groq:openai/gpt-oss-20b']") &&
+  workerSource.includes("['groq:openai/gpt-oss-20b', 'groq:openai/gpt-oss-120b']") &&
+  !workerSource.includes('qwen/qwen3.8-27b') &&
+  !workerSource.includes('isQwenGroq') &&
+  workerSource.includes("reasoning_effort: 'low'") &&
+  workerSource.includes("include_reasoning: false") &&
   workerSource.includes("preferredGroqModel = generated.model.startsWith('groq:')") &&
   workerSource.includes("...(groqConfigured ? groqModels : [])") &&
-  workerSource.includes("'groq:openai/gpt-oss-20b', 'groq:openai/gpt-oss-120b'") &&
   workerSource.includes("...(!groqRequired && env.AI ? [MODEL, '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'] : [])"),
-  'plan generation must use Groq when configured, enforce Groq-only Preview when required, and retain the bounded Cloudflare fallback chain elsewhere');
+  'plan generation must use only the approved GPT-OSS Groq models, enforce Groq-only Preview when required, and retain the bounded Cloudflare fallback chain elsewhere');
 assert.ok(workerSource.includes('for (let move = 0; move < 20; move++)') && workerSource.includes('!foodFitsMeal(foodId, key)'), 'nutrition correction must search more composition changes and keep replacement foods compatible with their meal');
 assert.ok(workerSource.includes('env.AI.run(model, inputs, { signal: controller.signal })') && workerSource.includes('env.AI.run(model, aiOptions, { rejectIfBusy: true })'),
   'plan generation may wait for capacity within its hard timeout while interactive chat remains fail-fast');
@@ -580,7 +590,8 @@ assert.ok(workerSource.includes("...(env.AI ? ['@cf/zai-org/glm-4.7-flash', '@cf
   'general chat must retain Cloudflare fallbacks when the binding is present');
 assert.ok(workerSource.includes('max_tokens: 6200') && workerSource.includes('max_completion_tokens: 6200') && workerSource.includes('GPT_OSS_PLAN_TIMEOUT_MS = 60000') && workerSource.includes('AI_PLAN_FALLBACK_TIMEOUT_MS = 60000'), 'each Workers AI plan model must use its documented token-limit parameter and bounded timeout');
 assert.ok(workerSource.includes("const isGptOss = model === '@cf/openai/gpt-oss-120b' || model === '@cf/openai/gpt-oss-20b'") && workerSource.includes('max_tokens: 6200') && workerSource.includes("reasoning_effort: 'low'"), 'both GPT-OSS fallbacks must use supported token limits and bounded reasoning');
-assert.ok(!workerSource.includes('QWEN4_API_KEY') && !workerSource.includes('qwen4-max'), 'paid QwenCloud integration must be absent from the Cloudflare-only model chain');
+assert.ok(!workerSource.includes('QWEN4_API_KEY') && !workerSource.includes('qwen4-max') &&
+  !workerSource.includes('qwen/qwen3.8-27b'), 'Qwen integrations must remain absent from the plan-generation chain');
 assert.ok(workerSource.includes('function buildPlanResponseSchema(menuDays)') && workerSource.includes('minItems: menuDays') && workerSource.includes('maxItems: menuDays'), 'the reusable server schema helper must still describe exact plan length');
 assert.ok(workerSource.includes("reasoning_effort: 'low'"), 'reasoning must be bounded to low for structured meal-plan generation');
 assert.ok(workerSource.includes('const aiOptions = {') && workerSource.includes('env.AI.run(model, aiOptions, { rejectIfBusy: true })'), 'the AI chat fallback must also disable reasoning before inference');
@@ -949,11 +960,16 @@ assert.ok(workerSource.includes("url.pathname === '/api/ai-data-flow-diagnostic'
 assert.ok(workerSource.includes('await saveMemberPlan(env, accessToken, profile, plan)'), 'integration diagnostic must save the generated plan and profile to D1');
 assert.ok(workerSource.includes('verifyGitHubActionsOidc(request, env, diagnosticMode)'), 'live diagnostic must authenticate GitHub Actions using production or restricted Preview OIDC');
 assert.ok(workerSource.includes("claims.aud !== 'fitalpro-ai-data-flow'"), 'OIDC authorization must restrict the token audience');
-assert.ok(workerSource.includes("claims.ref === 'refs/heads/main'") && workerSource.includes("(mode === 'production' ? !productionWorkflow : !previewWorkflow)"), 'D1 integration OIDC must remain restricted to the production workflow');
+assert.ok(workerSource.includes("claims.ref === 'refs/heads/main'") &&
+  workerSource.includes("['push', 'workflow_dispatch'].includes(claims.event_name)") &&
+  workerSource.includes("(mode === 'production' ? !productionWorkflow : !previewWorkflow)"),
+  'production OIDC must remain restricted to main-branch push or manual workflow dispatch');
 assert.ok(workerSource.includes("env?.FITALPRO_PREVIEW_CI === '1'") && workerSource.includes("claims.ref === 'refs/pull/53/merge'"), 'Preview OIDC must require the explicit preview flag and exact PR merge ref');
 assert.ok(workerSource.includes("claims.head_ref === 'design/tilda-inspired-bold-redesign'") && workerSource.includes("claims.base_ref === 'main'"), 'Preview OIDC must restrict the exact source and target branches');
 assert.ok(workerSource.includes("pull-request-checks.yml@refs/pull/53/merge"), 'Preview OIDC must restrict the dedicated PR workflow');
-assert.ok(workerSource.includes("verifyGitHubActionsOidc(request, env, 'preview')") && workerSource.includes("verifyGitHubActionsOidc(request, env, diagnosticMode)"), 'AI and D1 diagnostics must accept only the restricted Preview OIDC token');
+assert.ok(workerSource.includes("const diagnosticMode = env?.FITALPRO_PREVIEW_CI === '1' ? 'preview' : 'production';") &&
+  workerSource.includes("verifyGitHubActionsOidc(request, env, diagnosticMode)"),
+  'AI and D1 diagnostics must select production or restricted Preview OIDC from the Worker environment');
 assert.ok(workerSource.includes('vladimirdemenin5-pixel@324070911/fital-pro@1354815283:ref:refs/heads/main'), 'OIDC authorization must accept the repository immutable subject claim');
 assert.ok(workerSource.includes('env.FITALPRO_CI_TEST_KEY || env.ROBOKASSA_TEST_ACCESS_KEY'), 'integration diagnostic must support the temporary CI-only key without changing the Robokassa test key');
 assert.ok(workerSource.includes("personalizedPlan(new Request('https://fitalpro.internal/api/plan'"), 'integration diagnostic must read the saved plan through the personal-cabinet API');
