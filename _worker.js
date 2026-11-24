@@ -1488,7 +1488,7 @@ async function aiPlanDiagnostic(request, env) {
     return json({
       ok: false,
       error: clean(error.message, 240) || 'Не удалось проверить генерацию.',
-      diagnostic: clean(error?.cause?.message, 900) || undefined
+      diagnostic: oidcAuthorized ? (aiFailureDiagnostic(error, 1200) || undefined) : undefined
     }, 502);
   }
 
