@@ -337,8 +337,8 @@ try {
     'a rate-limited GPT-OSS 20B must fall back to the independent Groq GPT-OSS 120B model');
   assert.deepEqual(alternateGroqPlan.aiProviders, ['groq']);
   assert.equal(alternateGroqPlan.week.length, 7);
-  assert.equal(groqModelFallbackCalls.filter(model => model === 'openai/gpt-oss-20b').length, 2,
-    'the rate-limited primary model gets one bounded retry');
+  assert.equal(groqModelFallbackCalls.filter(model => model === 'openai/gpt-oss-20b').length, 3,
+    'the rate-limited primary model gets two bounded retries before switching providers');
   assert.equal(groqModelFallbackCalls.filter(model => model === 'openai/gpt-oss-120b').length, 3,
     'after GPT-OSS 120B succeeds, all remaining plan blocks must continue using it');
   assert.equal(groqStrictSchemaCalls, 5,
