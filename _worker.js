@@ -4,6 +4,22 @@ const MODEL = '@cf/google/gemma-4-26b-a4b-it';
 const AI_MODEL_TIMEOUT_MS = 45000;
 const GPT_OSS_PLAN_TIMEOUT_MS = 60000;
 const AI_PLAN_FALLBACK_TIMEOUT_MS = 60000;
+const NUTRITION_CONFIG = Object.freeze({
+  activity: Object.freeze({ minimal: 1.2, light: 1.375, medium: 1.55, high: 1.725, athlete: 1.9 }),
+  goals: Object.freeze({
+    loss: Object.freeze({ adjustment: -0.15, split: Object.freeze({ protein: 0.35, fat: 0.30, carbs: 0.35 }) }),
+    maintenance: Object.freeze({ adjustment: 0, split: Object.freeze({ protein: 0.25, fat: 0.30, carbs: 0.45 }) }),
+    gain: Object.freeze({ adjustment: 0.12, split: Object.freeze({ protein: 0.25, fat: 0.25, carbs: 0.50 }) })
+  }),
+  mealSchedule: Object.freeze([
+    Object.freeze({ id: 'breakfast', title: 'Завтрак', time: '08:00', kcalShare: 0.25 }),
+    Object.freeze({ id: 'lunch', title: 'Обед', time: '13:00', kcalShare: 0.35 }),
+    Object.freeze({ id: 'snack', title: 'Перекус', time: '16:30', kcalShare: 0.15 }),
+    Object.freeze({ id: 'dinner', title: 'Ужин', time: '19:30', kcalShare: 0.25 })
+  ]),
+  diets: Object.freeze(['classic', 'vegetarian', 'pescatarian', 'gluten_free', 'lactose_free']),
+  exclusions: Object.freeze(['nuts', 'eggs', 'soy', 'honey'])
+});
 const PLANS = {
   'Питание': { amount: '990.00', label: 'Fital Pro — Питание, 7 дней', days: 7, menuDays: 7 },
   'PRO': { amount: '1990.00', label: 'Fital Pro PRO — питание + тренировки, 14 дней', days: 14, menuDays: 14 },
@@ -107,14 +123,19 @@ function profileFrom(input) {
     goal: clean(input?.goal, 20),
     training: clean(input?.training, 20),
     days: Number(input?.days),
-    preferences: clean(input?.preferences, 700)
+    preferences: clean(input?.preferences, 700),
+    diet: clean(input?.diet || 'classic', 30),
+    exclusions: Array.isArray(input?.exclusions) ? [...new Set(input.exclusions.map(value => clean(value, 20)).filter(value => NUTRITION_CONFIG.exclusions.includes(value)))] : []
   };
   if (!profile.name) throw new Error('Укажите имя.');
   if (!['female', 'male'].includes(profile.sex)) throw new Error('Укажите пол.');
   if (!Number.isFinite(profile.age) || profile.age < 18 || profile.age > 90) throw new Error('Fital Pro пока формирует персональные программы только для совершеннолетних пользователей (18+).');
   if (!Number.isFinite(profile.height) || profile.height < 120 || profile.height > 230) throw new Error('Проверьте рост.');
   if (!Number.isFinite(profile.weight) || profile.weight < 35 || profile.weight > 250) throw new Error('Проверьте вес.');
-  if (!['low', 'medium', 'high'].includes(profile.activity)) throw new Error('Выберите уровень активности.');
+  const legacyActivity = { low: 'minimal', medium: 'medium', high: 'high' };
+  profile.activity = legacyActivity[profile.activity] || profile.activity;
+  if (!Object.hasOwn(NUTRITION_CONFIG.activity, profile.activity)) throw new Error('Выберите уровень активности.');
+  if (!NUTRITION_CONFIG.diets.includes(profile.diet)) throw new Error('Выберите тип питания.');
   if (!['loss', 'gain', 'maintenance'].includes(profile.goal)) throw new Error('Выберите цель.');
   if (!['gym', 'mixed', 'home'].includes(profile.training)) throw new Error('Выберите место тренировок.');
   if (!Number.isInteger(profile.days) || profile.days < 2 || profile.days > 7) throw new Error('Выберите от 2 до 7 тренировочных дней.');
@@ -122,17 +143,13 @@ function profileFrom(input) {
 }
 
 function nutritionTargets(profile) {
-  const activity = { low: 1.2, medium: 1.45, high: 1.65 }[profile.activity];
-  const bmr = profile.sex === 'female'
-    ? 10 * profile.weight + 6.25 * profile.height - 5 * profile.age - 161
-    : 10 * profile.weight + 6.25 * profile.height - 5 * profile.age + 5;
-  let calories = Math.round((bmr * activity) / 50) * 50;
-  if (profile.goal === 'loss') calories = Math.max(1400, calories - 300);
-  if (profile.goal === 'gain') calories += 250;
-  const protein = Math.round(profile.weight * (profile.goal === 'gain' ? 1.6 : 1.4));
-  const fat = Math.round(calories * 0.28 / 9);
-  const carbs = Math.max(0, Math.round((calories - protein * 4 - fat * 9) / 4));
-  return { calories, protein, fat, carbs };
+  const activity = NUTRITION_CONFIG.activity[profile.activity];
+  const goal = NUTRITION_CONFIG.goals[profile.goal];
+  const bmr = profile.sex === 'female' ? 10 * profile.weight + 6.25 * profile.height - 5 * profile.age - 161 : 10 * profile.weight + 6.25 * profile.height - 5 * profile.age + 5;
+  const tdee = bmr * activity;
+  const floor = profile.sex === 'female' ? 1300 : 1500;
+  const calories = Math.round(Math.max(floor, tdee * (1 + goal.adjustment)) / 10) * 10;
+  return { calories, protein: Math.round(calories * goal.split.protein / 4), fat: Math.round(calories * goal.split.fat / 9), carbs: Math.round(calories * goal.split.carbs / 4), waterLiters: profile.sex === 'female' ? 2.0 : 2.5, bmr: Math.round(bmr), tdee: Math.round(tdee) };
 }
 
 function extractAiText(result) {
@@ -366,10 +383,10 @@ function calculateDayNutrition(day) {
 }
 
 function nutritionWithinTargets(nutrition, targets) {
-  return nutrition.calories >= targets.calories * 0.8 && nutrition.calories <= targets.calories * 1.2 &&
-    nutrition.protein >= targets.protein * 0.8 && nutrition.protein <= targets.protein * 1.2 &&
-    (targets.fat <= 0 || (nutrition.fat >= targets.fat * 0.7 && nutrition.fat <= targets.fat * 1.3)) &&
-    (targets.carbs <= 0 || (nutrition.carbs >= targets.carbs * 0.7 && nutrition.carbs <= targets.carbs * 1.3));
+  return nutrition.calories >= targets.calories * 0.93 && nutrition.calories <= targets.calories * 1.07 &&
+    nutrition.protein >= targets.protein * 0.90 && nutrition.protein <= targets.protein * 1.10 &&
+    (targets.fat <= 0 || (nutrition.fat >= targets.fat * 0.85 && nutrition.fat <= targets.fat * 1.15)) &&
+    (targets.carbs <= 0 || (nutrition.carbs >= targets.carbs * 0.85 && nutrition.carbs <= targets.carbs * 1.15));
 }
 
 // Make small, bounded corrections to existing ingredient portions. Food choices,
@@ -450,35 +467,38 @@ function buildSynchronizedMealText(day, mealKey) {
 
 function foodAllowedByPreferences(foodId, profile) {
   const preferences = clean(profile?.preferences, 700).toLowerCase();
-  if (!preferences || /без ограничений|нет ограничений|всеядн/.test(preferences)) return true;
+  const diet = NUTRITION_CONFIG.diets.includes(profile?.diet) ? profile.diet : 'classic';
+  const exclusions = new Set(Array.isArray(profile?.exclusions) ? profile.exclusions : []);
+  const blocked = new Set();
   const groups = {
     oats_dry: ['gluten'], pasta_dry: ['gluten'], wholegrain_bread: ['gluten'],
-    chicken_raw: ['meat', 'poultry'], turkey_raw: ['meat', 'poultry'],
-    salmon_raw: ['fish'], cod_raw: ['fish'], egg_raw: ['eggs'],
+    chicken_raw: ['meat','poultry'], turkey_raw: ['meat','poultry'], salmon_raw: ['fish'], cod_raw: ['fish'], egg_raw: ['eggs'],
     greek_yogurt: ['dairy'], cottage_cheese: ['dairy'], milk_2pct: ['dairy'], cheddar: ['dairy'],
-    almonds: ['nuts'], walnuts: ['nuts'], peanut_butter: ['nuts', 'peanuts'],
-    tofu: ['soy'], lentils_dry: ['legumes'], chickpeas_dry: ['legumes']
+    almonds: ['nuts'], walnuts: ['nuts'], peanut_butter: ['nuts','peanuts'], tofu: ['soy'], lentils_dry: ['legumes'], chickpeas_dry: ['legumes']
   };
-  const blocked = new Set();
-  if (/веган|строг(ий|ая)\s+пост|только\s+растительн/.test(preferences)) {
-    ['chicken_raw','turkey_raw','salmon_raw','cod_raw','egg_raw','greek_yogurt','cottage_cheese','milk_2pct','cheddar'].forEach(id=>blocked.add(id));
-  } else if (/вегетариан|без\s+мяса/.test(preferences)) {
-    ['chicken_raw','turkey_raw','salmon_raw','cod_raw'].forEach(id=>blocked.add(id));
-  }
-  if (/глютен|целиак|пшениц/.test(preferences)) ['oats_dry','pasta_dry','wholegrain_bread'].forEach(id=>blocked.add(id));
-  if (/лактоз|молочн|молок|молочк/.test(preferences)) ['greek_yogurt','cottage_cheese','milk_2pct','cheddar'].forEach(id=>blocked.add(id));
-  if (/орех/.test(preferences)) ['almonds','walnuts','peanut_butter'].forEach(id=>blocked.add(id));
+  if (diet === 'vegetarian') ['chicken_raw','turkey_raw','salmon_raw','cod_raw'].forEach(id => blocked.add(id));
+  if (diet === 'pescatarian') ['chicken_raw','turkey_raw'].forEach(id => blocked.add(id));
+  if (diet === 'gluten_free') ['oats_dry','pasta_dry','wholegrain_bread'].forEach(id => blocked.add(id));
+  if (diet === 'lactose_free') ['greek_yogurt','cottage_cheese','milk_2pct','cheddar'].forEach(id => blocked.add(id));
+  if (exclusions.has('nuts')) ['almonds','walnuts','peanut_butter'].forEach(id => blocked.add(id));
+  if (exclusions.has('eggs')) blocked.add('egg_raw');
+  if (exclusions.has('soy')) blocked.add('tofu');
+  if (/веган|строг(ий|ая)\\s+пост|только\\s+растительн/.test(preferences)) ['chicken_raw','turkey_raw','salmon_raw','cod_raw','egg_raw','greek_yogurt','cottage_cheese','milk_2pct','cheddar'].forEach(id => blocked.add(id));
+  else if (/вегетариан|без\\s+мяса/.test(preferences)) ['chicken_raw','turkey_raw','salmon_raw','cod_raw'].forEach(id => blocked.add(id));
+  if (/глютен|целиак|пшениц/.test(preferences)) ['oats_dry','pasta_dry','wholegrain_bread'].forEach(id => blocked.add(id));
+  if (/лактоз|молочн|молок|молочк/.test(preferences)) ['greek_yogurt','cottage_cheese','milk_2pct','cheddar'].forEach(id => blocked.add(id));
+  if (/орех/.test(preferences)) ['almonds','walnuts','peanut_butter'].forEach(id => blocked.add(id));
   if (/арахис/.test(preferences)) blocked.add('peanut_butter');
-  if (/рыб|морепродукт/.test(preferences)) ['salmon_raw','cod_raw'].forEach(id=>blocked.add(id));
+  if (/рыб|морепродукт/.test(preferences)) ['salmon_raw','cod_raw'].forEach(id => blocked.add(id));
   if (/яйц/.test(preferences)) blocked.add('egg_raw');
   if (/соя/.test(preferences)) blocked.add('tofu');
-  if (/бобов|чечевиц|нут/.test(preferences)) ['lentils_dry','chickpeas_dry'].forEach(id=>blocked.add(id));
+  if (/бобов|чечевиц|нут/.test(preferences)) ['lentils_dry','chickpeas_dry'].forEach(id => blocked.add(id));
   if (/куриц/.test(preferences)) blocked.add('chicken_raw');
   if (/индейк/.test(preferences)) blocked.add('turkey_raw');
   if (/банан/.test(preferences)) blocked.add('banana');
   if (/авокад/.test(preferences)) blocked.add('avocado');
   const foodName = FOOD_CATALOG[foodId]?.name?.toLowerCase() || '';
-  const directExclusion = /(?:без|не ем|не люблю|исключить|аллерг(?:ия|ен)? на)\s+[^.;,]{0,30}/g;
+  const directExclusion = /(?:без|не ем|не люблю|исключить|аллерг(?:ия|ен)? на)\\s+[^.;,]{0,30}/g;
   for (const match of preferences.matchAll(directExclusion)) {
     const phrase = match[0];
     if (phrase.includes('арахис') && foodId === 'peanut_butter') return false;
@@ -496,10 +516,8 @@ function rebalanceDayNutrition(day, targets, profile) {
   ]));
   const nutrientTargets = [targets.calories, targets.protein, targets.fat, targets.carbs];
   const nutrientScales = [
-    Math.max(1, targets.calories * 0.2),
-    Math.max(1, targets.protein * 0.2),
-    Math.max(1, targets.fat * 0.3),
-    Math.max(1, targets.carbs * 0.3)
+    Math.max(1, targets.calories * 0.07), Math.max(1, targets.protein * 0.10),
+    Math.max(1, targets.fat * 0.15), Math.max(1, targets.carbs * 0.15)
   ];
   const totals = () => {
     const result = [0,0,0,0];
@@ -1200,12 +1218,7 @@ async function generateAiPlan(profile, planKey, env) {
     const generationBlockDays = 3;
     for (let offset = 0; offset < totalDays; offset += generationBlockDays) {
     const chunkDays = Math.min(generationBlockDays, totalDays - offset);
-    const mealCalorieTargets = [
-      ['завтрак', 0.25],
-      ['обед', 0.30],
-      ['перекус', 0.15],
-      ['ужин', 0.30]
-    ].map(([name, share]) =>
+    const mealCalorieTargets = NUTRITION_CONFIG.mealSchedule.map(({ title, kcalShare }) => [title.toLowerCase(), kcalShare]).map(([name, share]) =>
       name + ': ' + Math.round(targets.calories * share) + ' ккал, белки ' +
       Math.round(targets.protein * share) + ' г, жиры ' +
       Math.round(targets.fat * share) + ' г, углеводы ' +
@@ -1234,7 +1247,7 @@ async function generateAiPlan(profile, planKey, env) {
           }).join('; ') +
           '. Поле trainingDay должно соответствовать каждой строке выше. Сервер всё равно выставит его по расписанию. В workout на тренировочный день обязательно укажи упражнения, подходы и повторения; на день отдыха — только лёгкое восстановление. Не переноси тренировку на другой день и не добавляй лишние занятия. Распредели нагрузку безопасно, не ставь тяжёлые тренировки на одни и те же группы мышц подряд. Учитывай выбранный формат (дом, зал или смешанный); для новичка выбирай умеренную нагрузку и простые варианты.'
         : 'Тариф включает питание. Сервер самостоятельно задаст trainingDay=false. В workout указывай только лёгкую общую активность и восстановление, не составляй силовую программу.',
-      'Учитывай пищевые предпочтения, ограничения и аллергии. Не включай продукты, которые клиент указал как нежелательные или аллергенные. Если подходящего продукта нет в справочнике, подбери ближайшую безопасную альтернативу только из справочника.',
+      'Тип питания клиента: ' + profile.diet + '. Структурированные исключения: ' + (profile.exclusions.length ? profile.exclusions.join(', ') : 'нет') + '. Учитывай эти настройки и свободный текст предпочтений. Не включай запрещённые продукты ни в название, ни в состав блюда. Если безопасной замены нет в справочнике, не выдумывай её; сервер отклонит такой день.',
       'Рацион должен быть из доступных продуктов, с простыми блюдами и без экстремальных ограничений.',
       'Не диагностируй болезни, не назначай лечение и не давай рекомендаций по отмене лекарств. При заболеваниях, беременности, расстройствах пищевого поведения или противопоказаниях направляй к врачу.',
       'ДАННЫЕ КЛИЕНТА: ' + JSON.stringify({ ...profile, name: 'Клиент' }),
@@ -1292,6 +1305,8 @@ async function generateAiPlan(profile, planKey, env) {
     protein: targets.protein,
     fat: targets.fat,
     carbs: targets.carbs,
+    waterLiters: targets.waterLiters,
+    mealSchedule: NUTRITION_CONFIG.mealSchedule,
     week: fullWeek,
     menuDays: totalDays,
     shopping,
