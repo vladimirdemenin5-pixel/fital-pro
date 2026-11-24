@@ -743,6 +743,19 @@ function isScheduledTrainingDay(absoluteDay, weeklyTarget) {
   return Math.floor((dayInWeek + 1) * sessions / 7) > Math.floor(dayInWeek * sessions / 7);
 }
 
+function parseGroqDelayMs(value) {
+  const input = clean(value, 80).trim().toLowerCase();
+  if (!input) return 0;
+  const seconds = Number(input);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.round(seconds * 1000);
+  let total = 0;
+  const units = { ms: 1, s: 1000, m: 60000, h: 3600000 };
+  for (const match of input.matchAll(/(\\d+(?:\\.\\d+)?)\\s*(ms|s|m|h)/g)) {
+    total += Number(match[1]) * units[match[2]];
+  }
+  return total;
+}
+
 async function runGroqInferenceWithTimeout(env, model, inputs, timeoutMs = 60000) {
   const apiKey = clean(env.GROQ_API_KEY, 300);
   if (!apiKey) throw new Error('Groq API key is not configured.');
@@ -752,8 +765,8 @@ async function runGroqInferenceWithTimeout(env, model, inputs, timeoutMs = 60000
   }
   delete payload.max_tokens;
 
-  // Retry Groq once for transient transport, timeout, rate-limit and server failures.
-  // Permanent request/authentication errors go straight to the existing Cloudflare fallback.
+  // Respect Groq's own reset window on 429 instead of retrying after an arbitrary 700 ms.
+  // The wait is bounded so a single customer request cannot remain open indefinitely.
   for (let attempt = 0; attempt < 2; attempt++) {
     const controller = new AbortController();
     const timer = setTimeout(() => {
@@ -775,14 +788,9 @@ async function runGroqInferenceWithTimeout(env, model, inputs, timeoutMs = 60000
       if (!response.ok) {
         const error = new Error('Groq inference HTTP ' + response.status + ': ' + clean(responseText, 360));
         error.status = response.status;
-        const retryAfter = response.headers?.get('retry-after');
-        if (retryAfter) {
-          const seconds = Number(retryAfter);
-          const retryAt = Date.parse(retryAfter);
-          error.retryAfterMs = Number.isFinite(seconds) && seconds >= 0
-            ? Math.min(2000, seconds * 1000)
-            : (Number.isFinite(retryAt) ? Math.max(0, Math.min(2000, retryAt - Date.now())) : 0);
-        }
+        const retryAfterMs = parseGroqDelayMs(response.headers?.get('retry-after'));
+        const tokenResetMs = parseGroqDelayMs(response.headers?.get('x-ratelimit-reset-tokens'));
+        error.retryAfterMs = retryAfterMs || tokenResetMs || (response.status === 429 ? 5000 : 700);
         throw error;
       }
       try {
@@ -796,8 +804,9 @@ async function runGroqInferenceWithTimeout(env, model, inputs, timeoutMs = 60000
         error?.name === 'AbortError' || error?.name === 'TimeoutError' ||
         error instanceof TypeError || /network|fetch failed|timed out/i.test(clean(error?.message, 180));
       if (attempt === 0 && transient) {
-        const delayMs = error?.retryAfterMs ?? 700;
-        console.warn('Fital Pro Groq transient failure; retrying once before provider fallback:', status || error?.name || 'network-error');
+        const requestedDelay = Number(error?.retryAfterMs) || 700;
+        const delayMs = Math.min(30000, Math.max(250, requestedDelay));
+        console.warn('Fital Pro Groq transient failure; retrying after provider reset window:', status || error?.name || 'network-error', 'delayMs=' + delayMs);
         await new Promise(resolve => setTimeout(resolve, delayMs));
         continue;
       }
@@ -842,7 +851,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
     throw new Error('Preview requires GROQ_API_KEY; Cloudflare Workers AI fallback is disabled.');
   }
   const models = [
-    ...(groqConfigured ? ['groq:openai/gpt-oss-20b'] : []),
+    ...(groqConfigured ? ['groq:openai/gpt-oss-20b', 'groq:openai/gpt-oss-120b'] : []),
     ...(!groqRequired && env.AI ? [MODEL, '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'] : [])
   ];
   const diagnostics = [];
@@ -875,7 +884,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
         ? {
             messages: currentMessages,
             temperature: 0.2,
-            max_completion_tokens: 6200,
+            max_completion_tokens: 3500,
             reasoning_effort: 'low',
             include_reasoning: false,
             response_format: { type: 'json_object' }
