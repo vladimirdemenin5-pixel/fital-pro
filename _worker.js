@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto';
 
 const MODEL = '@cf/google/gemma-4-26b-a4b-it';
 const AI_MODEL_TIMEOUT_MS = 45000;
-const QWEN_PLAN_TIMEOUT_MS = 75000;
 const GPT_OSS_PLAN_TIMEOUT_MS = 60000;
 const AI_PLAN_FALLBACK_TIMEOUT_MS = 60000;
 const PLANS = {
@@ -805,10 +804,10 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
     { role: 'system', content: 'Ты Fital Pro. Отвечай только валидным JSON без Markdown и пояснений.' },
     { role: 'user', content: prompt }
   ];
-  // Gemma 4 is the lower-cost primary model; Qwen 3.8 and GPT-OSS remain bounded Cloudflare fallbacks.
+  // Groq GPT-OSS 20B is preferred when configured; Gemma 4 and Cloudflare GPT-OSS are bounded fallbacks.
   const models = [
     ...(clean(env.GROQ_API_KEY, 300) ? ['groq:openai/gpt-oss-20b'] : []),
-    ...(env.AI ? [MODEL, '@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'] : [])
+    ...(env.AI ? [MODEL, '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'] : [])
   ];
   const diagnostics = [];
   const rejectionDiagnostics = [];
@@ -825,7 +824,6 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
       : messages;
     try {
       const isGemma = model === MODEL;
-      const isQwen = model === '@cf/qwen/qwen3.8-27b';
       const isGptOss = model === '@cf/openai/gpt-oss-120b' || model === '@cf/openai/gpt-oss-20b';
       const isGroq = model.startsWith('groq:');
       const modelInput = isGroq
@@ -847,14 +845,13 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
             } : {
               max_completion_tokens: 4200,
               ...(isGemma ? { response_format: { type: 'json_object' } } : {}),
-              ...(isQwen ? { reasoning_effort: 'low' } : {})
             })
           };
       const result = isGroq
         ? await runGroqInferenceWithTimeout(env, model.slice(5), modelInput, GPT_OSS_PLAN_TIMEOUT_MS)
         : await runAiInferenceWithTimeout(
             env, model, modelInput,
-            isQwen ? QWEN_PLAN_TIMEOUT_MS : (isGptOss ? GPT_OSS_PLAN_TIMEOUT_MS : AI_PLAN_FALLBACK_TIMEOUT_MS)
+            isGptOss ? GPT_OSS_PLAN_TIMEOUT_MS : AI_PLAN_FALLBACK_TIMEOUT_MS
           );
       const text = extractAiText(result);
       const normalized = text.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
