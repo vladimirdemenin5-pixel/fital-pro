@@ -149,7 +149,7 @@ function nutritionTargets(profile) {
   const tdee = bmr * activity;
   const floor = profile.sex === 'female' ? 1300 : 1500;
   const calories = Math.round(Math.max(floor, tdee * (1 + goal.adjustment)) / 10) * 10;
-  return { calories, protein: Math.round(calories * goal.split.protein / 4), fat: Math.round(calories * goal.split.fat / 9), carbs: Math.round(calories * goal.split.carbs / 4), waterLiters: profile.sex === 'female' ? 2.0 : 2.5, bmr: Math.round(bmr), tdee: Math.round(tdee) };
+  return { calories, protein: Math.round(calories * goal.split.protein / 4), fat: Math.round(calories * goal.split.fat / 9), carbs: Math.round(calories * goal.split.carbs / 4), waterLiters: (profile.sex === 'female' ? 2.0 : 2.5) + (['high','athlete'].includes(profile.activity) ? 0.3 : 0), bmr: Math.round(bmr), tdee: Math.round(tdee) };
 }
 
 function extractAiText(result) {
@@ -1181,6 +1181,8 @@ function generateCatalogFallbackPlan(profile, planKey, targets, cause) {
     protein: targets.protein,
     fat: targets.fat,
     carbs: targets.carbs,
+    waterLiters: targets.waterLiters,
+    mealSchedule: NUTRITION_CONFIG.mealSchedule,
     week,
     menuDays: totalDays,
     shopping: buildShoppingList(week),
