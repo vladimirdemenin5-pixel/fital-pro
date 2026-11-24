@@ -1342,7 +1342,7 @@ async function checkout(request, env, forceTestMode = false) {
   } catch (error) {
     console.error('Fital Pro checkout blocked because AI plan generation failed:', aiFailureDiagnostic(error, 1200));
     const responseBody = {
-      error: 'ИИ временно не смог подготовить персональный план. Заказ и оплата не создавались. Попробуйте позже.'
+      error: 'ИИ временно недоступен и не смог подготовить персональный план. Заказ и оплата не создавались. Попробуйте позже.'
     };
     if (forceTestMode && env.FITALPRO_PREVIEW_CI === '1') {
       responseBody.diagnostic = aiFailureDiagnostic(error, 1200);
