@@ -436,8 +436,8 @@ try {
     'Groq must recover from a nutritionally rejected first draft using its corrective retry');
   assert.deepEqual(correctedGroqPlan.aiProviders, ['groq']);
   assert.equal(correctedGroqPlan.week.length, 7);
-  assert.equal(groqCorrectionCalls, 3,
-    'an infeasible calorie draft must receive one Groq correction, then the remaining two blocks must generate normally');
+  assert.equal(groqCorrectionCalls, 4,
+    'an infeasible calorie draft must receive one Groq correction request, then the remaining two blocks must generate normally');
   assert.equal(groqCorrectionCloudflareCalls, 0,
     'a Groq-only Preview must keep Workers AI disabled during corrective plan generation');
 } finally {
