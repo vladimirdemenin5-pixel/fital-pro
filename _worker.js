@@ -238,7 +238,8 @@ const FOOD_CATALOG = Object.freeze({
   wholegrain_bread:{name:'Хлеб цельнозерновой',kcal:252,protein:12.45,fat:3.5,carbs:43.1,fdcId:172688},
   cheddar:{name:'Сыр чеддер',kcal:403,protein:24.9,fat:33.1,carbs:1.3},
   orange:{name:'Апельсин без кожуры',kcal:47,protein:0.9,fat:0.1,carbs:11.8},
-  peanut_butter:{name:'Арахисовая паста без добавок',kcal:588,protein:25.0,fat:50,carbs:20}
+  peanut_butter:{name:'Арахисовая паста без добавок',kcal:588,protein:25.0,fat:50,carbs:20},
+  cinnamon:{name:'Корица молотая',kcal:247,protein:4.0,fat:1.2,carbs:80.6}
 });
 const MEAL_KEYS = ['breakfast','lunch','snack','dinner'];
 
@@ -263,7 +264,8 @@ function normalizeMealIngredients(raw, enforceFoodPortionLimits = false) {
   for (const item of raw) {
     const foodId = Array.isArray(item) && item.length === 2 ? item[0] : item?.foodId;
     const grams = Array.isArray(item) && item.length === 2 ? item[1] : item?.grams;
-    if (typeof foodId !== 'string' || !Object.hasOwn(FOOD_CATALOG, foodId) || !Number.isSafeInteger(grams) || grams < 5 || grams > 500) return null;
+    const maxInputGrams = enforceFoodPortionLimits ? 5000 : 500;
+    if (typeof foodId !== 'string' || !Object.hasOwn(FOOD_CATALOG, foodId) || !Number.isSafeInteger(grams) || grams < 5 || grams > maxInputGrams) return null;
     if (enforceFoodPortionLimits) {
       const maximum = MAX_MEAL_INGREDIENT_GRAMS[foodId] || 250;
       normalized.push({ foodId, name: FOOD_CATALOG[foodId].name, grams: Math.max(5, Math.min(maximum, grams)) });
@@ -381,7 +383,7 @@ const MAX_MEAL_INGREDIENT_GRAMS = Object.freeze({
   potato_raw:350, sweet_potato:300, avocado:100,
   almonds:30, walnuts:30, olive_oil:20,
   lentils_dry:100, chickpeas_dry:100, tofu:250, wholegrain_bread:150,
-  cheddar:50, orange:200, peanut_butter:25
+  cheddar:50, orange:200, peanut_butter:25, cinnamon:5
 });
 
 const FOOD_ROLE_BY_ID = Object.freeze({
@@ -391,7 +393,8 @@ const FOOD_ROLE_BY_ID = Object.freeze({
   banana:'fruit', apple:'fruit', blueberries:'fruit', strawberry:'fruit', orange:'fruit',
   broccoli:'vegetable', tomato:'vegetable', cucumber:'vegetable', carrot:'vegetable', spinach:'vegetable', cabbage:'vegetable',
   potato_raw:'starchy_vegetable', sweet_potato:'starchy_vegetable', avocado:'fat', olive_oil:'fat',
-  almonds:'nuts', walnuts:'nuts', peanut_butter:'nuts', lentils_dry:'plant_protein', chickpeas_dry:'plant_protein', tofu:'plant_protein'
+  almonds:'nuts', walnuts:'nuts', peanut_butter:'nuts', lentils_dry:'plant_protein', chickpeas_dry:'plant_protein', tofu:'plant_protein',
+  cinnamon:'spice'
 });
 function foodRole(foodId) { return FOOD_ROLE_BY_ID[foodId] || null; }
 function foodCanReplaceFood(sourceFoodId, candidateFoodId) {
@@ -401,10 +404,10 @@ function foodCanReplaceFood(sourceFoodId, candidateFoodId) {
 function foodFitsMeal(foodId, mealKey) {
   const role = foodRole(foodId);
   const allowed = {
-    breakfast:['grain','egg','dairy','fruit','vegetable','starchy_vegetable','plant_protein','nuts','fat'],
-    lunch:['grain','poultry','fish','egg','dairy','vegetable','starchy_vegetable','plant_protein','nuts','fat'],
-    snack:['grain','egg','dairy','fruit','vegetable','plant_protein','nuts','fat'],
-    dinner:['grain','poultry','fish','egg','dairy','vegetable','starchy_vegetable','plant_protein','nuts','fat']
+    breakfast:['grain','egg','dairy','fruit','vegetable','starchy_vegetable','plant_protein','nuts','fat','spice'],
+    lunch:['grain','poultry','fish','egg','dairy','vegetable','starchy_vegetable','plant_protein','nuts','fat','spice'],
+    snack:['grain','egg','dairy','fruit','vegetable','plant_protein','nuts','fat','spice'],
+    dinner:['grain','poultry','fish','egg','dairy','vegetable','starchy_vegetable','plant_protein','nuts','fat','spice']
   };
   return Boolean(role && allowed[mealKey]?.includes(role));
 }
@@ -421,6 +424,7 @@ function buildSynchronizedMealText(day, mealKey) {
   const vegetables = names(['vegetable']);
   const fruits = names(['fruit']);
   const extras = names(['nuts','fat']);
+  const spices = names(['spice']);
   const steps = [];
   if (mealKey === 'breakfast' || mealKey === 'snack') {
     if (grains) steps.push('Приготовь ' + grains + ' до готовности');
@@ -436,6 +440,7 @@ function buildSynchronizedMealText(day, mealKey) {
     if (fruits) steps.push('подай ' + fruits + ' отдельно');
   }
   if (extras) steps.push('добавь ' + extras + ' к готовому блюду');
+  if (spices) steps.push('приправь ' + spices);
   const ingredientNames = day[mealKey + 'Ingredients'].map(item => item.name || FOOD_CATALOG[item.foodId].name);
   return {
     title: ('Сбалансированное блюдо: ' + ingredientNames.join(', ')).slice(0,120),
