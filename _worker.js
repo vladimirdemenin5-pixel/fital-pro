@@ -750,7 +750,7 @@ function parseGroqDelayMs(value) {
   if (Number.isFinite(seconds) && seconds >= 0) return Math.round(seconds * 1000);
   let total = 0;
   const units = { ms: 1, s: 1000, m: 60000, h: 3600000 };
-  for (const match of input.matchAll(/(\\d+(?:\\.\\d+)?)\\s*(ms|s|m|h)/g)) {
+  for (const match of input.matchAll(/(\d+(?:\.\d+)?)\s*(ms|s|m|h)/g)) {
     total += Number(match[1]) * units[match[2]];
   }
   return total;
