@@ -89,7 +89,7 @@ jobs:
           echo "Cloudflare Preview: $FITALPRO_PREVIEW_URL"
 
       # Live AI plan generation is opt-in; this diagnostic never writes to D1 or creates payments.
-      - name: Verify real AI plans for all three tariffs without database writes
+      - name: Verify real 14-day PRO AI menu and training plan without database writes
         if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-live-ai-check')
         env:
           FITALPRO_WORKER_URL: ${{ steps.preview.outputs.url }}
