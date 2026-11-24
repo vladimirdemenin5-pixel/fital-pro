@@ -315,6 +315,23 @@ try {
   assert.equal(groqRepeatedRateLimitCalls, 3, 'Groq inference must survive two consecutive TPM windows before succeeding on its third bounded attempt');
   assert.equal(recoveredRepeatedRateLimit.choices[0].message.content, '{"ok":true}');
 
+  let groqDailyQuotaCalls = 0;
+  globalThis.fetch = async () => {
+    groqDailyQuotaCalls++;
+    return new Response(JSON.stringify({
+      error: { message: 'Rate limit reached on tokens per day (TPD): Limit 200000, Used 196704, Requested 4256' }
+    }), {
+      status: 429,
+      headers: { 'content-type': 'application/json', 'retry-after': '3600' }
+    });
+  };
+  await assert.rejects(
+    () => runGroqInferenceWithTimeout({ GROQ_API_KEY: 'test-groq-key' }, 'openai/gpt-oss-20b', {}, 1000),
+    /Groq inference HTTP 429/,
+    'a daily token quota must be surfaced immediately so runPlanModel can fail over to another provider'
+  );
+  assert.equal(groqDailyQuotaCalls, 1, 'a daily token quota must not waste retries waiting for an hourly reset');
+
   let groqPermanentCalls = 0;
   globalThis.fetch = async () => {
     groqPermanentCalls++;
