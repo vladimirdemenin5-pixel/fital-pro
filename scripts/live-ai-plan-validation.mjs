@@ -13,24 +13,40 @@ if (endpointUrl.protocol !== 'https:' || !allowedHostname) {
   throw new Error('Refusing live AI plan check: target must be the explicitly selected production Worker or PR #53 Preview Worker.');
 }
 
-function postJson(url, body, headers, timeoutMs) {
-  return new Promise((resolve, reject) => {
-    const request = httpsRequest(url, { method: 'POST', headers }, response => {
-      let text = '';
-      response.setEncoding('utf8');
-      response.on('data', chunk => { text += chunk; });
-      response.on('end', () => {
-        let data = {};
-        try { data = JSON.parse(text); } catch {}
-        const status = response.statusCode || 0;
-        resolve({ ok: status >= 200 && status < 300, status, data });
+async function postJson(url, body, headers, timeoutMs) {
+  const transientCodes = new Set(['ECONNRESET', 'ECONNREFUSED', 'EPIPE', 'ETIMEDOUT', 'EAI_AGAIN']);
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await new Promise((resolve, reject) => {
+        const request = httpsRequest(url, { method: 'POST', headers }, response => {
+          let text = '';
+          response.setEncoding('utf8');
+          response.on('data', chunk => { text += chunk; });
+          response.on('end', () => {
+            let data = {};
+            try { data = JSON.parse(text); } catch {}
+            const status = response.statusCode || 0;
+            resolve({ ok: status >= 200 && status < 300, status, data });
+          });
+        });
+        request.setTimeout(timeoutMs, () => {
+          const error = new Error('AI diagnostic timed out.');
+          error.code = 'ETIMEDOUT';
+          request.destroy(error);
+        });
+        request.on('error', reject);
+        request.write(JSON.stringify(body));
+        request.end();
       });
-    });
-    request.setTimeout(timeoutMs, () => request.destroy(new Error('AI diagnostic timed out.')));
-    request.on('error', reject);
-    request.write(JSON.stringify(body));
-    request.end();
-  });
+    } catch (error) {
+      if (!transientCodes.has(error?.code) || attempt === maxAttempts) throw error;
+      const waitMs = 1500 * attempt;
+      console.warn(`Temporary AI diagnostic connection error (${error.code}); retrying attempt ${attempt + 1}/${maxAttempts} in ${waitMs} ms.`);
+      await new Promise(resolve => setTimeout(resolve, waitMs));
+    }
+  }
+  throw new Error('AI diagnostic request failed after transient retries.');
 }
 
 async function getHealth() {
