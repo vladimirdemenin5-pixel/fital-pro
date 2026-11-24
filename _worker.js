@@ -875,9 +875,11 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
   // GPT-OSS gives strict schema-constrained plans. If both 8K-TPM model
   // buckets are saturated, Compound Mini is a high-throughput JSON-mode fallback;
   // the same full server-side nutrition and preference validator remains mandatory.
-  const groqModels = preferredGroqModel === 'openai/gpt-oss-120b'
-    ? ['groq:openai/gpt-oss-120b', 'groq:openai/gpt-oss-20b', 'groq/compound-mini']
-    : ['groq:openai/gpt-oss-20b', 'groq:openai/gpt-oss-120b', 'groq/compound-mini'];
+  const groqModels = preferredGroqModel === 'groq/compound-mini'
+    ? ['groq/compound-mini', 'groq:openai/gpt-oss-20b', 'groq:openai/gpt-oss-120b']
+    : preferredGroqModel === 'openai/gpt-oss-120b'
+      ? ['groq:openai/gpt-oss-120b', 'groq:openai/gpt-oss-20b', 'groq/compound-mini']
+      : ['groq:openai/gpt-oss-20b', 'groq:openai/gpt-oss-120b', 'groq/compound-mini'];
   const models = [
     ...(groqConfigured ? groqModels : []),
     ...(!groqRequired && env.AI ? [MODEL, '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'] : [])
@@ -1245,8 +1247,10 @@ async function generateAiPlan(profile, planKey, env) {
 
     const generated = await runPlanModel(env, prompt, profile, planKey, chunkDays, offset + 1, preferredGroqModel);
     providersUsed.add(generated.provider);
-    if (generated.provider === 'groq' && generated.model.startsWith('groq:')) {
-      preferredGroqModel = generated.model.slice(5);
+    if (generated.provider === 'groq') {
+      preferredGroqModel = generated.model.startsWith('groq:')
+        ? generated.model.slice(5)
+        : generated.model;
     }
     const raw = generated.text;
     const normalized = raw.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
