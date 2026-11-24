@@ -812,7 +812,8 @@ async function runGroqInferenceWithTimeout(env, model, inputs, timeoutMs = 60000
         error.status = response.status;
         const retryAfterMs = parseGroqDelayMs(response.headers?.get('retry-after'));
         const tokenResetMs = parseGroqDelayMs(response.headers?.get('x-ratelimit-reset-tokens'));
-        error.retryAfterMs = retryAfterMs || tokenResetMs || (response.status === 429 ? 5000 : 700);
+        // A short retry-after can precede the actual TPM reset; wait for the later signal.
+        error.retryAfterMs = Math.max(retryAfterMs, tokenResetMs, response.status === 429 ? 1000 : 700);
         throw error;
       }
       try {
