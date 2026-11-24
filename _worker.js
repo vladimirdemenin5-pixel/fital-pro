@@ -284,7 +284,8 @@ function normalizeMealIngredients(raw, enforceFoodPortionLimits = false) {
     const foodId = Array.isArray(item) && item.length === 2 ? item[0] : item?.foodId;
     const grams = Array.isArray(item) && item.length === 2 ? item[1] : item?.grams;
     const maxInputGrams = enforceFoodPortionLimits ? 5000 : 500;
-    if (typeof foodId !== 'string' || !Object.hasOwn(FOOD_CATALOG, foodId) || !Number.isSafeInteger(grams) || grams < 5 || grams > maxInputGrams) return null;
+    const minInputGrams = enforceFoodPortionLimits ? 1 : 5;
+    if (typeof foodId !== 'string' || !Object.hasOwn(FOOD_CATALOG, foodId) || !Number.isSafeInteger(grams) || grams < minInputGrams || grams > maxInputGrams) return null;
     if (enforceFoodPortionLimits) {
       const maximum = MAX_MEAL_INGREDIENT_GRAMS[foodId] || 250;
       normalized.push({ foodId, name: FOOD_CATALOG[foodId].name, grams: Math.max(5, Math.min(maximum, grams)) });
@@ -794,7 +795,7 @@ async function runAiInferenceWithTimeout(env, model, inputs, timeoutMs = AI_MODE
   }
 }
 
-async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 1, preferredGroqModel = 'openai/gpt-oss-20b') {
+async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 1, preferredGroqModel = 'openai/gpt-oss-20b', providerState = {}) {
   const messages = [
     { role: 'system', content: 'Ты Fital Pro. Отвечай только валидным JSON без Markdown и пояснений.' },
     { role: 'user', content: prompt }
@@ -811,8 +812,8 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
     ? ['groq:openai/gpt-oss-120b', 'groq:openai/gpt-oss-20b']
     : ['groq:openai/gpt-oss-20b', 'groq:openai/gpt-oss-120b'];
   const models = [
-    ...(groqConfigured ? groqModels : []),
-    ...(!groqRequired && env.AI ? [MODEL, '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'] : [])
+    ...(groqConfigured && !providerState.groqDailyQuotaExhausted ? groqModels : []),
+    ...(!groqRequired && env.AI ? [MODEL, '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b', '@cf/zai-org/glm-4.7-flash'] : [])
   ];
   const diagnostics = [];
   const rejectionDiagnostics = [];
@@ -831,6 +832,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
       : messages;
     try {
       const isGemma = model === MODEL;
+      const isGlmFlash = model === '@cf/zai-org/glm-4.7-flash';
       const isGptOss = model === '@cf/openai/gpt-oss-120b' || model === '@cf/openai/gpt-oss-20b';
       const isGroq = model.startsWith('groq:');
       const groqModelId = model.startsWith('groq:') ? model.slice(5) : model;
@@ -865,7 +867,8 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
               reasoning_effort: 'low'
             } : {
               max_completion_tokens: 6200,
-              ...(isGemma ? { response_format: { type: 'json_object' } } : {}),
+              ...(isGemma || isGlmFlash ? { response_format: { type: 'json_object' } } : {}),
+              ...(isGlmFlash ? { chat_template_kwargs: { enable_thinking: false } } : {})
             })
           };
       const result = isGroq
@@ -913,6 +916,11 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
       const detail = clean(error?.message, 240) || 'unknown model error';
       diagnostics.push(model + ': request-error=' + detail);
       console.error('Fital Pro AI model failed:', model, detail, 'elapsedMs=' + (Date.now() - modelStartedAt));
+      if (error?.dailyQuota || /Groq inference HTTP 429\b[\s\S]{0,240}(?:tokens? per day|\\bTPD\\b)/i.test(detail)) {
+        // A daily Groq quota will not reset during this plan generation. Do not
+        // waste every later day-block retrying both exhausted Groq models.
+        providerState.groqDailyQuotaExhausted = true;
+      }
       if (/(?:4006|3036|daily free allocation|used up your daily free allocation)/i.test(detail)) {
         throw new Error('Дневной бесплатный лимит ИИ Cloudflare исчерпан. Сейчас новый план создать нельзя; заказ и оплата не создаются. Попробуйте позже.', { cause: error });
       }
@@ -1125,6 +1133,7 @@ async function generateAiPlan(profile, planKey, env) {
   const totalDays = PLANS[planKey].menuDays;
   const fullWeek = [];
   const providersUsed = new Set();
+  const providerState = { groqDailyQuotaExhausted: false };
   let intro = '';
   const tips = [];
   // Premium is generated after shorter plans and needs many more blocks; start it on
@@ -1172,7 +1181,7 @@ async function generateAiPlan(profile, planKey, env) {
       'БЛОК: дни ' + (offset + 1) + '–' + (offset + chunkDays) + ' из ' + totalDays + '.'
     ].join('\n');
 
-    const generated = await runPlanModel(env, prompt, profile, planKey, chunkDays, offset + 1, preferredGroqModel);
+    const generated = await runPlanModel(env, prompt, profile, planKey, chunkDays, offset + 1, preferredGroqModel, providerState);
     providersUsed.add(generated.provider);
     if (generated.provider === 'groq') {
       preferredGroqModel = generated.model.startsWith('groq:')
