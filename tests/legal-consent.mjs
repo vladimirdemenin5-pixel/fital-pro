@@ -88,7 +88,7 @@ assert.ok(html.includes('id="progressTool"'));
 assert.ok(html.includes('id="chatTool"'));
 assert.ok(worker.includes('trainingDay: includesTraining && isScheduledTrainingDay(startDay + index, profile.days)'), 'training-day flag must be derived from the server-owned absolute schedule, not the AI response');
 assert.ok(worker.includes("JSON.stringify({ ...profile, name: 'Клиент' })"), 'AI providers must not receive the customer name');
-assert.ok(worker.includes("max_completion_tokens: 4200"), 'Qwen/GLM/Gemma plan requests must use the documented max_completion_tokens field and the bounded 4200-token plan output limit');
+assert.ok(worker.includes("max_completion_tokens: 6200"), 'Qwen/GLM/Gemma plan requests must use the documented max_completion_tokens field and the bounded 6200-token plan output limit');
 assert.ok(worker.includes("...(env.AI ? ['@cf/zai-org/glm-4.7-flash', '@cf/meta/llama-3.1-8b-instruct-fast', MODEL] : [])"),
   'the general AI chat must retain the supported Cloudflare GLM, Llama and Gemma fallback order when the binding is present');
 assert.ok(worker.includes("...(clean(env.GROQ_API_KEY, 300) ? ['groq:openai/gpt-oss-20b'] : [])"),
