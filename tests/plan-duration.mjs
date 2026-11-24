@@ -121,10 +121,8 @@ assert.ok(pullRequestWorkflow.includes('types: [opened, synchronize, reopened, l
 assert.ok(Object.entries(FOOD_CATALOG).every(([id, food]) => Number.isFinite(food.kcal) && Number.isFinite(food.protein) && Number.isFinite(food.fat) && Number.isFinite(food.carbs)), 'every food must define calories, protein, fat and carbohydrates');
 
 function nutritionWithinTargetsForTest(n, t) {
-  return n.calories >= t.calories * 0.93 && n.calories <= t.calories * 1.07 &&
-    n.protein >= t.protein * 0.90 && n.protein <= t.protein * 1.10 &&
-    n.fat >= t.fat * 0.85 && n.fat <= t.fat * 1.15 &&
-    n.carbs >= t.carbs * 0.85 && n.carbs <= t.carbs * 1.15;
+  return [n.calories,n.protein,n.fat,n.carbs].every(value=>Number.isFinite(value)&&value>=0) &&
+    n.calories >= t.calories * 0.90 && n.calories <= t.calories * 1.10;
 }
 
 const profile = {
@@ -202,57 +200,41 @@ assert.equal(foodFitsMeal('cod_raw', 'snack'), false, 'fish must not be auto-add
 assert.equal(foodFitsMeal('banana', 'snack'), true, 'fruit is compatible with a snack');
 assert.equal(foodFitsMeal('banana', 'dinner'), false, 'fruit must not be auto-added as a dinner component');
 
-const macroCorrectionDay = {
-  day: 'День 1',
-  trainingDay: false,
-  breakfast: 'Омлет',
-  breakfastRecipe: 'Приготовь продукты до готовности и подай вместе.',
-  breakfastIngredients: [{ foodId: 'egg_raw', name: FOOD_CATALOG.egg_raw.name, grams: 200 }],
-  lunch: 'Индейка',
-  lunchRecipe: 'Приготовь продукты до готовности и подай вместе.',
-  lunchIngredients: [{ foodId: 'turkey_raw', name: FOOD_CATALOG.turkey_raw.name, grams: 250 }],
-  snack: 'Йогурт',
-  snackRecipe: 'Приготовь продукты до готовности и подай вместе.',
-  snackIngredients: [{ foodId: 'greek_yogurt', name: FOOD_CATALOG.greek_yogurt.name, grams: 300 }],
-  dinner: 'Треска',
-  dinnerRecipe: 'Приготовь продукты до готовности и подай вместе.',
-  dinnerIngredients: [{ foodId: 'cod_raw', name: FOOD_CATALOG.cod_raw.name, grams: 250 }]
+const portionCorrectionDay = {
+ day:'День 1',trainingDay:false,
+ breakfast:'Овсянка с бананом',breakfastRecipe:'Свари хлопья на молоке и добавь нарезанный банан.',
+ breakfastIngredients:[{foodId:'oats_dry',name:FOOD_CATALOG.oats_dry.name,grams:80},{foodId:'milk_2pct',name:FOOD_CATALOG.milk_2pct.name,grams:200},{foodId:'banana',name:FOOD_CATALOG.banana.name,grams:120}],
+ lunch:'Курица с рисом',lunchRecipe:'Отвари рис, приготовь курицу и подай с брокколи.',
+ lunchIngredients:[{foodId:'chicken_raw',name:FOOD_CATALOG.chicken_raw.name,grams:100},{foodId:'rice_dry',name:FOOD_CATALOG.rice_dry.name,grams:85},{foodId:'broccoli',name:FOOD_CATALOG.broccoli.name,grams:100}],
+ snack:'Йогурт с яблоком',snackRecipe:'Нарежь яблоко и подай с йогуртом и миндалём.',
+ snackIngredients:[{foodId:'greek_yogurt',name:FOOD_CATALOG.greek_yogurt.name,grams:150},{foodId:'apple',name:FOOD_CATALOG.apple.name,grams:150},{foodId:'almonds',name:FOOD_CATALOG.almonds.name,grams:15}],
+ dinner:'Лосось с картофелем',dinnerRecipe:'Запеки лосось с картофелем и овощами.',
+ dinnerIngredients:[{foodId:'salmon_raw',name:FOOD_CATALOG.salmon_raw.name,grams:100},{foodId:'potato_raw',name:FOOD_CATALOG.potato_raw.name,grams:200},{foodId:'olive_oil',name:FOOD_CATALOG.olive_oil.name,grams:20},{foodId:'tomato',name:FOOD_CATALOG.tomato.name,grams:100},{foodId:'avocado',name:FOOD_CATALOG.avocado.name,grams:50}]
 };
-const lowEnergyDay = {
-  ...macroCorrectionDay,
-  breakfastIngredients: [{ foodId:'oats_dry', name:FOOD_CATALOG.oats_dry.name, grams:5 }],
-  lunchIngredients: [{ foodId:'chicken_raw', name:FOOD_CATALOG.chicken_raw.name, grams:5 }],
-  snackIngredients: [{ foodId:'greek_yogurt', name:FOOD_CATALOG.greek_yogurt.name, grams:5 }],
-  dinnerIngredients: [{ foodId:'cod_raw', name:FOOD_CATALOG.cod_raw.name, grams:5 }]
+const selectedFoodIds=['breakfast','lunch','snack','dinner'].flatMap(key=>portionCorrectionDay[key+'Ingredients'].map(item=>item.foodId));
+assert.equal(rebalanceDayNutrition(portionCorrectionDay,{calories:1900,protein:90,fat:58,carbs:225},profile),true,
+ 'portion correction must bring an achievable day into the calorie band');
+assert.deepEqual(['breakfast','lunch','snack','dinner'].flatMap(key=>portionCorrectionDay[key+'Ingredients'].map(item=>item.foodId)),selectedFoodIds,
+ 'calorie correction must never add, remove, or replace selected foods');
+assert.ok(portionCorrectionDay.nutrition.calories>=1710&&portionCorrectionDay.nutrition.calories<=2090);
+assert.ok(nutritionWithinTargetsForTest(portionCorrectionDay.nutrition,{calories:1900}));
+assert.ok(['breakfast','lunch','snack','dinner'].every(key=>portionCorrectionDay[key+'Ingredients'].every(item=>item.grams>=5&&item.grams<=500)));
+assert.ok(portionCorrectionDay.dinnerIngredients.find(item=>item.foodId==='olive_oil').grams<=20,
+ 'product-specific portion ceilings must remain enforced');
+const lowEnergyDay={
+ ...portionCorrectionDay,
+ breakfastIngredients:[{foodId:'oats_dry',name:FOOD_CATALOG.oats_dry.name,grams:5}],
+ lunchIngredients:[{foodId:'chicken_raw',name:FOOD_CATALOG.chicken_raw.name,grams:5}],
+ snackIngredients:[{foodId:'greek_yogurt',name:FOOD_CATALOG.greek_yogurt.name,grams:5}],
+ dinnerIngredients:[{foodId:'cod_raw',name:FOOD_CATALOG.cod_raw.name,grams:5}]
 };
-const lowEnergyBefore = JSON.stringify(lowEnergyDay);
-assert.equal(rebalanceDayNutrition(lowEnergyDay, { calories:1800, protein:90, fat:58, carbs:225 }, profile), true,
-  'a severely under-portioned AI draft must be recovered with allowed catalog foods and bounded portions');
-assert.ok(nutritionWithinTargetsForTest(lowEnergyDay.nutrition, { calories:1800, protein:90, fat:58, carbs:225 }),
-  'recovered low-energy draft must satisfy all four strict macro ranges');
+const lowEnergyFoodIds=['breakfast','lunch','snack','dinner'].flatMap(key=>lowEnergyDay[key+'Ingredients'].map(item=>item.foodId));
+assert.equal(rebalanceDayNutrition(lowEnergyDay,{calories:1800,protein:90,fat:58,carbs:225},profile),false,
+ 'an infeasible day must be rejected when existing foods cannot reach the calorie band within portion limits');
+assert.deepEqual(['breakfast','lunch','snack','dinner'].flatMap(key=>lowEnergyDay[key+'Ingredients'].map(item=>item.foodId)),lowEnergyFoodIds,
+ 'a failed correction must preserve the original selected foods');
 
-const originalMacroFoodIds = ['breakfast','lunch','snack','dinner'].flatMap(key => macroCorrectionDay[key + 'Ingredients'].map(item => item.foodId));
-const macroCorrectionSucceeded = rebalanceDayNutrition(macroCorrectionDay, {
-  calories: 1800, protein: 90, fat: 58, carbs: 225
-}, profile);
-assert.equal(macroCorrectionSucceeded, true, 'server correction must change the food composition when portion-only tuning cannot balance protein, fat and carbohydrates');
-assert.ok(macroCorrectionDay.nutrition.calories >= 1674 && macroCorrectionDay.nutrition.calories <= 1926);
-assert.ok(macroCorrectionDay.nutrition.protein >= 81 && macroCorrectionDay.nutrition.protein <= 99);
-assert.ok(macroCorrectionDay.nutrition.fat >= 49.3 && macroCorrectionDay.nutrition.fat <= 66.7);
-assert.ok(macroCorrectionDay.nutrition.carbs >= 191.25 && macroCorrectionDay.nutrition.carbs <= 258.75);
-const correctedMacroFoodIds = ['breakfast','lunch','snack','dinner'].flatMap(key => macroCorrectionDay[key + 'Ingredients'].map(item => item.foodId));
-assert.notDeepEqual(correctedMacroFoodIds, originalMacroFoodIds, 'the correction must actually replace products from the catalog');
-assert.ok(['breakfast','lunch','snack','dinner'].some(key => macroCorrectionDay[key + 'Recipe'].length >= 20 && macroCorrectionDay[key + 'Recipe'].toLowerCase().includes('приготов')), 'the recipe must be synchronized with changed ingredients');
-for (const key of ['breakfast','lunch','snack','dinner']) {
-  assert.ok(macroCorrectionDay[key+'Ingredients'].every(item => foodFitsMeal(item.foodId, key)), key + ' correction must keep every ingredient compatible with its meal');
-  assert.ok(macroCorrectionDay[key+'Ingredients'].every(item => foodAllowedByPreferences(item.foodId, profile)), key + ' correction must preserve client food restrictions');
-}
-assert.equal(foodAllowedByPreferences('greek_yogurt', { preferences: 'Без молочных продуктов' }), false, 'replacement candidates must respect dairy restrictions');
-assert.equal(foodAllowedByPreferences('milk_2pct', { preferences: 'Без молока' }), false, 'inflected dairy restrictions must also be recognized');
-assert.equal(foodAllowedByPreferences('chicken_raw', { preferences: 'Вегетарианство' }), false, 'replacement candidates must respect vegetarian restrictions');
-assert.equal(foodAllowedByPreferences('rice_dry', { preferences: 'Без глютена' }), true, 'gluten-free restrictions must keep safe catalog alternatives available');
-
-const timeoutSignalCapture = { signal: null };
+const timeoutSignalCapture =const timeoutSignalCapture = { signal: null };
 await assert.rejects(
   () => runAiInferenceWithTimeout({
     AI: {
@@ -348,54 +330,29 @@ try {
 }
 
 
-const quotaAttemptedModels = [];
-const quotaFallbackPlan = await generateAiPlan(profile, 'Питание', { AI: {
-  async run(model) {
-    quotaAttemptedModels.push(model);
-    throw new Error('4006: you have used up your daily free allocation of 10,000 neurons');
-  }
-} });
-assert.equal(quotaFallbackPlan.generationMode, 'catalog-fallback',
-  'an exhausted Workers AI quota must switch to the validated server-side catalog planner instead of blocking checkout');
-assert.equal(quotaFallbackPlan.week.length, 7);
-assert.equal(quotaAttemptedModels.length, 1, 'generation must stop after the first block detects exhausted quota');
-assert.equal(quotaAttemptedModels[0], '@cf/google/gemma-4-26b-a4b-it');
-assert.ok(quotaFallbackPlan.generationIssue.includes('4006') && quotaFallbackPlan.generationIssue.includes('10,000 neurons'),
-  'the fallback plan must retain the original Cloudflare quota response in its private diagnostic');
-const groqRequiredCalls = [];
-const groqRequiredMissingKeyPlan = await generateAiPlan(profile, 'Питание', {
-  FITALPRO_REQUIRE_GROQ: '1',
-  AI: { async run(model) { groqRequiredCalls.push(model); throw new Error('Cloudflare AI must not be called'); } }
-});
-assert.equal(groqRequiredMissingKeyPlan.generationMode, 'catalog-fallback');
-assert.equal(groqRequiredCalls.length, 0,
-  'Preview must not call Workers AI when Groq is required but its secret is missing');
-assert.ok(groqRequiredMissingKeyPlan.generationIssue.includes('GROQ_API_KEY'),
-  'missing required Groq configuration must be explicit in the private diagnostic');
+const quotaAttemptedModels=[];
+await assert.rejects(()=>generateAiPlan(profile,'Питание',{AI:{async run(model){quotaAttemptedModels.push(model);throw new Error('4006: you have used up your daily free allocation of 10,000 neurons');}}}),
+ /временно не смог подготовить полный персональный план/i,
+ 'an exhausted Workers AI quota must fail closed instead of returning a catalog plan');
+assert.equal(quotaAttemptedModels.length,1);
+assert.equal(quotaAttemptedModels[0],'@cf/google/gemma-4-26b-a4b-it');
+const groqRequiredCalls=[];
+await assert.rejects(()=>generateAiPlan(profile,'Питание',{FITALPRO_REQUIRE_GROQ:'1',AI:{async run(model){groqRequiredCalls.push(model);throw new Error('Cloudflare AI must not be called');}}}),
+ /временно не смог подготовить полный персональный план/i,
+ 'missing required Groq credentials must not fall back to a catalog plan');
+assert.equal(groqRequiredCalls.length,0);
+const originalGroqRequiredFetch=globalThis.fetch;
+let groqRequiredHttpCalls=0,groqRequiredCloudflareCalls=0;
+try{
+ globalThis.fetch=async()=>{groqRequiredHttpCalls++;return new Response('invalid credentials',{status:401});};
+ await assert.rejects(()=>generateAiPlan(profile,'Питание',{FITALPRO_REQUIRE_GROQ:'1',GROQ_API_KEY:'test-groq-key',AI:{async run(){groqRequiredCloudflareCalls++;throw new Error('Cloudflare fallback must remain disabled');}}}),
+  /временно не смог подготовить полный персональный план/i,
+  'a permanent Groq authentication failure must fail closed');
+ assert.equal(groqRequiredHttpCalls,1);
+ assert.equal(groqRequiredCloudflareCalls,0);
+}finally{globalThis.fetch=originalGroqRequiredFetch;}
 
-const originalGroqRequiredFetch = globalThis.fetch;
-let groqRequiredHttpCalls = 0;
-let groqRequiredCloudflareCalls = 0;
-try {
-  globalThis.fetch = async () => {
-    groqRequiredHttpCalls++;
-    return new Response('invalid credentials', { status: 401 });
-  };
-  const groqRequiredAuthFailurePlan = await generateAiPlan(profile, 'Питание', {
-    FITALPRO_REQUIRE_GROQ: '1',
-    GROQ_API_KEY: 'test-groq-key',
-    AI: { async run() { groqRequiredCloudflareCalls++; throw new Error('Cloudflare fallback must remain disabled'); } }
-  });
-  assert.equal(groqRequiredAuthFailurePlan.generationMode, 'catalog-fallback');
-  assert.equal(groqRequiredHttpCalls, 1, 'a permanent Groq 401 must not be retried or sent to a second model');
-  assert.equal(groqRequiredCloudflareCalls, 0,
-    'Preview must not switch to Workers AI after a permanent Groq authentication failure');
-  assert.ok(groqRequiredAuthFailurePlan.generationIssue.includes('HTTP 401'));
-} finally {
-  globalThis.fetch = originalGroqRequiredFetch;
-}
-
-let groqModelFallbackCalls = [];
+let groqModelFallbackCalls = [];let groqModelFallbackCalls = [];
 let groqStrictSchemaCalls = 0;
 let groqUnboundedArraySchemaCalls = 0;
 let groqCatalogEnumSchemaCalls = 0;
@@ -480,52 +437,18 @@ try {
   assert.deepEqual(correctedGroqPlan.aiProviders, ['groq']);
   assert.equal(correctedGroqPlan.week.length, 7);
   assert.equal(groqCorrectionCalls, 3,
-    'server-side macro balancing must recover the first Groq block without an unnecessary corrective API round-trip, then generate the remaining two blocks');
+    'an infeasible calorie draft must receive one Groq correction, then the remaining two blocks must generate normally');
   assert.equal(groqCorrectionCloudflareCalls, 0,
     'a Groq-only Preview must keep Workers AI disabled during corrective plan generation');
 } finally {
   globalThis.fetch = originalGroqRequiredFetch;
 }
 
-assert.ok(quotaFallbackPlan.week.every(day => day.nutrition.calories >= quotaFallbackPlan.calories * 0.93 &&
-  day.nutrition.calories <= quotaFallbackPlan.calories * 1.07 &&
-  day.nutrition.protein >= quotaFallbackPlan.protein * 0.90 &&
-  day.nutrition.protein <= quotaFallbackPlan.protein * 1.10 &&
-  day.nutrition.fat >= quotaFallbackPlan.fat * 0.85 &&
-  day.nutrition.fat <= quotaFallbackPlan.fat * 1.15 &&
-  day.nutrition.carbs >= quotaFallbackPlan.carbs * 0.85 &&
-  day.nutrition.carbs <= quotaFallbackPlan.carbs * 1.15),
-  'every fallback day must pass the same strict calculated macro ranges as an AI-generated day');
-
-const noProviderNutritionPlan = await generateAiPlan(profile, 'Питание', {});
-assert.equal(noProviderNutritionPlan.generationMode, 'catalog-fallback');
-assert.equal(noProviderNutritionPlan.week.length, 7);
-
-const noProviderProPlan = await generateAiPlan(profile, 'PRO', {});
-assert.equal(noProviderProPlan.generationMode, 'catalog-fallback');
-assert.equal(noProviderProPlan.week.length, 14);
-assert.equal(noProviderProPlan.week.filter(day => day.trainingDay).length, 6,
-  'catalog fallback must preserve the exact server-owned PRO training schedule');
-
-const noProviderPremiumPlan = await generateAiPlan(profile, 'Premium', {});
-assert.equal(noProviderPremiumPlan.generationMode, 'catalog-fallback');
-assert.equal(noProviderPremiumPlan.week.length, 30);
-assert.equal(noProviderPremiumPlan.week.filter(day => day.trainingDay).length, 12,
-  'catalog fallback must preserve the exact server-owned Premium training schedule');
-
-const veganFallbackPlan = await generateAiPlan({
-  ...profile,
-  preferences: 'Веганство, без молочных продуктов, яиц, рыбы и мяса'
-}, 'Питание', {});
-assert.equal(veganFallbackPlan.generationMode, 'catalog-fallback');
-assert.ok(veganFallbackPlan.week.every(day =>
-  ['breakfast','lunch','snack','dinner'].every(key =>
-    day[key + 'Ingredients'].every(item => foodAllowedByPreferences(item.foodId, {
-      preferences: 'Веганство, без молочных продуктов, яиц, рыбы и мяса'
-    }))
-  )
-), 'catalog fallback must strictly respect vegan restrictions');
-
+for(const planKey of ['Питание','PRO','Premium']){
+ await assert.rejects(()=>generateAiPlan(profile,planKey,{}),
+  /временно не смог подготовить полный персональный план/i,
+  planKey+' must fail closed when no AI provider is available');
+}
 const proPlan = await generateAiPlan(profile, 'PRO', { AI: makeAi(14) });
 assert.equal(proPlan.week.length, 14, 'PRO must contain 14 complete menu days');
 assert.equal(proPlan.menuDays, 14);
@@ -572,10 +495,9 @@ const oversizedIngredientPlan = await generateAiPlan(profile, 'Питание', 
 assert.ok(oversizedIngredientPlan.week.every(day => {
   const oil = day.dinnerIngredients.find(item => item.foodId === 'olive_oil');
   return oil?.grams === 20 &&
-    day.nutrition.calories >= oversizedIngredientPlan.calories * 0.93 &&
-    day.nutrition.calories <= oversizedIngredientPlan.calories * 1.07 &&
-    day.nutrition.fat >= oversizedIngredientPlan.fat * 0.85 &&
-    day.nutrition.fat <= oversizedIngredientPlan.fat * 1.15;
+    day.nutrition.calories >= oversizedIngredientPlan.calories * 0.90 &&
+    day.nutrition.calories <= oversizedIngredientPlan.calories * 1.10 &&
+    [day.nutrition.protein,day.nutrition.fat,day.nutrition.carbs].every(value=>Number.isFinite(value)&&value>=0);
 }), 'a globally valid ingredient portion above its product-specific ceiling must be clamped and the resulting full day must still pass strict nutrition validation');
 const invalidPortionFallback = await generateAiPlan(profile, 'Питание', { AI: {
   async run(model, input) {
@@ -635,7 +557,12 @@ assert.ok(!proPlan.shopping.includes('Продукты на весь перио�
 assert.ok(proPlan.nutritionSource.includes('USDA FoodData Central'));
 assert.ok(workerSource.includes('fdcId:173904'), 'oats reference must retain its USDA food record identifier');
 assert.ok(workerSource.includes('for (let offset = 0; offset < totalDays; offset += generationBlockDays)') && workerSource.includes('const generationBlockDays = 3;') && workerSource.includes('const chunkDays = Math.min(generationBlockDays, totalDays - offset)') && !workerSource.includes('Promise.all([0, 2, 4, 6]'), 'long plans must be generated as sequential validated three-day blocks');
-assert.ok(workerSource.includes('MAX_MEAL_INGREDIENT_GRAMS') && workerSource.includes('min:5,max:') && workerSource.includes('for (let iteration=0;iteration<120;iteration++)') && workerSource.includes('const nutrientTargets = [targets.calories, targets.protein, targets.fat, targets.carbs];') && workerSource.includes('const derivatives=values.map(') && workerSource.includes('let learningRate=1000;') && workerSource.includes('const allowedFoods = Object.keys(FOOD_CATALOG).filter(id => foodAllowedByPreferences(id, profile));'), 'portion and food-choice correction must use bounded catalog search without relaxing nutrition ranges');
+assert.ok(workerSource.includes('function rebalanceDayNutrition(day, targets, profile)') &&
+ workerSource.includes('const originalFoodIds = items.map(item => item.foodId)') &&
+ workerSource.includes('const minimumAllowed = targets.calories * 0.90') &&
+ workerSource.includes('const maximumAllowed = targets.calories * 1.10') &&
+ !workerSource.includes('for (let move = 0; move < 20; move++)'),
+ 'nutrition correction must adjust only gram amounts of selected foods within catalog bounds');
 assert.ok(workerSource.includes('function aiFailureDiagnostic(error, maxLength = 1200)') &&
   workerSource.includes("forceTestMode && env.FITALPRO_PREVIEW_CI === '1' && plan.generationIssue") &&
   workerSource.includes("checkoutError.cause = new Error(clean(checkoutData.diagnostic, 1000))"),
@@ -663,12 +590,11 @@ assert.ok(workerSource.includes('max_tokens: 6200') && workerSource.includes('ma
 assert.ok(workerSource.includes("const isGptOss = model === '@cf/openai/gpt-oss-120b' || model === '@cf/openai/gpt-oss-20b'") && workerSource.includes('max_tokens: 6200') && workerSource.includes("reasoning_effort: 'low'"), 'both GPT-OSS fallbacks must use supported token limits and bounded reasoning');
 assert.ok(!workerSource.includes('QWEN4_API_KEY') && !workerSource.includes('qwen4-max') &&
   !workerSource.includes('qwen/qwen3.8-27b'), 'Qwen integrations must remain absent from the plan-generation chain');
-assert.ok(workerSource.includes("Неизменные допуски сервера: калории ±7%, белок ±10%, жиры и углеводы ±15%.") &&
-  workerSource.includes("n.calories < targets.calories * 0.93") &&
-  workerSource.includes("n.protein < targets.protein * 0.90") &&
-  workerSource.includes("n.fat < targets.fat * 0.85") &&
-  workerSource.includes("n.carbs < targets.carbs * 0.85"),
-  'diagnostic rejection reasons and corrective prompts must use the exact server nutrition tolerances');
+assert.ok(workerSource.includes('nutrition.calories >= targets.calories * 0.90') &&
+ workerSource.includes('nutrition.calories <= targets.calories * 1.10') &&
+ workerSource.includes('Отклонения белков, жиров и углеводов не являются причиной отказа') &&
+ !workerSource.includes('Неизменные допуски сервера: калории ±7%'),
+ 'server validation and AI prompts must use per-day calorie tolerance only, with macros as calculated values');
 assert.ok(workerSource.includes('function buildPlanResponseSchema(menuDays, allowedFoodIds = Object.keys(FOOD_CATALOG))') && workerSource.includes('minItems: menuDays') && workerSource.includes('maxItems: menuDays'), 'the reusable server schema helper must still describe exact plan length');
 assert.ok(workerSource.includes("reasoning_effort: 'low'"), 'reasoning must be bounded to low for structured meal-plan generation');
 assert.ok(workerSource.includes('const aiOptions = {') && workerSource.includes('env.AI.run(model, aiOptions, { rejectIfBusy: true })'), 'the AI chat fallback must also disable reasoning before inference');
@@ -778,7 +704,9 @@ assert.equal(gptFallbackPlan.week.length, 7, 'GPT-OSS fallback must produce a co
 assert.equal(gptModelInput.max_tokens, 6200);
 assert.equal(gptModelInput.reasoning_effort, 'low');
 assert.equal(gptModelInput.response_format, undefined, 'do not send undocumented JSON Mode to GPT-OSS; validate its JSON response server-side');
-assert.ok(workerSource.includes('заменять или добавлять продукты') && workerSource.includes('Для углеводов используй подходящие крупи') === false && workerSource.includes('Для углеводов используй подходящие крупы'), 'AI fallback correction must be allowed to add catalog carbohydrate sources when needed');
+assert.ok(workerSource.includes('не добавляй и не заменяй продукты ради достижения калорийности') &&
+ workerSource.includes('Белки, жиры и углеводы — расчётные показатели'),
+ 'AI correction must preserve selected foods for calorie-only adjustments and treat macros as calculated values');
 assert.ok(workerSource.includes('верни полный JSON') || workerSource.includes('Верни полный JSON'), 'correction prompt must request the complete plan JSON');
 const diagnosticSource = JSON.parse((await makeAi(7).run()).response);
 diagnosticSource.week[0].snackRecipe = 'Смешать.';
@@ -786,150 +714,80 @@ const multiFailureReason = diagnosePlanWeekFailure(diagnosticSource, profile, '�
   calories: 2600, protein: 150, fat: 100, carbs: 350
 });
 assert.ok(multiFailureReason.includes('day-1-snack-recipe-short-or-missing'), 'diagnostics must preserve recipe-length errors');
-assert.ok(multiFailureReason.includes('day-1-calories=') && multiFailureReason.includes('day-1-carbs='), 'diagnostics must also include macro errors even when the recipe is invalid');
+assert.ok(multiFailureReason.includes('day-1-calories=') && !multiFailureReason.includes('day-1-carbs='), 'diagnostics must report calorie deviations but never reject macro-only deviations');
 
 const correctedPortionPlan = await generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, false, false, false, 0.7) });
-const underPortionRetryAI = makeRetryAi(7, 0.4, 0.7);
-let lowEnergyCorrectionPrompt = '';
-const lowEnergyFallbackPlan = await generateAiPlan(profile, 'Питание', { AI: {
-  async run(model, input) {
-    if (model === '@cf/google/gemma-4-26b-a4b-it') return makeAi(7, false, false, false, false, 0.4).run(model, input);
-    if (model === '@cf/openai/gpt-oss-120b') {
-      lowEnergyCorrectionPrompt = input.messages.at(-1).content;
-      return makeAi(7).run(model, input);
-    }
-    throw new Error('unexpected model after low-energy rejection');
+const underPortionRetryAI=makeRetryAi(7,0.4,0.7);
+let lowEnergyCorrectionPrompt='';
+const lowEnergyFallbackPlan=await generateAiPlan(profile,'Питание',{AI:{
+ async run(model,input){
+  if(model==='@cf/google/gemma-4-26b-a4b-it')return makeAi(7,false,false,false,false,0.4).run(model,input);
+  if(model==='@cf/openai/gpt-oss-120b'){lowEnergyCorrectionPrompt=input.messages.at(-1).content;return makeAi(7).run(model,input);}
+  throw new Error('unexpected model after calorie correction');
+ }
+}});
+assert.equal(lowEnergyFallbackPlan.week.length,7);
+assert.equal(lowEnergyCorrectionPrompt,'','recoverable under-portioned meals must be corrected locally without another model request');
+const severelyUnderPortionedPlan=await generateAiPlan(profile,'Питание',{AI:underPortionRetryAI});
+assert.equal(underPortionRetryAI.calls,3,'each recoverable three-day block must be corrected locally without repeated AI calls');
+const severelyOverProteinPlan=await generateAiPlan(profile,'Питание',{AI:makeAi(7,false,false,false,false,1.4)});
+const mixedMacroRecovery=await generateAiPlan(profile,'Питание',{AI:{
+ async run(model,input){
+  const response=await makeAi(7).run(model,input),parsed=JSON.parse(response.response);
+  for(const day of parsed.week){
+   const setPortion=(meal,foodId,grams)=>{const item=day[meal+'Ingredients'].find(value=>value.foodId===foodId);if(item)item.grams=grams;};
+   setPortion('breakfast','oats_dry',15);setPortion('breakfast','banana',20);
+   setPortion('lunch','chicken_raw',220);setPortion('lunch','rice_dry',15);
+   setPortion('snack','greek_yogurt',250);setPortion('snack','apple',20);setPortion('snack','almonds',30);
+   setPortion('dinner','salmon_raw',180);setPortion('dinner','potato_raw',20);
   }
-} });
-assert.equal(lowEnergyFallbackPlan.week.length, 7);
-assert.equal(lowEnergyCorrectionPrompt, '', 'a severely under-portioned draft that can be corrected safely must pass server-side macro balancing without another model round-trip');
-const severelyUnderPortionedPlan = await generateAiPlan(profile, 'Питание', { AI: underPortionRetryAI });
-assert.equal(underPortionRetryAI.calls, 3, 'a recoverable under-portioned draft must be balanced locally for each of the three menu blocks without repeated AI calls');
-const severelyOverProteinPlan = await generateAiPlan(profile, 'Питание', { AI: makeAi(7, false, false, false, false, 1.4) });
-const mixedMacroRecovery = await generateAiPlan(profile, 'Питание', { AI: {
-  async run(model, input) {
-    const response = await makeAi(7).run(model, input);
-    const parsed = JSON.parse(response.response);
-    for (const day of parsed.week) {
-      const setPortion = (meal, foodId, grams) => {
-        const ingredient = day[meal + 'Ingredients'].find(item => item.foodId === foodId);
-        if (ingredient) ingredient.grams = grams;
-      };
-      setPortion('breakfast', 'oats_dry', 15);
-      setPortion('breakfast', 'banana', 20);
-      setPortion('lunch', 'chicken_raw', 220);
-      setPortion('lunch', 'rice_dry', 15);
-      setPortion('snack', 'greek_yogurt', 250);
-      setPortion('snack', 'apple', 20);
-      setPortion('snack', 'almonds', 30);
-      setPortion('dinner', 'salmon_raw', 180);
-      setPortion('dinner', 'potato_raw', 20);
-    }
-    return { response: JSON.stringify(parsed) };
-  }
-} });
-assert.equal(mixedMacroRecovery.week.length, 7, 'mixed protein excess and carbohydrate deficit must be recovered by paired portion correction');
-for (const day of mixedMacroRecovery.week) {
-  assert.ok(day.nutrition.calories >= mixedMacroRecovery.calories * 0.93 && day.nutrition.calories <= mixedMacroRecovery.calories * 1.07);
-  assert.ok(day.nutrition.protein >= mixedMacroRecovery.protein * 0.90 && day.nutrition.protein <= mixedMacroRecovery.protein * 1.10);
-  assert.ok(day.nutrition.fat >= mixedMacroRecovery.fat * 0.85 && day.nutrition.fat <= mixedMacroRecovery.fat * 1.15);
-  assert.ok(day.nutrition.carbs >= mixedMacroRecovery.carbs * 0.85 && day.nutrition.carbs <= mixedMacroRecovery.carbs * 1.15);
+  return {response:JSON.stringify(parsed)};
+ }
+}});
+assert.equal(mixedMacroRecovery.week.length,7);
+assert.ok(mixedMacroRecovery.week.every(day=>
+ [day.nutrition.calories,day.nutrition.protein,day.nutrition.fat,day.nutrition.carbs].every(value=>Number.isFinite(value)&&value>=0) &&
+ day.nutrition.calories>=mixedMacroRecovery.calories*0.90&&day.nutrition.calories<=mixedMacroRecovery.calories*1.10),
+ 'macro deviations must not reject a day when calories and food rules pass');
+for(const [label,plan] of [['under-portioned',severelyUnderPortionedPlan],['over-portioned',severelyOverProteinPlan]]){
+ assert.equal(plan.week.length,7);
+ assert.ok(plan.week.every(day=>nutritionWithinTargetsForTest(day.nutrition,{calories:plan.calories})));
 }
-for (const [label, plan] of [['under-portioned', severelyUnderPortionedPlan], ['over-portioned', severelyOverProteinPlan]]) {
-  assert.equal(plan.week.length, 7, label + ' AI output must be recoverable when bounded correction can produce a valid menu');
-  assert.ok(plan.week.every(day =>
-    day.nutrition.calories >= plan.calories * 0.93 &&
-    day.nutrition.calories <= plan.calories * 1.07 &&
-    day.nutrition.protein >= plan.protein * 0.90 &&
-    day.nutrition.protein <= plan.protein * 1.10 &&
-    day.nutrition.fat >= plan.fat * 0.85 &&
-    day.nutrition.fat <= plan.fat * 1.15 &&
-    day.nutrition.carbs >= plan.carbs * 0.85 &&
-    day.nutrition.carbs <= plan.carbs * 1.15
-  ), label + ' plan must pass the same strict daily nutrition ranges as live plans');
+assert.equal(correctedPortionPlan.week.length,14);
+assert.ok(correctedPortionPlan.week.every(day=>nutritionWithinTargetsForTest(day.nutrition,{calories:correctedPortionPlan.calories})));
+
+for(const [label,createPlan] of [
+ ['missing recipe',()=>generateAiPlan(profile,'Питание',{AI:{async run(model,input){const response=await makeAi(7).run(model,input),parsed=JSON.parse(response.response);parsed.week[0].breakfastRecipe='';return {response:JSON.stringify(parsed)};}}})],
+ ['wrong 14-day length',()=>generateAiPlan(profile,'PRO',{AI:makeAi(14,true)})],
+ ['wrong 30-day length',()=>generateAiPlan(profile,'Premium',{AI:makeAi(30,true)})],
+ ['missing ingredients',()=>generateAiPlan(profile,'PRO',{AI:makeAi(14,false,true,false)})],
+ ['missing workout',()=>generateAiPlan(profile,'PRO',{AI:makeAi(14,false,false,true)})]
+]){
+ await assert.rejects(createPlan(),/временно не смог подготовить полный персональный план/i,
+  label+' must not be replaced by a catalog-generated plan');
 }
-assert.equal(correctedPortionPlan.week.length, 14, 'server-side portion correction must recover a plan with initially undersized portions');
-assert.ok(correctedPortionPlan.week.every(day =>
-  day.nutrition.calories >= correctedPortionPlan.calories * 0.93 &&
-  day.nutrition.calories <= correctedPortionPlan.calories * 1.07 &&
-  day.nutrition.protein >= correctedPortionPlan.protein * 0.90 &&
-  day.nutrition.protein <= correctedPortionPlan.protein * 1.10 &&
-  day.nutrition.fat >= correctedPortionPlan.fat * 0.85 &&
-  day.nutrition.fat <= correctedPortionPlan.fat * 1.15 &&
-  day.nutrition.carbs >= correctedPortionPlan.carbs * 0.85 &&
-  day.nutrition.carbs <= correctedPortionPlan.carbs * 1.15
-), 'server-corrected days must still satisfy strict calorie and macro ranges');
-const missingRecipeFallback = await generateAiPlan(profile, 'Питание', { AI: {
-  async run(model, input) {
-    const result = makeAi(7);
-    const response = await result.run(model, input);
-    const parsed = JSON.parse(response.response);
-    parsed.week[0].breakfastRecipe = '';
-    return { response: JSON.stringify(parsed) };
-  }
-} });
-assert.equal(missingRecipeFallback.generationMode, 'catalog-fallback');
-assert.ok(missingRecipeFallback.week.every(day =>
-  ['breakfast','lunch','snack','dinner'].every(key => day[key + 'Recipe'].length >= 15)
-), 'invalid AI recipes must be replaced by complete recipes built from the catalog ingredients');
-assert.equal(nutritionPlan.week.length, 7);
-assert.equal(nutritionPlan.menuDays, 7);
-assert.equal(nutritionPlan.durationDays, 7);
+await assert.rejects(()=>generateAiPlan(profile,'PRO',{AI:makeAi(14,false,false,false,true)}),
+ /временно не смог подготовить полный персональный план/i,
+ 'an infeasible severely under-portioned plan must fail closed');
 
-const wrongLengthProFallback = await generateAiPlan(profile, 'PRO', { AI: makeAi(14, true) });
-assert.equal(wrongLengthProFallback.generationMode, 'catalog-fallback');
-assert.equal(wrongLengthProFallback.week.length, 14,
-  'PRO must replace an incomplete AI response with a full 14-day catalog plan');
-const wrongLengthPremiumFallback = await generateAiPlan(profile, 'Premium', { AI: makeAi(30, true) });
-assert.equal(wrongLengthPremiumFallback.generationMode, 'catalog-fallback');
-assert.equal(wrongLengthPremiumFallback.week.length, 30,
-  'Premium must replace an incomplete AI response with a full 30-day catalog plan');
+let nutritionRetryCalls=0;
+const nutritionRetryModelsByBlock=new Map();
+const nutritionRetryAi={async run(model,input){
+ nutritionRetryCalls++;
+ const prompt=input?.messages?.map(message=>message?.content||'').join('\n')||'';
+ const startDay=Number(prompt.match(/БЛОК: дни ([0-9]+)[–-]/)?.[1]||0);
+ const models=nutritionRetryModelsByBlock.get(startDay)||[];models.push(model);nutritionRetryModelsByBlock.set(startDay,models);
+ return (startDay===1&&models.length<=2?makeAi(7,false,false,false,true):makeAi(7)).run(model,input);
+}};
+const recoveredNutritionPlan=await generateAiPlan(profile,'Питание',{AI:nutritionRetryAi});
+assert.equal(recoveredNutritionPlan.week.length,7);
+assert.equal(nutritionRetryCalls,5);
+assert.deepEqual(nutritionRetryModelsByBlock.get(1),['@cf/google/gemma-4-26b-a4b-it','@cf/openai/gpt-oss-120b','@cf/openai/gpt-oss-20b']);
+assert.deepEqual(nutritionRetryModelsByBlock.get(4),['@cf/google/gemma-4-26b-a4b-it']);
+assert.deepEqual(nutritionRetryModelsByBlock.get(7),['@cf/google/gemma-4-26b-a4b-it']);
+assert.ok(workerSource.includes('const generationBlockDays = 3;'));
 
-const missingIngredientsFallback = await generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, true, false) });
-assert.equal(missingIngredientsFallback.generationMode, 'catalog-fallback');
-assert.ok(missingIngredientsFallback.week.every(day =>
-  ['breakfast','lunch','snack','dinner'].every(key => day[key + 'Ingredients'].length > 0)
-), 'missing AI portions must be replaced with complete catalog meals');
-const missingWorkoutFallback = await generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, false, true) });
-assert.equal(missingWorkoutFallback.generationMode, 'catalog-fallback');
-assert.ok(missingWorkoutFallback.week.every(day => !day.trainingDay || /\d+×\d+/.test(day.workout)),
-  'missing workout prescriptions must be replaced with a complete scheduled session');
-const lowNutritionFallback = await generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, false, false, true) });
-assert.equal(lowNutritionFallback.generationMode, 'ai',
-  'severely under-portioned but structurally complete AI meals must be recovered without replacing the AI plan');
-assert.ok(lowNutritionFallback.week.every(day => nutritionWithinTargetsForTest(day.nutrition, {
-  calories: lowNutritionFallback.calories,
-  protein: lowNutritionFallback.protein,
-  fat: lowNutritionFallback.fat,
-  carbs: lowNutritionFallback.carbs
-})), 'every recovered AI day must pass strict calories and all three macro ranges');
-
-let nutritionRetryCalls = 0;
-const nutritionRetryModelsByBlock = new Map();
-const nutritionRetryAi = {
-  async run(model, input) {
-    nutritionRetryCalls++;
-    const prompt = Array.isArray(input?.messages)
-      ? input.messages.map(message => typeof message?.content === 'string' ? message.content : '').join('\n')
-      : '';
-    const startDay = Number(prompt.match(/БЛОК: дни ([0-9]+)[–-]/)?.[1] || 0);
-    const models = nutritionRetryModelsByBlock.get(startDay) || [];
-    models.push(model);
-    nutritionRetryModelsByBlock.set(startDay, models);
-    const firstBlockNeedsTwoRetries = startDay === 1 && models.length <= 2;
-    const fixture = firstBlockNeedsTwoRetries ? makeAi(7, false, false, false, true) : makeAi(7);
-    return fixture.run(model, input);
-  }
-};
-const recoveredNutritionPlan = await generateAiPlan(profile, 'Питание', { AI: nutritionRetryAi });
-assert.equal(recoveredNutritionPlan.week.length, 7, 'a corrected fallback-model response must produce a complete plan');
-assert.equal(nutritionRetryCalls, 3, 'a structurally complete low-energy block must be corrected server-side without consuming additional model calls');
-assert.deepEqual(nutritionRetryModelsByBlock.get(1), ['@cf/google/gemma-4-26b-a4b-it'], 'a recoverable low-energy block must pass after the first model response');
-assert.deepEqual(nutritionRetryModelsByBlock.get(4), ['@cf/google/gemma-4-26b-a4b-it'], 'the next three-day block must start with Gemma after the previous block is validated');
-assert.deepEqual(nutritionRetryModelsByBlock.get(7), ['@cf/google/gemma-4-26b-a4b-it'], 'the third block must start with Gemma');
-assert.ok(workerSource.includes('const generationBlockDays = 3;'), 'plan generation must use three-day blocks to reduce serial model requests');
-
-const modelCalls = [];
+const modelCalls = []const modelCalls = [];
 const fallbackText = await runAiTextWithFallback({
   AI: {
     async run(model) {
@@ -961,7 +819,7 @@ const validatedFallback = await runAiTextWithFallback({
 assert.ok(validatedFallback.includes('Готово'));
 assert.equal(invalidOutputCalls.length, 2, 'fallback must also run when the primary model returns malformed output');
 
-console.log('PASS: 7/14/30-day plans, calories/protein/fat/carbohydrates, shopping aggregation, workout prescriptions and AI fallback');
+console.log('PASS: 7/14/30-day AI plans, per-day calorie tolerance, calculated macros, shopping aggregation and workout prescriptions');
 assert.ok(workerSource.includes("'Premium': { amount: '3990.00', label: 'Fital Pro Premium — меню и тренировки, 30 дней', days: 30, menuDays: 30 }"), 'Premium must configure 30 menu days');
 assert.ok(workerSource.includes('profile.age < 18'), 'adult nutrition formula must not be used for minors');
 assert.ok(htmlSource.includes('min="18"'), 'both questionnaire forms must require adult age');

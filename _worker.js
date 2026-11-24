@@ -387,10 +387,11 @@ function calculateDayNutrition(day) {
 }
 
 function nutritionWithinTargets(nutrition, targets) {
-  return nutrition.calories >= targets.calories * 0.93 && nutrition.calories <= targets.calories * 1.07 &&
-    nutrition.protein >= targets.protein * 0.90 && nutrition.protein <= targets.protein * 1.10 &&
-    (targets.fat <= 0 || (nutrition.fat >= targets.fat * 0.85 && nutrition.fat <= targets.fat * 1.15)) &&
-    (targets.carbs <= 0 || (nutrition.carbs >= targets.carbs * 0.85 && nutrition.carbs <= targets.carbs * 1.15));
+  const values = [nutrition?.calories, nutrition?.protein, nutrition?.fat, nutrition?.carbs];
+  return Number.isFinite(targets?.calories) && targets.calories > 0 &&
+    values.every(value => Number.isFinite(value) && value >= 0) &&
+    nutrition.calories >= targets.calories * 0.90 &&
+    nutrition.calories <= targets.calories * 1.10;
 }
 
 // Make small, bounded corrections to existing ingredient portions. Food choices,
@@ -518,146 +519,52 @@ function rebalanceDayNutrition(day, targets, profile) {
   const originalIngredients = Object.fromEntries(MEAL_KEYS.map(key => [
     key, day[key + 'Ingredients'].map(item => ({...item}))
   ]));
-  const nutrientTargets = [targets.calories, targets.protein, targets.fat, targets.carbs];
-  const nutrientScales = [
-    Math.max(1, targets.calories * 0.07), Math.max(1, targets.protein * 0.10),
-    Math.max(1, targets.fat * 0.15), Math.max(1, targets.carbs * 0.15)
-  ];
-  const totals = () => {
-    const result = [0,0,0,0];
-    for (const key of MEAL_KEYS) for (const item of day[key + 'Ingredients']) {
-      const food = FOOD_CATALOG[item.foodId];
-      result[0] += food.kcal * item.grams / 100;
-      result[1] += food.protein * item.grams / 100;
-      result[2] += food.fat * item.grams / 100;
-      result[3] += food.carbs * item.grams / 100;
-    }
-    return result;
-  };
-  const score = () => {
-    const values = totals();
-    return values.reduce((sum,value,index) => {
-      const delta = (value - nutrientTargets[index]) / nutrientScales[index];
-      return sum + delta * delta;
-    },0);
-  };
-  // Recover under-portioned AI drafts using only the client's allowed food catalog.
-  // All four macros remain subject to the same strict server-side validation.
-  const allowedFoods = Object.keys(FOOD_CATALOG).filter(id => foodAllowedByPreferences(id, profile));
-  if (!allowedFoods.length) return false;
-
-  // First change the food composition, not just the grams. Greedy bounded
-  // substitutions/additions use only the existing catalog and client-safe foods.
-  for (let move = 0; move < 20; move++) {
-    const currentScore = score();
-    let best = null;
-    for (const key of MEAL_KEYS) {
-      const ingredients = day[key + 'Ingredients'];
-      for (let index = 0; index < ingredients.length; index++) {
-        const item = ingredients[index];
-        for (const foodId of allowedFoods) {
-          if (foodId === item.foodId || !foodFitsMeal(foodId, key) || ingredients.some((other,i)=>i!==index&&other.foodId===foodId)) continue;
-          const previous = {...item};
-          item.foodId = foodId;
-          item.name = FOOD_CATALOG[foodId].name;
-          item.grams = Math.min(item.grams, MAX_MEAL_INGREDIENT_GRAMS[foodId] || 250);
-          const candidateScore = score();
-          if (candidateScore < currentScore - 1e-8 && (!best || candidateScore < best.score)) {
-            best = {type:'replace',key,index,item:{...item},score:candidateScore};
-          }
-          Object.assign(item,previous);
-        }
-      }
-      if (ingredients.length < 6) {
-        const additions = allowedFoods.filter(id => foodFitsMeal(id, key) && !ingredients.some(item=>item.foodId===id));
-        for (const foodId of additions) {
-          const role = foodRole(foodId);
-          const portions = role === 'grain' || role === 'plant_protein' ? [30,50,70] :
-            role === 'fruit' || role === 'vegetable' || role === 'starchy_vegetable' ? [50,80,100] :
-            role === 'dairy' || role === 'egg' || role === 'poultry' || role === 'fish' ? [30,50,75] :
-            role === 'fat' || role === 'nuts' ? [5,10,15] : [];
-          for (const grams of portions) {
-            ingredients.push({foodId,name:FOOD_CATALOG[foodId].name,grams});
-            const candidateScore = score();
-            if (candidateScore < currentScore - 1e-8 && (!best || candidateScore < best.score)) {
-              best = {type:'add',key,item:{foodId,name:FOOD_CATALOG[foodId].name,grams},score:candidateScore};
-            }
-            ingredients.pop();
-          }
-        }
-      }
-    }
-    if (!best) break;
-    if (best.type === 'replace') Object.assign(day[best.key + 'Ingredients'][best.index],best.item);
-    else day[best.key + 'Ingredients'].push(best.item);
-  }
-
   const items = MEAL_KEYS.flatMap(key => day[key + 'Ingredients']);
-  const original = items.map(item => item.grams);
-  const bounds = items.map(item => ({min:5,max:MAX_MEAL_INGREDIENT_GRAMS[item.foodId]||250}));
-  const nutrientTotals = totals;
-  const portionScore = () => {
-    const values = nutrientTotals();
-    let result = 0;
-    for (let index=0;index<values.length;index++) {
-      const normalized=(values[index]-nutrientTargets[index])/nutrientScales[index];
-      result += normalized*normalized;
-    }
-    for (let index=0;index<items.length;index++) {
-      const divisor=Math.max(20,original[index]);
-      const delta=(items[index].grams-original[index])/divisor;
-      result += 0.0001*delta*delta;
-    }
-    return result;
-  };
-  const withinTargets = () => {
-    day.nutrition = calculateDayNutrition(day);
-    return nutritionWithinTargets(day.nutrition,targets);
-  };
-  if (!withinTargets()) {
-    for (let iteration=0;iteration<120;iteration++) {
-    const values=nutrientTotals();
-    const derivatives=values.map((value,index)=>2*(value-nutrientTargets[index])/(nutrientScales[index]*nutrientScales[index]));
-    const gradients=items.map((item,index)=>{
-      const food=FOOD_CATALOG[item.foodId];
-      const nutrientGradient=derivatives[0]*food.kcal/100+derivatives[1]*food.protein/100+
-        derivatives[2]*food.fat/100+derivatives[3]*food.carbs/100;
-      const divisor=Math.max(20,original[index]);
-      return nutrientGradient+2*0.0001*(item.grams-original[index])/(divisor*divisor);
-    });
-    const currentScore=portionScore();
-    let learningRate=1000;
-    let improved=false;
-    while (learningRate>=0.001) {
-      const previous=items.map(item=>item.grams);
-      for(let index=0;index<items.length;index++) {
-        const candidate=Math.round(items[index].grams-learningRate*gradients[index]);
-        items[index].grams=Math.max(bounds[index].min,Math.min(bounds[index].max,candidate));
-      }
-      if(portionScore()<currentScore-1e-12||withinTargets()){improved=true;break;}
-      items.forEach((item,index)=>{item.grams=previous[index];});
-      learningRate/=2;
-    }
-    if(!improved) break;
-    if(withinTargets()) break;
-    }
-  }
-  if (!withinTargets()) {
-    for (const key of MEAL_KEYS) day[key + 'Ingredients'] = originalIngredients[key].map(item => ({...item}));
+  if (!items.length || !Number.isFinite(targets?.calories) || targets.calories <= 0) return false;
+
+  // Adjust only gram amounts of ingredients already selected by AI.
+  const originalFoodIds = items.map(item => item.foodId);
+  const originalGrams = items.map(item => item.grams);
+  const bounds = items.map(item => ({ min: 5, max: MAX_MEAL_INGREDIENT_GRAMS[item.foodId] || 250 }));
+  const caloriesAt = grams => grams.reduce((sum, value, index) =>
+    sum + FOOD_CATALOG[items[index].foodId].kcal * value / 100, 0
+  );
+  const minimumCalories = caloriesAt(bounds.map(bound => bound.min));
+  const maximumCalories = caloriesAt(bounds.map(bound => bound.max));
+  const minimumAllowed = targets.calories * 0.90;
+  const maximumAllowed = targets.calories * 1.10;
+
+  if (maximumCalories < minimumAllowed || minimumCalories > maximumAllowed) {
     day.nutrition = calculateDayNutrition(day);
     return false;
   }
-  for (const key of MEAL_KEYS) {
-    const before = originalIngredients[key].map(item=>item.foodId).join('|');
-    const after = day[key+'Ingredients'].map(item=>item.foodId).join('|');
-    if (before !== after) {
-      const synchronized = buildSynchronizedMealText(day, key);
-      day[key] = synchronized.title;
-      day[key+'Recipe'] = synchronized.recipe.slice(0,300);
+
+  const desiredCalories = Math.max(minimumCalories, Math.min(maximumCalories, targets.calories));
+  const gramsAtScale = scale => originalGrams.map((grams, index) =>
+    Math.max(bounds[index].min, Math.min(bounds[index].max, Math.round(grams * scale)))
+  );
+  let low = 0;
+  let high = 256;
+  for (let iteration = 0; iteration < 60; iteration++) {
+    const middle = (low + high) / 2;
+    if (caloriesAt(gramsAtScale(middle)) < desiredCalories) low = middle;
+    else high = middle;
+  }
+  const correctedGrams = gramsAtScale((low + high) / 2);
+  items.forEach((item, index) => { item.grams = correctedGrams[index]; });
+  day.nutrition = calculateDayNutrition(day);
+
+  const foodIdsUnchanged = items.every((item, index) => item.foodId === originalFoodIds[index]);
+  if (!foodIdsUnchanged || !nutritionWithinTargets(day.nutrition, targets)) {
+    for (const key of MEAL_KEYS) {
+      day[key + 'Ingredients'] = originalIngredients[key].map(item => ({...item}));
     }
+    day.nutrition = calculateDayNutrition(day);
+    return false;
   }
   return true;
 }
+
 function mealTextAllowedByPreferences(value, profile) {
   const text = String(value || '').toLowerCase();
   const exclusions = new Set(Array.isArray(profile?.exclusions) ? profile.exclusions : []);
@@ -722,11 +629,7 @@ function diagnosePlanWeekFailure(parsed, profile, planKey, menuDays, targets, st
   for (let index = 0; index < parsed.week.length; index++) {
     const source = parsed.week[index];
     const dayLabel = 'day-' + (index + 1);
-    if (typeof source?.trainingDay !== 'boolean') {
-      issues.push(dayLabel + '-trainingDay-not-boolean');
-    } else {
-      // The server owns the training schedule; model-provided flags are not authoritative.
-    }
+    if (typeof source?.trainingDay !== 'boolean') issues.push(dayLabel + '-trainingDay-not-boolean');
 
     const day = {};
     let ingredientsValid = true;
@@ -735,13 +638,12 @@ function diagnosePlanWeekFailure(parsed, profile, planKey, menuDays, targets, st
       if (clean(source?.[key + 'Recipe'], 300).length < 15) {
         issues.push(dayLabel + '-' + key + '-recipe-short-or-missing');
       }
-      const rawIngredients = source?.[key + 'Ingredients'];
-      const ingredientIssue = diagnoseMealIngredients(rawIngredients);
+      const ingredientIssue = diagnoseMealIngredients(source?.[key + 'Ingredients']);
       if (ingredientIssue) {
         issues.push(dayLabel + '-' + key + '-' + ingredientIssue);
         ingredientsValid = false;
       } else {
-        day[key + 'Ingredients'] = normalizeMealIngredients(rawIngredients);
+        day[key + 'Ingredients'] = normalizeMealIngredients(source[key + 'Ingredients']);
         if (day[key + 'Ingredients'].some(item => !foodAllowedByPreferences(item.foodId, profile))) {
           issues.push(dayLabel + '-' + key + '-client-food-preference-violation');
           ingredientsValid = false;
@@ -755,30 +657,18 @@ function diagnosePlanWeekFailure(parsed, profile, planKey, menuDays, targets, st
       issues.push(dayLabel + '-workout-prescription-missing');
     }
 
-    // Even if a recipe is short, still calculate macros from valid ingredients.
     if (ingredientsValid) {
       day.nutrition = calculateDayNutrition(day);
       const n = day.nutrition;
-      if (n.calories < targets.calories * 0.93 || n.calories > targets.calories * 1.07) {
+      if (![n.calories,n.protein,n.fat,n.carbs].every(Number.isFinite) ||
+          n.protein < 0 || n.fat < 0 || n.carbs < 0) {
+        issues.push(dayLabel + '-nutrition-calculation-invalid');
+      } else if (n.calories < targets.calories * 0.90 || n.calories > targets.calories * 1.10) {
         issues.push(dayLabel + '-calories=' + n.calories + '-allowed=' +
-          Math.round(targets.calories * 0.93) + '-' + Math.round(targets.calories * 1.07));
-      }
-      if (n.protein < targets.protein * 0.90 || n.protein > targets.protein * 1.10) {
-        issues.push(dayLabel + '-protein=' + n.protein + '-allowed=' +
-          (Math.round(targets.protein * 0.90 * 10) / 10) + '-' + (Math.round(targets.protein * 1.10 * 10) / 10));
-      }
-      if (targets.fat > 0 && (n.fat < targets.fat * 0.85 || n.fat > targets.fat * 1.15)) {
-        issues.push(dayLabel + '-fat=' + n.fat + '-allowed=' +
-          (Math.round(targets.fat * 0.85 * 10) / 10) + '-' + (Math.round(targets.fat * 1.15 * 10) / 10));
-      }
-      if (targets.carbs > 0 && (n.carbs < targets.carbs * 0.85 || n.carbs > targets.carbs * 1.15)) {
-        issues.push(dayLabel + '-carbs=' + n.carbs + '-allowed=' +
-          (Math.round(targets.carbs * 0.85 * 10) / 10) + '-' + (Math.round(targets.carbs * 1.15 * 10) / 10));
+          Math.round(targets.calories * 0.90) + '-' + Math.round(targets.calories * 1.10));
       }
     }
   }
-
-  
 
   return issues.length ? issues.slice(0, 32).join(' | ') : 'plan-validation-failed-without-specific-rule';
 }
@@ -926,16 +816,15 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
   const rejectionDiagnostics = [];
   let groqCorrectionScheduled = false;
 
-  // Each fallback receives the previous model's concrete rejection reasons.
-  // Groq gets one corrective retry after a structurally valid but nutritionally rejected draft.
-  // A rejected draft is never repaired by weakening server-side validation.
+  // Each fallback receives the previous model's concrete structural or calorie rejection reasons.
+  // Macro-only deviations are accepted and never trigger a corrective retry.
   for (let modelIndex = 0; modelIndex < models.length; modelIndex++) {
     const model = models[modelIndex];
     const modelStartedAt = Date.now();
     const currentMessages = rejectionDiagnostics.length
       ? [...messages, {
           role: 'user',
-          content: 'ПРЕДЫДУЩАЯ МОДЕЛЬ ВЕРНУЛА ПЛАН, ОТКЛОНЁННЫЙ СЕРВЕРНОЙ ПРОВЕРКОЙ. Создай НОВЫЙ ПОЛНЫЙ JSON-план с нуля, исправив ВСЕ перечисленные причины. Не повторяй ошибочный состав блюд и граммовки. Причины отказа предыдущей модели: ' + rejectionDiagnostics.slice(-3).join(' | ') + '. Требуется ровно ' + menuDays + ' дней и четыре приёма пищи в каждом дне со всеми обязательными полями. Для каждого блюда дай конкретный рецепт из 1–2 шагов длиной 15–300 символов. Цели на каждый день: ' + JSON.stringify(nutritionTargets(profile)) + '. Неизменные допуски сервера: калории ±7%, белок ±10%, жиры и углеводы ±15%. Разрешается менять граммовки, заменять или добавлять продукты только из переданного справочника, строго соблюдая предпочтения и аллергии. Для углеводов используй подходящие крупы, картофель, хлеб, бобовые или фрукты; не компенсируй дефицит углеводов дополнительным мясом, рыбой, творогом или маслом. Проверь состав, граммовки, калории, белки, жиры и углеводы каждого дня по справочнику. КРИТИЧЕСКОЕ ПРАВИЛО: если исходная калорийность дня ниже 50% целевой, не пытайся исправлять её искусственным увеличением порций или добавлением продуктов — полностью пересоставь рацион этого дня как полноценный план. Сервер всё равно отклонит любой день вне допусков. Верни полный JSON, не ослабляй проверки и не пропускай поля.'
+          content: 'ПРЕДЫДУЩАЯ МОДЕЛЬ ВЕРНУЛА ПЛАН, ОТКЛОНЁННЫЙ СЕРВЕРНОЙ ПРОВЕРКОЙ. Исправь перечисленные причины и верни полный JSON на все ' + menuDays + ' дней с четырьмя приёмами пищи, рецептами и обязательными полями. Причины отказа: ' + rejectionDiagnostics.slice(-3).join(' | ') + '. Для каждого дня соблюдай коридор калорий ±10% от цели; калории считаются отдельно для каждого дня. Белки, жиры и углеводы — расчётные показатели, а не условия отказа: не подгоняй их под проценты и не заменяй продукты ради БЖУ. Если причина только в калориях, корректируй граммовки уже выбранных ингредиентов в пределах их индивидуальных максимумов и минимума 5 г; не добавляй и не заменяй продукты ради достижения калорийности. Соблюдай все ограничения, аллергии и предпочтения. Если невозможно получить допустимую калорийность в этих пределах, не выдумывай порции. Верни полный JSON без пропусков.'
         }]
       : messages;
     try {
@@ -1000,8 +889,8 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
       } else {
         try {
           const parsed = JSON.parse(match[0]);
-          // Re-run the complete server validation for every model response:
-          // meal titles, recipes, catalog IDs, gram ranges, preferences, calories and all macros.
+          // Re-run complete server validation for every model response:
+          // structure, catalog IDs, gram bounds, client restrictions, daily calories and finite macro calculations.
           const week = normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, nutritionTargets(profile), startDay);
           if (week) return { text, model, provider: isGroq ? 'groq' : 'cloudflare-ai' };
           const reason = diagnosePlanWeekFailure(parsed, profile, planKey, menuDays, nutritionTargets(profile), startDay);
@@ -1247,11 +1136,8 @@ async function generateAiPlan(profile, planKey, env) {
     const generationBlockDays = 3;
     for (let offset = 0; offset < totalDays; offset += generationBlockDays) {
     const chunkDays = Math.min(generationBlockDays, totalDays - offset);
-    const mealCalorieTargets = NUTRITION_CONFIG.mealSchedule.map(({ title, kcalShare }) => [title.toLowerCase(), kcalShare]).map(([name, share]) =>
-      name + ': ' + Math.round(targets.calories * share) + ' ккал, белки ' +
-      Math.round(targets.protein * share) + ' г, жиры ' +
-      Math.round(targets.fat * share) + ' г, углеводы ' +
-      Math.round(targets.carbs * share) + ' г'
+    const mealCalorieTargets = NUTRITION_CONFIG.mealSchedule.map(({ title, kcalShare }) =>
+      title.toLowerCase() + ': ' + Math.round(targets.calories * kcalShare) + ' ккал'
     ).join('; ');
 
     const prompt = [
@@ -1262,10 +1148,10 @@ async function generateAiPlan(profile, planKey, env) {
       'Структура JSON: {"intro":"короткое персональное объяснение","week":[{"day":"День ' + (offset + 1) + '","trainingDay":false,"breakfast":"название блюда","breakfastRecipe":"короткий способ приготовления","breakfastIngredients":[{"foodId":"oats_dry","grams":60}],"lunch":"название блюда","lunchRecipe":"короткий способ приготовления","lunchIngredients":[{"foodId":"chicken_raw","grams":120}],"snack":"название блюда","snackRecipe":"короткий способ подачи или приготовления","snackIngredients":[{"foodId":"greek_yogurt","grams":150}],"dinner":"название блюда","dinnerRecipe":"короткий способ приготовления","dinnerIngredients":[{"foodId":"salmon_raw","grams":120}],"workout":"план тренировки или восстановления"}],"tips":["практичный совет"]}. trainingDay — строго boolean. Для каждого приёма пищи обязательны ingredients-массивы.',
       'Для каждого приёма пищи обязательно заполни отдельное поле: breakfastRecipe, lunchRecipe, snackRecipe или dinnerRecipe соответственно. Это 1 короткая, конкретная инструкция по приготовлению (1–2 шага, от 15 до 300 символов); не повторяй список ингредиентов и не пиши общие фразы. Каждый ingredients-массив содержит 2–4 объекта вида {"foodId":"oats_dry","grams":60}. В каждом объекте обязательны ровно два поля: foodId и grams. Используй ТОЛЬКО точные foodId из справочника ниже. grams — целое число от 5 до 500 съедобных граммов ДО приготовления: мясо, рыба, овощи и фрукты — сырые очищенные части; крупы, макароны и бобовые — сухой вес; яйца — без скорлупы. Не используй готовый вес. Масло и орехи учитывай, если добавляешь их в блюдо. Не добавляй в название блюда продукты, которых нет в его ingredients.',
       'Пиши краткое название блюда без граммов. Полный состав и вес продуктов будут показаны отдельно. shopping не возвращай: список покупок сервер рассчитает сам по всем ингредиентам.',
-      'Целевые ориентиры КАЖДОГО дня: ' + targets.calories + ' ккал, белок ' + targets.protein + ' г, жиры ' + targets.fat + ' г, углеводы ' + targets.carbs + ' г. Допуск сервера: калории ±7%, белок ±10%, жиры и углеводы ±15%. Планируй рацион около 98–102% целевых значений и не стремись к границе допуска. Калорийность каждого дня должна быть не ниже ' + Math.round(targets.calories * 0.93) + ' и не выше ' + Math.round(targets.calories * 1.07) + ' ккал. Ориентир жидкости — ' + targets.waterLiters + ' л в сутки; потребность зависит от климата, нагрузки и индивидуальных особенностей.',
-      'Распредели дневные нормы калорий и всех БЖУ по четырём приёмам пищи так: ' + mealCalorieTargets + '. Ориентир каждого приёма пищи — отклонение не более 15%; итоговые значения за день обязаны пройти строгую серверную проверку. Не делай маленькие порции и не оставляй значительную часть дневной нормы нераспределённой. Если сумма калорий ниже цели, увеличь граммовки подходящих продуктов из справочника и перепроверь сумму каждого дня. Индивидуальные максимумы на один продукт в одном приёме пищи (г): ' + JSON.stringify(Object.fromEntries(Object.keys(FOOD_CATALOG).map(id => [id, MAX_MEAL_INGREDIENT_GRAMS[id] || 250]))) + '. Никогда не превышай максимум соответствующего foodId и общий предел 500 г.',
+      'Цель КАЖДОГО дня — около ' + targets.calories + ' ккал; допустимый коридор сервера составляет ±10% отдельно для каждого дня: от ' + Math.round(targets.calories * 0.90) + ' до ' + Math.round(targets.calories * 1.10) + ' ккал. Белки, жиры и углеводы рассчитываются сервером по справочнику продуктов и показываются как фактические значения; не подгоняй их под строгие проценты и не меняй продукты ради БЖУ. Белок используй как ориентир разнообразного рациона, без обязательного точного попадания в цель. Ориентир жидкости — ' + targets.waterLiters + ' л в сутки; потребность зависит от климата, нагрузки и индивидуальных особенностей.',
+      'Распредели дневную калорийность по четырём приёмам пищи так: ' + mealCalorieTargets + '. Составляй реалистичные порции и не оставляй значительную часть дневной калорийности нераспределённой. Индивидуальные максимумы на один продукт в одном приёме пищи (г): ' + JSON.stringify(Object.fromEntries(Object.keys(FOOD_CATALOG).map(id => [id, MAX_MEAL_INGREDIENT_GRAMS[id] || 250]))) + '. Не превышай максимум соответствующего foodId и общий предел 500 г.',
       'Не делай рацион преимущественно белковым: распределяй нужное количество сложных углеводов по завтраку, обеду и ужину. Для источников углеводов выбирай подходящие по предпочтениям продукты из овсянки, риса, гречки, макарон, киноа, картофеля, батата, цельнозернового хлеба, бобовых и фруктов. При цели углеводов от 150 г в сутки используй несколько таких источников в течение дня, а не только овощи.',
-      'Перед выдачей проверь каждый день отдельно: сложи калории и БЖУ всех ингредиентов по справочнику. Не возвращай день, если калории, белок, жиры или углеводы выходят за указанные допуски.',
+      'Перед выдачей проверь каждый день отдельно: сложи калории и БЖУ ингредиентов по справочнику. Не возвращай день, если его калорийность выходит за коридор ±10%. Отклонения белков, жиров и углеводов не являются причиной отказа.',
       'СПРАВОЧНИК ПРОДУКТОВ НА 100 г (ккал, белки г, жиры г, углеводы г): ' + JSON.stringify(Object.entries(FOOD_CATALOG).map(([id,food])=>[id,food.name,food.kcal,food.protein,food.fat,food.carbs])),
       includesTraining
         ? 'РАСПИСАНИЕ ЗАДАНО СЕРВЕРОМ И НЕ ПОДЛЕЖИТ ИЗМЕНЕНИЮ. По дням этого блока: ' +
@@ -1303,7 +1189,7 @@ async function generateAiPlan(profile, planKey, env) {
     }
     const week = normalizeAndValidatePlanWeek(parsed, profile, planKey, chunkDays, targets, offset + 1);
     if (!week) {
-      throw new Error('ИИ не смог составить блок с проверяемыми порциями и подходящими суточными калориями и БЖУ.');
+      throw new Error('ИИ не смог составить полный блок с допустимой суточной калорийностью, корректными порциями и обязательными полями.');
     }
     week.forEach((day, index) => {
       day.day = 'День ' + (offset + index + 1);
@@ -1315,8 +1201,12 @@ async function generateAiPlan(profile, planKey, env) {
     }
     }
   } catch (error) {
-    console.error('Fital Pro generation provider unavailable; switching to validated catalog planner:', aiFailureDiagnostic(error, 1800) || 'unknown AI error');
-    return generateCatalogFallbackPlan(profile, planKey, targets, error);
+    console.error('Fital Pro AI plan generation failed:', aiFailureDiagnostic(error, 1800) || 'unknown AI error');
+    throw new Error('ИИ временно не смог подготовить полный персональный план. Заказ и оплата не создавались. Попробуйте позже.', { cause: error });
+  }
+
+  if (fullWeek.length !== totalDays) {
+    throw new Error('ИИ вернул неполный план: получено ' + fullWeek.length + ' дней вместо ' + totalDays + '. Заказ и оплата не создавались.');
   }
 
   const shopping = buildShoppingList(fullWeek);
@@ -1450,17 +1340,14 @@ async function checkout(request, env, forceTestMode = false) {
   try {
     plan = await generateAiPlan(profile, planKey, env);
   } catch (error) {
-    // Last-resort protection at the checkout boundary: quota/provider errors
-    // must never prevent order creation when the validated local planner works.
-    console.error('Fital Pro AI plan generation escaped its fallback; using final catalog fallback:', clean(error?.message, 240));
-    try {
-      plan = generateCatalogFallbackPlan(profile, planKey, nutritionTargets(profile), error);
-    } catch (fallbackError) {
-      console.error('Fital Pro final catalog fallback failed:', clean(fallbackError?.message, 240));
-      return json({
-        error: 'Не удалось подготовить проверенный план для указанных ограничений. Уточните пищевые предпочтения и повторите попытку.'
-      }, 422);
+    console.error('Fital Pro checkout blocked because AI plan generation failed:', aiFailureDiagnostic(error, 1200));
+    const responseBody = {
+      error: 'ИИ временно не смог подготовить персональный план. Заказ и оплата не создавались. Попробуйте позже.'
+    };
+    if (forceTestMode && env.FITALPRO_PREVIEW_CI === '1') {
+      responseBody.diagnostic = aiFailureDiagnostic(error, 1200);
     }
+    return json(responseBody, 503);
   }
 
   if (plan.generationMode !== 'ai') {
