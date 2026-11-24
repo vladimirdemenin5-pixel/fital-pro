@@ -497,9 +497,8 @@ function rebalanceDayNutrition(day, targets, profile) {
       return sum + delta * delta;
     },0);
   };
-  // Do not fabricate a complete day from a severely incomplete AI response.
-  // Very low-energy drafts must go through the AI retry path instead.
-  if (totals()[0] < targets.calories * 0.5) return false;
+  // Recover under-portioned AI drafts using only the client's allowed food catalog.
+  // All four macros remain subject to the same strict server-side validation.
   const allowedFoods = Object.keys(FOOD_CATALOG).filter(id => foodAllowedByPreferences(id, profile));
   if (!allowedFoods.length) return false;
 
