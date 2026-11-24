@@ -64,6 +64,20 @@ jobs:
             console.log("PASS: all three required production Robokassa secret bindings are present; optional test-only secrets are not required for production deployment");
           '
 
+      - name: Sync Groq API key to Production Worker
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "$GROQ_API_KEY" ]; then
+            echo "GROQ_API_KEY is required for the production AI provider but is not configured as a GitHub repository secret." >&2
+            exit 1
+          fi
+          printf '%s' "$GROQ_API_KEY" | npx wrangler secret put GROQ_API_KEY --name red-waterfall-2af8
+          echo "PASS: Groq API key synchronized to the existing Production Worker without printing its value."
+
       - name: Deploy Worker and assets
         uses: cloudflare/wrangler-action@v4
         with:
@@ -75,7 +89,7 @@ jobs:
         run: |
           set -euo pipefail
           response="$(curl --fail --silent --show-error --retry 8 --retry-delay 3 --retry-all-errors --max-time 20 'https://red-waterfall-2af8.vladimirdemenin5.workers.dev/health')"
-          printf '%s' "$response" | node --input-type=module -e 'let s=""; for await (const c of process.stdin) s+=c; const d=JSON.parse(s); if (d.ok!==true || d.ai!==true || d.db!==true || d.payments!==true) throw new Error("Production Worker health check failed: AI, D1, or Robokassa configuration is missing"); console.log("PASS: production Worker responds; AI, D1, and Robokassa are configured")'
+          printf '%s' "$response" | node --input-type=module -e 'let s=""; for await (const c of process.stdin) s+=c; const d=JSON.parse(s); if (d.ok!==true || d.ai!==true || d.db!==true || d.payments!==true || d.groq!==true) throw new Error("Production Worker health check failed: AI, D1, Robokassa, or Groq configuration is missing"); console.log("PASS: production Worker responds; AI, D1, Robokassa, and Groq are configured")'
           page="$(curl --fail --silent --show-error --retry 5 --retry-delay 2 --retry-all-errors --max-time 20 'https://red-waterfall-2af8.vladimirdemenin5.workers.dev/')"
           printf '%s' "$page" | node --input-type=module -e 'let s=""; for await (const c of process.stdin) s+=c; if (!s.includes("<html") || !s.includes("Fital")) throw new Error("Production site HTML/assets did not load"); console.log("PASS: public Fital Pro homepage is served by the deployed Worker")'
 
@@ -86,7 +100,6 @@ jobs:
       group: fital-pro-live-ai-plans
       cancel-in-progress: true
     runs-on: ubuntu-latest
-    needs: deploy
     timeout-minutes: 90
     permissions:
       contents: read
