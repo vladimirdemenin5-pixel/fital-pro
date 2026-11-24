@@ -899,6 +899,41 @@ assert.ok(diagnosticData.days[0].calculatedNutrition.fat > 0);
 assert.ok(diagnosticData.days[0].calculatedNutrition.carbs > 0);
 assert.ok(diagnosticData.targets.fat > 0 && diagnosticData.targets.carbs > 0);
 assert.ok(diagnosticData.shopping.length > 0);
+assert.equal(diagnosticData.days[0].trainingDay, false, 'diagnostic must expose the server-scheduled rest-day flag');
+assert.ok(typeof diagnosticData.days[0].workout === 'string' && diagnosticData.days[0].workout.length > 0,
+  'diagnostic must expose the workout or recovery instructions for each day');
+const proDiagnosticResponse = await aiPlanDiagnostic(new Request('https://fitalpro.test/api/ai-diagnostic', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'X-Fital-Test-Key': 'test-secret' },
+  body: JSON.stringify({ plan: 'PRO', profile })
+}), {
+  ROBOKASSA_TEST_ACCESS_KEY: 'test-secret',
+  AI: makeAi(14),
+  DB: noDatabaseAccess
+});
+assert.equal(proDiagnosticResponse.status, 200, '14-day PRO diagnostic must complete without accessing D1');
+const proDiagnosticData = await proDiagnosticResponse.json();
+assert.equal(proDiagnosticData.plan, 'PRO');
+assert.equal(proDiagnosticData.durationDays, 14);
+assert.equal(proDiagnosticData.days.length, 14);
+assert.deepEqual(proDiagnosticData.days.map(day => day.day),
+  Array.from({ length: 14 }, (_, index) => 'День ' + (index + 1)),
+  '14-day diagnostic must return every day in the correct order');
+assert.deepEqual(proDiagnosticData.days.map(day => day.trainingDay),
+  Array.from({ length: 14 }, (_, index) =>
+    Math.floor(((index % 7) + 1) * profile.days / 7) > Math.floor((index % 7) * profile.days / 7)),
+  '14-day diagnostic must preserve exactly three scheduled workouts in each full week');
+assert.equal(proDiagnosticData.days.filter(day => day.trainingDay).length, 6);
+assert.ok(proDiagnosticData.days.every(day => typeof day.workout === 'string' && day.workout.length >= 15),
+  'every 14-day entry must include a workout prescription or recovery instructions');
+assert.ok(proDiagnosticData.days.every(day =>
+  Object.keys(day.meals || {}).length === 4 &&
+  Object.values(day.meals).every(meal =>
+    meal.title && meal.recipe.length >= 15 && Array.isArray(meal.ingredients) && meal.ingredients.length > 0
+  ) &&
+  day.calculatedNutrition.calories >= proDiagnosticData.targets.calories * 0.90 &&
+  day.calculatedNutrition.calories <= proDiagnosticData.targets.calories * 1.10
+), 'every 14-day entry must contain four complete meals and pass daily calorie validation');
 assert.ok(workerSource.includes("url.pathname === '/api/ai-diagnostic'"), 'diagnostic route must be registered');
 assert.ok(workerSource.includes('async function aiPlanDiagnostic(request, env)'), 'diagnostic route handler must exist');
 assert.ok(workerSource.includes('diagnostic path deliberately does not call checkout, rateLimit, or any D1 write'));
