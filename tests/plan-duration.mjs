@@ -308,7 +308,7 @@ try {
 
 let groqModelFallbackCalls = [];
 let groqStrictSchemaCalls = 0;
-let groqExactLengthSchemaCalls = 0;
+let groqUnboundedArraySchemaCalls = 0;
 let groqServerValidatedFoodIdSchemaCalls = 0;
 try {
   globalThis.fetch = async (_url, init) => {
@@ -319,8 +319,8 @@ try {
         payload.response_format.json_schema.schema?.required?.includes('week')) {
       groqStrictSchemaCalls++;
       const schema = payload.response_format.json_schema.schema;
-      if (schema.properties?.week?.minItems === schema.properties?.week?.maxItems) {
-        groqExactLengthSchemaCalls++;
+      if (schema.properties?.week?.minItems === undefined && schema.properties?.week?.maxItems === undefined) {
+        groqUnboundedArraySchemaCalls++;
       }
       if (!schema.properties?.week?.items?.properties?.breakfastIngredients?.items?.properties?.foodId?.enum) {
         groqServerValidatedFoodIdSchemaCalls++;
@@ -352,8 +352,8 @@ try {
     'after GPT-OSS 120B succeeds, all remaining plan blocks must continue using it');
   assert.equal(groqStrictSchemaCalls, 6,
     'the three bounded primary attempts and all three alternate-model blocks must use strict JSON Schema output');
-  assert.equal(groqExactLengthSchemaCalls, 6,
-    'every Groq response schema must enforce the exact requested number of days');
+  assert.equal(groqUnboundedArraySchemaCalls, 6,
+    'Groq schema must avoid unsupported array-length constraints; the server enforces the exact number of days');
   assert.equal(groqServerValidatedFoodIdSchemaCalls, 6,
     'the server must validate catalog food IDs after structured generation rather than asking Groq to enforce a fragile enum');
 } finally {
