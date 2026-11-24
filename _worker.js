@@ -275,6 +275,23 @@ function normalizeMealIngredients(raw, enforceFoodPortionLimits = false) {
   return normalized;
 }
 
+function buildGroqStrictPlanSchema(menuDays) {
+  const schema = JSON.parse(JSON.stringify(buildPlanResponseSchema(menuDays)));
+  const removeUnsupportedConstraints = value => {
+    if (!value || typeof value !== 'object') return;
+    if (Array.isArray(value)) {
+      value.forEach(removeUnsupportedConstraints);
+      return;
+    }
+    for (const key of ['minLength','maxLength','minItems','maxItems','minimum','maximum']) {
+      delete value[key];
+    }
+    Object.values(value).forEach(removeUnsupportedConstraints);
+  };
+  removeUnsupportedConstraints(schema);
+  return schema;
+}
+
 function buildPlanResponseSchema(menuDays) {
   const ingredient = {
     type: 'object',
@@ -890,7 +907,14 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
             max_completion_tokens: 3500,
             reasoning_effort: 'low',
             include_reasoning: false,
-            response_format: { type: 'json_object' }
+            response_format: {
+              type: 'json_schema',
+              json_schema: {
+                name: 'fital_pro_plan',
+                strict: true,
+                schema: buildGroqStrictPlanSchema(menuDays)
+              }
+            }
           }
         : {
             messages: currentMessages,
