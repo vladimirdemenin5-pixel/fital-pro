@@ -34,13 +34,13 @@ const htmlSource = await readFile(new URL('../public/index.html', import.meta.ur
 const productionWorkflow = await readFile(new URL('../.github/workflows/main.yml', import.meta.url), 'utf8');
 const pullRequestWorkflow = await readFile(new URL('../.github/workflows/pull-request-checks.yml', import.meta.url), 'utf8');
 const liveIntegrationSource = await readFile(new URL('../scripts/live-ai-plans.mjs', import.meta.url), 'utf8');
-const previewWorkerName = pullRequestWorkflow.match(/npx wrangler preview --name ([^\\s]+)/)?.[1];
-assert.ok(previewWorkerName &&
-  liveIntegrationSource.includes(`hostname.startsWith('${previewWorkerName}-red-waterfall-2af8.')`),
+assert.ok(pullRequestWorkflow.includes('--name fital-pro-redesign-groq-ready') &&
+  liveIntegrationSource.includes("hostname.startsWith('fital-pro-redesign-groq-ready-red-waterfall-2af8.')"),
   'the full Preview integration script must accept the exact Worker Preview name published by the PR workflow');
 assert.ok(productionWorkflow.includes('FITALPRO_AI_TARGET: production') &&
   productionWorkflow.includes('FITALPRO_WORKER_URL: https://red-waterfall-2af8.vladimirdemenin5.workers.dev') &&
   productionWorkflow.includes('node scripts/live-ai-plan-validation.mjs') &&
+  productionWorkflow.includes('timeout-minutes: 90') &&
   !productionWorkflow.includes('node scripts/live-ai-plans.mjs'),
   'the optional production AI check must target the existing production Worker and use the no-D1-write AI diagnostic');
 assert.ok(Object.entries(FOOD_CATALOG).length >= 30, 'food reference catalog must remain populated');

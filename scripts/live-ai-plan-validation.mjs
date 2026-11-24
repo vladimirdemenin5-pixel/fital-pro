@@ -1,7 +1,7 @@
 import { request as httpsRequest } from 'node:https';
 
 const endpoint = process.env.FITALPRO_WORKER_URL || '';
-if (!endpoint) throw new Error('FITALPRO_WORKER_URL must point to the dedicated PR Preview Worker.');
+if (!endpoint) throw new Error('FITALPRO_WORKER_URL must point to the explicitly selected production Worker or PR Preview Worker.');
 const endpointUrl = new URL(endpoint);
 const target = process.env.FITALPRO_AI_TARGET || 'preview';
 const allowedHostname = target === 'production'
