@@ -862,7 +862,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
         ? {
             messages: currentMessages,
             temperature: 0.2,
-            max_completion_tokens: 4200,
+            max_completion_tokens: 6200,
             reasoning_effort: 'low',
             reasoning_format: 'hidden',
             response_format: { type: 'json_object' }
@@ -872,10 +872,10 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
             temperature: 0.2,
             ...(isGptOss ? {
               // GPT-OSS uses max_tokens; keep JSON enforcement in the prompt and validate server-side.
-              max_tokens: 4200,
+              max_tokens: 6200,
               reasoning_effort: 'low'
             } : {
-              max_completion_tokens: 4200,
+              max_completion_tokens: 6200,
               ...(isGemma ? { response_format: { type: 'json_object' } } : {}),
             })
           };
@@ -1125,10 +1125,11 @@ async function generateAiPlan(profile, planKey, env) {
 
   try {
     if (!env.AI && !clean(env.GROQ_API_KEY, 300)) throw new Error('Нет доступного подключения к генеративной модели.');
-    // Generate one validated two-day block at a time. If a block fails,
-    // later blocks are never started and cannot consume additional AI quota.
-    for (let offset = 0; offset < totalDays; offset += 2) {
-    const chunkDays = Math.min(2, totalDays - offset);
+    // Generate validated three-day blocks to reduce serial provider round-trips.
+    // The final block may be shorter; every block still passes the full server validator.
+    const generationBlockDays = 3;
+    for (let offset = 0; offset < totalDays; offset += generationBlockDays) {
+    const chunkDays = Math.min(generationBlockDays, totalDays - offset);
     const mealCalorieTargets = [
       ['завтрак', 0.25],
       ['обед', 0.30],
