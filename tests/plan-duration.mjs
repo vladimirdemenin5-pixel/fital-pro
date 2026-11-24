@@ -524,7 +524,10 @@ assert.ok(workerSource.includes("reasoning_effort: 'low'"), 'reasoning must be b
 assert.ok(workerSource.includes('const aiOptions = {') && workerSource.includes('env.AI.run(model, aiOptions, { rejectIfBusy: true })'), 'the AI chat fallback must also disable reasoning before inference');
 assert.ok(workerSource.includes("https://api.groq.com/openai/v1/chat/completions") &&
   workerSource.includes("Authorization: 'Bearer ' + apiKey") &&
-  workerSource.includes("response_format: { type: 'json_object' }") &&
+  workerSource.includes("type: 'json_schema'") &&
+  workerSource.includes("name: 'fital_pro_plan'") &&
+  workerSource.includes('strict: true') &&
+  workerSource.includes('buildGroqStrictPlanSchema(menuDays)') &&
   workerSource.includes('include_reasoning: false'),
   'optional Groq inference must use server-side API credentials, bounded output, and JSON-only structured generation');
 assert.ok(workerSource.includes('week должен содержать РОВНО'), 'the model prompt must explicitly require the exact block length');
