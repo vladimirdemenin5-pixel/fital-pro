@@ -558,8 +558,20 @@ const concurrentPlan = await generateAiPlan(profile, 'PRO', { AI: {
 } });
 assert.equal(concurrentPlan.week.length, 14, 'sequential chunk generation must still assemble every PRO day');
 assert.equal(maxConcurrentPlanCalls, 1, 'AI plan blocks must never run concurrently');
-assert.ok(proPlan.shopping.includes('Овсяные хлопья, сухие — 1,12 кг'));
-assert.ok(proPlan.shopping.includes('Молоко 2% — 2,8 кг'));
+function expectedShoppingLine(foodId) {
+  const grams = proPlan.week.reduce((sum,day)=>sum+['breakfast','lunch','snack','dinner']
+    .flatMap(key=>day[key+'Ingredients'])
+    .filter(item=>item.foodId===foodId)
+    .reduce((mealSum,item)=>mealSum+item.grams,0),0);
+  const amount = grams >= 1000
+    ? Number((grams/1000).toFixed(2)).toLocaleString('ru-RU') + ' кг'
+    : grams + ' г';
+  return FOOD_CATALOG[foodId].name + ' — ' + amount;
+}
+assert.ok(proPlan.shopping.includes(expectedShoppingLine('oats_dry')),
+  'shopping list must aggregate accepted AI gram amounts for oats across all days');
+assert.ok(proPlan.shopping.includes(expectedShoppingLine('milk_2pct')),
+  'shopping list must aggregate accepted AI gram amounts for milk across all days');
 assert.ok(!proPlan.shopping.includes('Продукты на весь период'));
 assert.ok(proPlan.nutritionSource.includes('USDA FoodData Central'));
 assert.ok(workerSource.includes('fdcId:173904'), 'oats reference must retain its USDA food record identifier');
