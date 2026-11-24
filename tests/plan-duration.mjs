@@ -471,7 +471,7 @@ const underPortionRetryAI = makeRetryAi(7, 0.4, 0.7);
 let lowEnergyCorrectionPrompt = '';
 const lowEnergyFallbackPlan = await generateAiPlan(profile, 'Питание', { AI: {
   async run(model, input) {
-    if (model === '@cf/google/gemma-4-26b-a4b-it') throw new Error('Gemma intentionally unavailable for low-energy retry test');
+    if (model === '@cf/google/gemma-4-26b-a4b-it') return makeAi(7, false, false, false, false, 0.4).run(model, input);
     if (model === '@cf/openai/gpt-oss-120b') {
       lowEnergyCorrectionPrompt = input.messages.at(-1).content;
       return makeAi(7).run(model, input);
