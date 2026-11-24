@@ -325,8 +325,8 @@ try {
     'the rate-limited primary model gets one bounded retry');
   assert.equal(groqModelFallbackCalls.filter(model => model === 'openai/gpt-oss-120b').length, 3,
     'after GPT-OSS 120B succeeds, all remaining plan blocks must continue using it');
-  assert.equal(groqStrictSchemaCalls, 3,
-    'every Groq block must use strict JSON Schema output for the exact required plan structure');
+  assert.equal(groqStrictSchemaCalls, 5,
+    'the two bounded primary attempts and all three alternate-model blocks must use strict JSON Schema output');
 } finally {
   globalThis.fetch = originalGroqRequiredFetch;
 }
