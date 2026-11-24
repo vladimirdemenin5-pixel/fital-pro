@@ -69,6 +69,14 @@ const liveIntegrationSource = await readFile(new URL('../scripts/live-ai-plans.m
 assert.ok(pullRequestWorkflow.includes('--name fital-pro-redesign-groq-ready') &&
   liveIntegrationSource.includes("hostname.startsWith('fital-pro-redesign-groq-ready-red-waterfall-2af8.')"),
   'the full Preview integration script must accept the exact Worker Preview name published by the PR workflow');
+const productionWorkflowSource = productionWorkflow;
+assert.ok(productionWorkflowSource.includes('wrangler secret put GROQ_API_KEY --name red-waterfall-2af8') &&
+  productionWorkflowSource.includes('secrets.GROQ_API_KEY') &&
+  productionWorkflowSource.includes('d.groq!==true'),
+  'Production deployment must synchronize the existing Groq secret and fail health verification if Groq is unavailable at runtime');
+assert.ok(liveIntegrationSource.includes("data.groq !== true") &&
+  liveIntegrationSource.includes("result.aiProviders.includes('groq')"),
+  'the live AI validator must preflight Groq runtime availability and reject Production plans generated without Groq');
 assert.ok(productionWorkflow.includes('FITALPRO_AI_TARGET: production') &&
   productionWorkflow.includes('FITALPRO_WORKER_URL: https://red-waterfall-2af8.vladimirdemenin5.workers.dev') &&
   productionWorkflow.includes('node scripts/live-ai-plan-validation.mjs') &&
