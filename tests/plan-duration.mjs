@@ -76,10 +76,10 @@ assert.ok(pullRequestWorkflow.includes('types: [opened, synchronize, reopened, l
 assert.ok(Object.entries(FOOD_CATALOG).every(([id, food]) => Number.isFinite(food.kcal) && Number.isFinite(food.protein) && Number.isFinite(food.fat) && Number.isFinite(food.carbs)), 'every food must define calories, protein, fat and carbohydrates');
 
 function nutritionWithinTargetsForTest(n, t) {
-  return n.calories >= t.calories * 0.8 && n.calories <= t.calories * 1.2 &&
-    n.protein >= t.protein * 0.8 && n.protein <= t.protein * 1.2 &&
-    n.fat >= t.fat * 0.7 && n.fat <= t.fat * 1.3 &&
-    n.carbs >= t.carbs * 0.7 && n.carbs <= t.carbs * 1.3;
+  return n.calories >= t.calories * 0.93 && n.calories <= t.calories * 1.07 &&
+    n.protein >= t.protein * 0.90 && n.protein <= t.protein * 1.10 &&
+    n.fat >= t.fat * 0.85 && n.fat <= t.fat * 1.15 &&
+    n.carbs >= t.carbs * 0.85 && n.carbs <= t.carbs * 1.15;
 }
 
 const profile = {
@@ -191,10 +191,10 @@ const macroCorrectionSucceeded = rebalanceDayNutrition(macroCorrectionDay, {
   calories: 1800, protein: 90, fat: 58, carbs: 225
 }, profile);
 assert.equal(macroCorrectionSucceeded, true, 'server correction must change the food composition when portion-only tuning cannot balance protein, fat and carbohydrates');
-assert.ok(macroCorrectionDay.nutrition.calories >= 1440 && macroCorrectionDay.nutrition.calories <= 2160);
-assert.ok(macroCorrectionDay.nutrition.protein >= 72 && macroCorrectionDay.nutrition.protein <= 108);
-assert.ok(macroCorrectionDay.nutrition.fat >= 40.6 && macroCorrectionDay.nutrition.fat <= 75.4);
-assert.ok(macroCorrectionDay.nutrition.carbs >= 157.5 && macroCorrectionDay.nutrition.carbs <= 292.5);
+assert.ok(macroCorrectionDay.nutrition.calories >= 1674 && macroCorrectionDay.nutrition.calories <= 1926);
+assert.ok(macroCorrectionDay.nutrition.protein >= 81 && macroCorrectionDay.nutrition.protein <= 99);
+assert.ok(macroCorrectionDay.nutrition.fat >= 49.3 && macroCorrectionDay.nutrition.fat <= 66.7);
+assert.ok(macroCorrectionDay.nutrition.carbs >= 191.25 && macroCorrectionDay.nutrition.carbs <= 258.75);
 const correctedMacroFoodIds = ['breakfast','lunch','snack','dinner'].flatMap(key => macroCorrectionDay[key + 'Ingredients'].map(item => item.foodId));
 assert.notDeepEqual(correctedMacroFoodIds, originalMacroFoodIds, 'the correction must actually replace products from the catalog');
 assert.ok(['breakfast','lunch','snack','dinner'].some(key => macroCorrectionDay[key + 'Recipe'].length >= 20 && macroCorrectionDay[key + 'Recipe'].toLowerCase().includes('приготов')), 'the recipe must be synchronized with changed ingredients');
@@ -425,14 +425,14 @@ try {
   globalThis.fetch = originalGroqRequiredFetch;
 }
 
-assert.ok(quotaFallbackPlan.week.every(day => day.nutrition.calories >= quotaFallbackPlan.calories * 0.8 &&
-  day.nutrition.calories <= quotaFallbackPlan.calories * 1.2 &&
-  day.nutrition.protein >= quotaFallbackPlan.protein * 0.8 &&
-  day.nutrition.protein <= quotaFallbackPlan.protein * 1.2 &&
-  day.nutrition.fat >= quotaFallbackPlan.fat * 0.7 &&
-  day.nutrition.fat <= quotaFallbackPlan.fat * 1.3 &&
-  day.nutrition.carbs >= quotaFallbackPlan.carbs * 0.7 &&
-  day.nutrition.carbs <= quotaFallbackPlan.carbs * 1.3),
+assert.ok(quotaFallbackPlan.week.every(day => day.nutrition.calories >= quotaFallbackPlan.calories * 0.93 &&
+  day.nutrition.calories <= quotaFallbackPlan.calories * 1.07 &&
+  day.nutrition.protein >= quotaFallbackPlan.protein * 0.90 &&
+  day.nutrition.protein <= quotaFallbackPlan.protein * 1.10 &&
+  day.nutrition.fat >= quotaFallbackPlan.fat * 0.85 &&
+  day.nutrition.fat <= quotaFallbackPlan.fat * 1.15 &&
+  day.nutrition.carbs >= quotaFallbackPlan.carbs * 0.85 &&
+  day.nutrition.carbs <= quotaFallbackPlan.carbs * 1.15),
   'every fallback day must pass the same strict calculated macro ranges as an AI-generated day');
 
 const noProviderNutritionPlan = await generateAiPlan(profile, 'Питание', {});
@@ -510,10 +510,10 @@ const oversizedIngredientPlan = await generateAiPlan(profile, 'Питание', 
 assert.ok(oversizedIngredientPlan.week.every(day => {
   const oil = day.dinnerIngredients.find(item => item.foodId === 'olive_oil');
   return oil?.grams === 20 &&
-    day.nutrition.calories >= oversizedIngredientPlan.calories * 0.8 &&
-    day.nutrition.calories <= oversizedIngredientPlan.calories * 1.2 &&
-    day.nutrition.fat >= oversizedIngredientPlan.fat * 0.7 &&
-    day.nutrition.fat <= oversizedIngredientPlan.fat * 1.3;
+    day.nutrition.calories >= oversizedIngredientPlan.calories * 0.93 &&
+    day.nutrition.calories <= oversizedIngredientPlan.calories * 1.07 &&
+    day.nutrition.fat >= oversizedIngredientPlan.fat * 0.85 &&
+    day.nutrition.fat <= oversizedIngredientPlan.fat * 1.15;
 }), 'a globally valid ingredient portion above its product-specific ceiling must be clamped and the resulting full day must still pass strict nutrition validation');
 const invalidPortionFallback = await generateAiPlan(profile, 'Питание', { AI: {
   async run(model, input) {
@@ -601,6 +601,12 @@ assert.ok(workerSource.includes('max_tokens: 6200') && workerSource.includes('ma
 assert.ok(workerSource.includes("const isGptOss = model === '@cf/openai/gpt-oss-120b' || model === '@cf/openai/gpt-oss-20b'") && workerSource.includes('max_tokens: 6200') && workerSource.includes("reasoning_effort: 'low'"), 'both GPT-OSS fallbacks must use supported token limits and bounded reasoning');
 assert.ok(!workerSource.includes('QWEN4_API_KEY') && !workerSource.includes('qwen4-max') &&
   !workerSource.includes('qwen/qwen3.8-27b'), 'Qwen integrations must remain absent from the plan-generation chain');
+assert.ok(workerSource.includes("Неизменные допуски сервера: калории ±7%, белок ±10%, жиры и углеводы ±15%.") &&
+  workerSource.includes("n.calories < targets.calories * 0.93") &&
+  workerSource.includes("n.protein < targets.protein * 0.90") &&
+  workerSource.includes("n.fat < targets.fat * 0.85") &&
+  workerSource.includes("n.carbs < targets.carbs * 0.85"),
+  'diagnostic rejection reasons and corrective prompts must use the exact server nutrition tolerances');
 assert.ok(workerSource.includes('function buildPlanResponseSchema(menuDays, allowedFoodIds = Object.keys(FOOD_CATALOG))') && workerSource.includes('minItems: menuDays') && workerSource.includes('maxItems: menuDays'), 'the reusable server schema helper must still describe exact plan length');
 assert.ok(workerSource.includes("reasoning_effort: 'low'"), 'reasoning must be bounded to low for structured meal-plan generation');
 assert.ok(workerSource.includes('const aiOptions = {') && workerSource.includes('env.AI.run(model, aiOptions, { rejectIfBusy: true })'), 'the AI chat fallback must also disable reasoning before inference');
@@ -762,34 +768,34 @@ const mixedMacroRecovery = await generateAiPlan(profile, 'Питание', { AI:
 } });
 assert.equal(mixedMacroRecovery.week.length, 7, 'mixed protein excess and carbohydrate deficit must be recovered by paired portion correction');
 for (const day of mixedMacroRecovery.week) {
-  assert.ok(day.nutrition.calories >= mixedMacroRecovery.calories * 0.8 && day.nutrition.calories <= mixedMacroRecovery.calories * 1.2);
-  assert.ok(day.nutrition.protein >= mixedMacroRecovery.protein * 0.8 && day.nutrition.protein <= mixedMacroRecovery.protein * 1.2);
-  assert.ok(day.nutrition.fat >= mixedMacroRecovery.fat * 0.7 && day.nutrition.fat <= mixedMacroRecovery.fat * 1.3);
-  assert.ok(day.nutrition.carbs >= mixedMacroRecovery.carbs * 0.7 && day.nutrition.carbs <= mixedMacroRecovery.carbs * 1.3);
+  assert.ok(day.nutrition.calories >= mixedMacroRecovery.calories * 0.93 && day.nutrition.calories <= mixedMacroRecovery.calories * 1.07);
+  assert.ok(day.nutrition.protein >= mixedMacroRecovery.protein * 0.90 && day.nutrition.protein <= mixedMacroRecovery.protein * 1.10);
+  assert.ok(day.nutrition.fat >= mixedMacroRecovery.fat * 0.85 && day.nutrition.fat <= mixedMacroRecovery.fat * 1.15);
+  assert.ok(day.nutrition.carbs >= mixedMacroRecovery.carbs * 0.85 && day.nutrition.carbs <= mixedMacroRecovery.carbs * 1.15);
 }
 for (const [label, plan] of [['under-portioned', severelyUnderPortionedPlan], ['over-portioned', severelyOverProteinPlan]]) {
   assert.equal(plan.week.length, 7, label + ' AI output must be recoverable when bounded correction can produce a valid menu');
   assert.ok(plan.week.every(day =>
-    day.nutrition.calories >= plan.calories * 0.8 &&
-    day.nutrition.calories <= plan.calories * 1.2 &&
-    day.nutrition.protein >= plan.protein * 0.8 &&
-    day.nutrition.protein <= plan.protein * 1.2 &&
-    day.nutrition.fat >= plan.fat * 0.7 &&
-    day.nutrition.fat <= plan.fat * 1.3 &&
-    day.nutrition.carbs >= plan.carbs * 0.7 &&
-    day.nutrition.carbs <= plan.carbs * 1.3
+    day.nutrition.calories >= plan.calories * 0.93 &&
+    day.nutrition.calories <= plan.calories * 1.07 &&
+    day.nutrition.protein >= plan.protein * 0.90 &&
+    day.nutrition.protein <= plan.protein * 1.10 &&
+    day.nutrition.fat >= plan.fat * 0.85 &&
+    day.nutrition.fat <= plan.fat * 1.15 &&
+    day.nutrition.carbs >= plan.carbs * 0.85 &&
+    day.nutrition.carbs <= plan.carbs * 1.15
   ), label + ' plan must pass the same strict daily nutrition ranges as live plans');
 }
 assert.equal(correctedPortionPlan.week.length, 14, 'server-side portion correction must recover a plan with initially undersized portions');
 assert.ok(correctedPortionPlan.week.every(day =>
-  day.nutrition.calories >= correctedPortionPlan.calories * 0.8 &&
-  day.nutrition.calories <= correctedPortionPlan.calories * 1.2 &&
-  day.nutrition.protein >= correctedPortionPlan.protein * 0.8 &&
-  day.nutrition.protein <= correctedPortionPlan.protein * 1.2 &&
-  day.nutrition.fat >= correctedPortionPlan.fat * 0.7 &&
-  day.nutrition.fat <= correctedPortionPlan.fat * 1.3 &&
-  day.nutrition.carbs >= correctedPortionPlan.carbs * 0.7 &&
-  day.nutrition.carbs <= correctedPortionPlan.carbs * 1.3
+  day.nutrition.calories >= correctedPortionPlan.calories * 0.93 &&
+  day.nutrition.calories <= correctedPortionPlan.calories * 1.07 &&
+  day.nutrition.protein >= correctedPortionPlan.protein * 0.90 &&
+  day.nutrition.protein <= correctedPortionPlan.protein * 1.10 &&
+  day.nutrition.fat >= correctedPortionPlan.fat * 0.85 &&
+  day.nutrition.fat <= correctedPortionPlan.fat * 1.15 &&
+  day.nutrition.carbs >= correctedPortionPlan.carbs * 0.85 &&
+  day.nutrition.carbs <= correctedPortionPlan.carbs * 1.15
 ), 'server-corrected days must still satisfy strict calorie and macro ranges');
 const missingRecipeFallback = await generateAiPlan(profile, 'Питание', { AI: {
   async run(model, input) {

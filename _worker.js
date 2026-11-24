@@ -759,21 +759,21 @@ function diagnosePlanWeekFailure(parsed, profile, planKey, menuDays, targets, st
     if (ingredientsValid) {
       day.nutrition = calculateDayNutrition(day);
       const n = day.nutrition;
-      if (n.calories < targets.calories * 0.8 || n.calories > targets.calories * 1.2) {
+      if (n.calories < targets.calories * 0.93 || n.calories > targets.calories * 1.07) {
         issues.push(dayLabel + '-calories=' + n.calories + '-allowed=' +
-          Math.round(targets.calories * 0.8) + '-' + Math.round(targets.calories * 1.2));
+          Math.round(targets.calories * 0.93) + '-' + Math.round(targets.calories * 1.07));
       }
-      if (n.protein < targets.protein * 0.8 || n.protein > targets.protein * 1.2) {
+      if (n.protein < targets.protein * 0.90 || n.protein > targets.protein * 1.10) {
         issues.push(dayLabel + '-protein=' + n.protein + '-allowed=' +
-          (Math.round(targets.protein * 0.8 * 10) / 10) + '-' + (Math.round(targets.protein * 1.2 * 10) / 10));
+          (Math.round(targets.protein * 0.90 * 10) / 10) + '-' + (Math.round(targets.protein * 1.10 * 10) / 10));
       }
-      if (targets.fat > 0 && (n.fat < targets.fat * 0.7 || n.fat > targets.fat * 1.3)) {
+      if (targets.fat > 0 && (n.fat < targets.fat * 0.85 || n.fat > targets.fat * 1.15)) {
         issues.push(dayLabel + '-fat=' + n.fat + '-allowed=' +
-          (Math.round(targets.fat * 0.7 * 10) / 10) + '-' + (Math.round(targets.fat * 1.3 * 10) / 10));
+          (Math.round(targets.fat * 0.85 * 10) / 10) + '-' + (Math.round(targets.fat * 1.15 * 10) / 10));
       }
-      if (targets.carbs > 0 && (n.carbs < targets.carbs * 0.7 || n.carbs > targets.carbs * 1.3)) {
+      if (targets.carbs > 0 && (n.carbs < targets.carbs * 0.85 || n.carbs > targets.carbs * 1.15)) {
         issues.push(dayLabel + '-carbs=' + n.carbs + '-allowed=' +
-          (Math.round(targets.carbs * 0.7 * 10) / 10) + '-' + (Math.round(targets.carbs * 1.3 * 10) / 10));
+          (Math.round(targets.carbs * 0.85 * 10) / 10) + '-' + (Math.round(targets.carbs * 1.15 * 10) / 10));
       }
     }
   }
@@ -930,7 +930,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
     const currentMessages = rejectionDiagnostics.length
       ? [...messages, {
           role: 'user',
-          content: 'ПРЕДЫДУЩАЯ МОДЕЛЬ ВЕРНУЛА ПЛАН, ОТКЛОНЁННЫЙ СЕРВЕРНОЙ ПРОВЕРКОЙ. Создай НОВЫЙ ПОЛНЫЙ JSON-план с нуля, исправив ВСЕ перечисленные причины. Не повторяй ошибочный состав блюд и граммовки. Причины отказа предыдущей модели: ' + rejectionDiagnostics.slice(-3).join(' | ') + '. Требуется ровно ' + menuDays + ' дней и четыре приёма пищи в каждом дне со всеми обязательными полями. Для каждого блюда дай конкретный рецепт из 1–2 шагов длиной 15–300 символов. Цели на каждый день: ' + JSON.stringify(nutritionTargets(profile)) + '. Неизменные допуски сервера: калории и белок ±20%, жиры и углеводы ±30%. Разрешается менять граммовки, заменять или добавлять продукты только из переданного справочника, строго соблюдая предпочтения и аллергии. Для углеводов используй подходящие крупы, картофель, хлеб, бобовые или фрукты; не компенсируй дефицит углеводов дополнительным мясом, рыбой, творогом или маслом. Проверь состав, граммовки, калории, белки, жиры и углеводы каждого дня по справочнику. КРИТИЧЕСКОЕ ПРАВИЛО: если исходная калорийность дня ниже 50% целевой, не пытайся исправлять её искусственным увеличением порций или добавлением продуктов — полностью пересоставь рацион этого дня как полноценный план. Сервер всё равно отклонит любой день вне допусков. Верни полный JSON, не ослабляй проверки и не пропускай поля.'
+          content: 'ПРЕДЫДУЩАЯ МОДЕЛЬ ВЕРНУЛА ПЛАН, ОТКЛОНЁННЫЙ СЕРВЕРНОЙ ПРОВЕРКОЙ. Создай НОВЫЙ ПОЛНЫЙ JSON-план с нуля, исправив ВСЕ перечисленные причины. Не повторяй ошибочный состав блюд и граммовки. Причины отказа предыдущей модели: ' + rejectionDiagnostics.slice(-3).join(' | ') + '. Требуется ровно ' + menuDays + ' дней и четыре приёма пищи в каждом дне со всеми обязательными полями. Для каждого блюда дай конкретный рецепт из 1–2 шагов длиной 15–300 символов. Цели на каждый день: ' + JSON.stringify(nutritionTargets(profile)) + '. Неизменные допуски сервера: калории ±7%, белок ±10%, жиры и углеводы ±15%. Разрешается менять граммовки, заменять или добавлять продукты только из переданного справочника, строго соблюдая предпочтения и аллергии. Для углеводов используй подходящие крупы, картофель, хлеб, бобовые или фрукты; не компенсируй дефицит углеводов дополнительным мясом, рыбой, творогом или маслом. Проверь состав, граммовки, калории, белки, жиры и углеводы каждого дня по справочнику. КРИТИЧЕСКОЕ ПРАВИЛО: если исходная калорийность дня ниже 50% целевой, не пытайся исправлять её искусственным увеличением порций или добавлением продуктов — полностью пересоставь рацион этого дня как полноценный план. Сервер всё равно отклонит любой день вне допусков. Верни полный JSON, не ослабляй проверки и не пропускай поля.'
         }]
       : messages;
     try {
