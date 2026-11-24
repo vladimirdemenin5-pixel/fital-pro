@@ -1,4 +1,4 @@
 .dev.vars*
 .env*
 node_modules/
-.wrangler/
+.wrangler/\nwrangler.preview.generated.jsonc\n
