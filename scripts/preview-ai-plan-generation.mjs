@@ -127,6 +127,9 @@ for (const item of plans) {
     throw new Error(item.key + ': preview AI generation failed (HTTP ' + response.status + '): ' +
       (result.error || 'unknown error') + (result.diagnostic ? ' [' + result.diagnostic + ']' : ''));
   }
+  if (result.generationMode !== 'ai' || !Array.isArray(result.aiProviders) || result.aiProviders.length === 0) {
+    throw new Error(item.key + ': read-only diagnostic did not confirm a real generative AI provider.');
+  }
   if (result.plan !== item.key || result.menuDays !== item.days ||
       result.durationDays !== item.days || !Array.isArray(result.days) ||
       result.days.length !== item.days) {
@@ -172,6 +175,7 @@ for (const item of plans) {
     plan: item.key,
     days: result.days.length,
     meals: result.days.length * mealKeys.length,
+    aiProviders: result.aiProviders,
     everyDayNutritionValidated: true,
     recipesAndIngredientsValidated: true,
     shoppingList: result.shopping.length,

@@ -79,7 +79,11 @@ for (const item of plans) {
   if (!response.ok || result.ok !== true) {
     throw new Error(`${item.key}: live Worker flow failed (HTTP ${response.status}, stage ${result.stage || 'authorization'}): ${result.error || 'unknown error'}${result.diagnostic ? ' [' + result.diagnostic + ']' : ''}`);
   }
-  if (result.days !== item.days || result.meals !== item.days * 4 ||
+  if (result.generationMode !== 'ai') {
+    throw new Error(`${item.key}: live checkout flow returned ${result.generationMode || 'unknown'} instead of a real AI plan.`);
+  }
+  if (!Array.isArray(result.aiProviders) || result.aiProviders.length === 0 ||
+      result.days !== item.days || result.meals !== item.days * 4 ||
       result.d1Write !== true || result.cabinetPlanRead !== true ||
       result.cabinetProfileRead !== true || result.memberAccessRead !== true) {
     throw new Error(`${item.key}: AI → D1 → personal-cabinet verification returned incomplete results.`);
@@ -87,6 +91,7 @@ for (const item of plans) {
   console.log(JSON.stringify({
     plan: item.key,
     generationMode: result.generationMode,
+    aiProviders: result.aiProviders,
     days: result.days,
     meals: result.meals,
     checkoutCreated: result.checkoutCreated,
