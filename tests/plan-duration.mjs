@@ -23,16 +23,44 @@ const previewDiagnosticStillProtected = await worker.fetch(new Request('https://
   body: JSON.stringify({ plan: 'Питание' })
 }), { FITALPRO_PREVIEW_CI: '1' });
 assert.equal(previewDiagnosticStillProtected.status, 404, 'Preview diagnostic must remain available only to authenticated CI');
+const healthSchemaColumns = {
+  request_log: ['ip_hash', 'route', 'created_at'],
+  subscriptions: ['id', 'payment_id', 'client_ref', 'plan', 'status', 'access_token', 'customer_contact', 'created_at', 'updated_at', 'expires_at'],
+  payments: ['id', 'status', 'plan', 'amount', 'currency', 'created_at'],
+  profiles: ['access_token', 'profile_json', 'updated_at'],
+  weekly_plans: ['id', 'access_token', 'plan_json', 'created_at', 'updated_at'],
+  progress: ['access_token', 'date', 'weight', 'completed_meal', 'completed_workout', 'note'],
+  leads: ['id', 'name', 'contact', 'goal', 'plan', 'created_at']
+};
+function makeHealthDb(missingTable = null) {
+  return {
+    prepare(sql) {
+      const match = sql.match(/^PRAGMA table_info\(([^)]+)\)$/);
+      assert.ok(match, 'health must use read-only PRAGMA schema checks');
+      const table = match[1];
+      return {
+        async all() {
+          return { results: table === missingTable ? [] : (healthSchemaColumns[table] || []).map(name => ({ name })) };
+        }
+      };
+    }
+  };
+}
 const healthWithGroq = await worker.fetch(new Request('https://fitalpro.test/health'), {
   AI: {},
-  DB: {},
+  DB: makeHealthDb(),
   GROQ_API_KEY: 'test-groq-secret'
 });
 const healthWithGroqBody = await healthWithGroq.json();
 assert.equal(healthWithGroqBody.groq, true, 'health must report Groq configuration without exposing its value');
+assert.equal(healthWithGroqBody.db, true, 'health must confirm that all required D1 tables and columns are readable');
 assert.equal(Object.values(healthWithGroqBody).includes('test-groq-secret'), false, 'health must never expose the Groq secret');
-const healthWithoutGroq = await worker.fetch(new Request('https://fitalpro.test/health'), { AI: {}, DB: {} });
-assert.equal((await healthWithoutGroq.json()).groq, false, 'health must report when the Preview Groq secret is missing');
+const healthWithoutGroq = await worker.fetch(new Request('https://fitalpro.test/health'), { AI: {}, DB: makeHealthDb() });
+const healthWithoutGroqBody = await healthWithoutGroq.json();
+assert.equal(healthWithoutGroqBody.groq, false, 'health must report when the Preview Groq secret is missing');
+assert.equal(healthWithoutGroqBody.db, true, 'D1 schema readiness must be independent of Groq configuration');
+const healthWithBrokenD1 = await worker.fetch(new Request('https://fitalpro.test/health'), { AI: {}, DB: makeHealthDb('payments') });
+assert.equal((await healthWithBrokenD1.json()).db, false, 'health must fail closed when a required D1 table is missing');
 const appSource = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
 const htmlSource = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
 const productionWorkflow = await readFile(new URL('../.github/workflows/main.yml', import.meta.url), 'utf8');

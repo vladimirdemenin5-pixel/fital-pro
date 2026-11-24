@@ -65,6 +65,36 @@ const [settings, secrets, database, schemaResult, domains, deployments] = await 
   readOnly('Production Worker deployments', '/accounts/' + accountId + '/workers/scripts/' + workerName + '/deployments')
 ]);
 
+async function publicWorkerHealth(url, label) {
+  try {
+    const response = await fetch(url + '/health', { signal: AbortSignal.timeout(15000) });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const body = await response.json();
+    console.log('READ OK: ' + label + ' health endpoint');
+    return body;
+  } catch (error) {
+    console.warn('NOT VERIFIED: ' + label + ' health endpoint — ' + error.message);
+    return null;
+  }
+}
+
+const [productionHealth, customDomainHealth] = await Promise.all([
+  publicWorkerHealth('https://red-waterfall-2af8.vladimirdemenin5.workers.dev', 'Production workers.dev'),
+  publicWorkerHealth('https://fitalpro.ru', 'fitalpro.ru')
+]);
+
+if (productionHealth) {
+  check(productionHealth.ok === true, 'Production Worker health endpoint is responding');
+  check(productionHealth.ai === true, 'Production AI binding is available at runtime');
+  check(productionHealth.db === true, 'Production D1 health check passes');
+  check(productionHealth.groq === true, 'Production Groq secret is available at runtime');
+  check(productionHealth.payments === true, 'Production Robokassa credentials are available at runtime');
+}
+if (customDomainHealth) {
+  check(customDomainHealth.ok === true && customDomainHealth.ai === true && customDomainHealth.db === true,
+    'fitalpro.ru serves the Production Worker health endpoint');
+}
+
 if (settings) {
   const bindings = Array.isArray(settings.bindings) ? settings.bindings : [];
   const d1 = bindings.find(binding => binding.type === 'd1' && binding.name === 'DB');

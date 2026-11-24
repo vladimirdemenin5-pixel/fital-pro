@@ -2406,6 +2406,31 @@ async function me(request, env) {
   });
 }
 
+const REQUIRED_D1_HEALTH_SCHEMA = Object.freeze({
+  request_log: ['ip_hash', 'route', 'created_at'],
+  subscriptions: ['id', 'payment_id', 'client_ref', 'plan', 'status', 'access_token', 'customer_contact', 'created_at', 'updated_at', 'expires_at'],
+  payments: ['id', 'status', 'plan', 'amount', 'currency', 'created_at'],
+  profiles: ['access_token', 'profile_json', 'updated_at'],
+  weekly_plans: ['id', 'access_token', 'plan_json', 'created_at', 'updated_at'],
+  progress: ['access_token', 'date', 'weight', 'completed_meal', 'completed_workout', 'note'],
+  leads: ['id', 'name', 'contact', 'goal', 'plan', 'created_at']
+});
+
+async function d1SchemaIsReady(db) {
+  if (!db || typeof db.prepare !== 'function') return false;
+  try {
+    const checks = await Promise.all(Object.entries(REQUIRED_D1_HEALTH_SCHEMA).map(async ([table, requiredColumns]) => {
+      const result = await db.prepare('PRAGMA table_info(' + table + ')').all();
+      const actualColumns = new Set((result?.results || []).map(column => column.name));
+      return requiredColumns.every(column => actualColumns.has(column));
+    }));
+    return checks.every(Boolean);
+  } catch (error) {
+    console.error('Fital Pro D1 schema health check failed:', error?.message || 'unknown error');
+    return false;
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -2417,11 +2442,12 @@ export default {
         return json({ error: 'Временный Preview: публичные записи, заказы и платёжные уведомления отключены.' }, 503);
       }
       if (url.pathname === '/health' && request.method === 'GET') {
+        const dbReady = await d1SchemaIsReady(env.DB);
         return json({
           ok: true,
           service: 'Fital Pro',
           ai: !!env.AI,
-          db: !!env.DB,
+          db: dbReady,
           groq: !!clean(env.GROQ_API_KEY, 300),
           payments: !!(env.ROBOKASSA_MERCHANT_LOGIN && robokassaPassword(env, 1) && robokassaPassword(env, 2))
         });
