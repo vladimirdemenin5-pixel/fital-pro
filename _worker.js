@@ -839,7 +839,7 @@ async function runAiInferenceWithTimeout(env, model, inputs, timeoutMs = AI_MODE
   }
 }
 
-async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 1) {
+async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 1, preferredGroqModel = 'openai/gpt-oss-20b') {
   const messages = [
     { role: 'system', content: 'Ты Fital Pro. Отвечай только валидным JSON без Markdown и пояснений.' },
     { role: 'user', content: prompt }
@@ -850,8 +850,11 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
   if (groqRequired && !groqConfigured) {
     throw new Error('Preview requires GROQ_API_KEY; Cloudflare Workers AI fallback is disabled.');
   }
+  const groqModels = preferredGroqModel === 'openai/gpt-oss-120b'
+    ? ['groq:openai/gpt-oss-120b', 'groq:openai/gpt-oss-20b']
+    : ['groq:openai/gpt-oss-20b', 'groq:openai/gpt-oss-120b'];
   const models = [
-    ...(groqConfigured ? ['groq:openai/gpt-oss-20b', 'groq:openai/gpt-oss-120b'] : []),
+    ...(groqConfigured ? groqModels : []),
     ...(!groqRequired && env.AI ? [MODEL, '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'] : [])
   ];
   const diagnostics = [];
@@ -949,6 +952,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
       if (/(?:4006|3036|daily free allocation|used up your daily free allocation)/i.test(detail)) {
         throw new Error('Дневной бесплатный лимит ИИ Cloudflare исчерпан. Сейчас новый план создать нельзя; заказ и оплата не создаются. Попробуйте позже.', { cause: error });
       }
+      if (/Groq inference HTTP (?:401|403)\\b/i.test(detail)) throw error;
     }
   }
   const diagnostic = new Error(diagnostics.join(' | ').slice(0, 1800));
@@ -1148,6 +1152,7 @@ async function generateAiPlan(profile, planKey, env) {
   const providersUsed = new Set();
   let intro = '';
   const tips = [];
+  let preferredGroqModel = 'openai/gpt-oss-20b';
 
   try {
     if (!env.AI && !clean(env.GROQ_API_KEY, 300)) throw new Error('Нет доступного подключения к генеративной модели.');
@@ -1198,8 +1203,11 @@ async function generateAiPlan(profile, planKey, env) {
       'БЛОК: дни ' + (offset + 1) + '–' + (offset + chunkDays) + ' из ' + totalDays + '.'
     ].join('\n');
 
-    const generated = await runPlanModel(env, prompt, profile, planKey, chunkDays, offset + 1);
+    const generated = await runPlanModel(env, prompt, profile, planKey, chunkDays, offset + 1, preferredGroqModel);
     providersUsed.add(generated.provider);
+    if (generated.provider === 'groq' && generated.model.startsWith('groq:')) {
+      preferredGroqModel = generated.model.slice(5);
+    }
     const raw = generated.text;
     const normalized = raw.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
     const match = normalized.match(/\{[\s\S]*\}/);
