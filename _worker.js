@@ -654,6 +654,18 @@ function rebalanceDayNutrition(day, targets, profile) {
   }
   return true;
 }
+function mealTextAllowedByPreferences(value, profile) {
+  const text = String(value || '').toLowerCase();
+  const exclusions = new Set(Array.isArray(profile?.exclusions) ? profile.exclusions : []);
+  const forbidden = [
+    [exclusions.has('nuts'), /\\b(?:орехи|миндаль|грецк(?:ий|ие) орех|арахис|арахисовая паста)\\b/i],
+    [exclusions.has('eggs'), /\\b(?:яйц(?:о|а|ами)?|омлет)\\b/i],
+    [exclusions.has('soy'), /\\b(?:соя|тофу|соевый|соевое)\\b/i],
+    [exclusions.has('honey'), /\\bм[её]д\\b/i]
+  ];
+  return !forbidden.some(([enabled, pattern]) => enabled && pattern.test(text));
+}
+
 function normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, targets, startDay = 1) {
   if (!Array.isArray(parsed.week) || parsed.week.length !== menuDays) return null;
   const includesTraining = planKey !== 'Питание';
@@ -684,6 +696,7 @@ function normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, target
     };
     if (MEAL_KEYS.some(key => !day[key] || !day[key + 'Ingredients'] || day[key + 'Recipe'].length < 15)) return null;
     if (MEAL_KEYS.some(key => day[key + 'Ingredients'].some(item => !foodAllowedByPreferences(item.foodId, profile)))) return null;
+    if (MEAL_KEYS.some(key => !mealTextAllowedByPreferences(day[key], profile) || !mealTextAllowedByPreferences(day[key + 'Recipe'], profile))) return null;
     if (!day.workout || (includesTraining && day.trainingDay && !hasWorkoutPrescription(day.workout))) return null;
     day.nutrition = calculateDayNutrition(day);
     if (!nutritionWithinTargets(day.nutrition, targets) && !rebalanceDayNutrition(day, targets, profile)) return null;
