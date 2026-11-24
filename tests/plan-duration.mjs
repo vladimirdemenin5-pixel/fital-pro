@@ -4,6 +4,8 @@ import { readFile } from 'node:fs/promises';
 
 const workerSource = await readFile(new URL('../_worker.js', import.meta.url), 'utf8');
 const wranglerSource = await readFile(new URL('../wrangler.jsonc', import.meta.url), 'utf8');
+assert.ok(!wranglerSource.includes('"FITALPRO_REQUIRE_GROQ": "1"'),
+  'Preview must use the same provider fallback chain as Production when Groq quota is exhausted');
 assert.ok(wranglerSource.includes('"ROBOKASSA_IS_TEST": "0"') &&
   wranglerSource.includes('"ROBOKASSA_IS_TEST": "1"'),
   'Production must remain in live mode while Preview explicitly uses Robokassa test mode');
