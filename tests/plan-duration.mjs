@@ -446,7 +446,7 @@ assert.equal(gpt20ModelInput.reasoning_effort, 'low');
 
 const gptFallbackPlan = await generateAiPlan(profile, 'Питание', { AI: {
   async run(model, input) {
-    if (model === '@cf/google/gemma-4-26b-a4b-it' || model === '@cf/qwen/qwen3.8-27b') throw new Error('Gemma intentionally unavailable in this test');
+    if (model === '@cf/google/gemma-4-26b-a4b-it') throw new Error('Gemma intentionally unavailable in this test');
     assert.equal(model, '@cf/openai/gpt-oss-120b', 'GPT-OSS must follow Gemma when it is unavailable');
     gptModelInput = input;
     return makeAi(7).run(model, input);
