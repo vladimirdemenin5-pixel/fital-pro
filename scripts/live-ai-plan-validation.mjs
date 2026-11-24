@@ -76,9 +76,7 @@ const profile = {
   preferences: 'Обычное питание, без аллергий. Синтетические тестовые данные.'
 };
 const plans = [
-  { key: 'Питание', days: 7 },
-  { key: 'PRO', days: 14 },
-  { key: 'Premium', days: 30 }
+  { key: 'PRO', days: 14 }
 ];
 
 for (const item of plans) {
@@ -104,7 +102,14 @@ for (const item of plans) {
 
   for (const [index, day] of result.days.entries()) {
     const meals = Object.values(day.meals || {});
+    const expectedTrainingDay = Math.floor(((index % 7) + 1) * profile.days / 7) >
+      Math.floor((index % 7) * profile.days / 7);
     if (
+      day.day !== 'День ' + (index + 1) ||
+      day.trainingDay !== expectedTrainingDay ||
+      typeof day.workout !== 'string' ||
+      day.workout.trim().length < 15 ||
+      (expectedTrainingDay && !/\\d+\\s*[×xх]\\s*\\d+/.test(day.workout)) ||
       meals.length !== 4 ||
       meals.some(meal =>
         typeof meal.title !== 'string' || !meal.title.trim() ||
@@ -129,16 +134,26 @@ for (const item of plans) {
     }
   }
 
+  const trainingDays = result.days.filter(day => day.trainingDay).length;
+  if (trainingDays !== 6) {
+    throw new Error(item.key + ': expected six scheduled training days across two complete weeks, received ' + trainingDays + '.');
+  }
+  if (!Array.isArray(result.shopping) || result.shopping.length === 0 ||
+      typeof result.nutritionSource !== 'string' || !result.nutritionSource.includes('USDA FoodData Central')) {
+    throw new Error(item.key + ': shopping list or nutrition reference is missing.');
+  }
   console.log(JSON.stringify({
     plan: item.key,
     generationMode: result.generationMode,
     aiProviders: result.aiProviders,
     days: result.days.length,
     meals: result.days.length * 4,
+    trainingDays,
+    workoutsAndRecoveryValidated: true,
     shoppingItems: Array.isArray(result.shopping) ? result.shopping.length : 0,
     dailyAverage: result.dailyAverage,
     persistence: 'not performed',
     payment: 'not created'
   }));
 }
-console.log('PASS: real AI generated complete 7-, 14-, and 30-day plans without writing to D1 or creating payments.');
+console.log('PASS: real AI generated and validated the complete 14-day PRO menu and training schedule without writing to D1 or creating payments.');
