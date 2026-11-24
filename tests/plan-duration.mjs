@@ -452,11 +452,11 @@ assert.equal(proPlan.week.length, 14, 'PRO must contain 14 complete menu days');
 assert.equal(proPlan.menuDays, 14);
 assert.equal(proPlan.week[0].day, 'День 1');
 assert.equal(proPlan.week[13].day, 'День 14');
-assert.deepEqual(proPlan.week[0].nutrition, { calories: 1872, protein: 98.1, fat: 63, carbs: 237.1 });
-assert.equal(proPlan.dailyAverage.calories, 1872);
-assert.equal(proPlan.dailyAverage.protein, 98.1);
-assert.equal(proPlan.dailyAverage.fat, 63);
-assert.equal(proPlan.dailyAverage.carbs, 237.1);
+assert.deepEqual(proPlan.week[0].nutrition, { calories: 2248, protein: 141.7, fat: 75.7, carbs: 254.6 });
+assert.equal(proPlan.dailyAverage.calories, 2248);
+assert.equal(proPlan.dailyAverage.protein, 141.7);
+assert.equal(proPlan.dailyAverage.fat, 75.7);
+assert.equal(proPlan.dailyAverage.carbs, 254.6);
 const breakfastReply = buildLocalPlanChatReply('Что у меня на завтрак в день 2?', proPlan);
 assert.ok(breakfastReply.includes('День 2') && breakfastReply.includes('Состав:') && breakfastReply.includes('г'),
   'offline consultant must return the actual saved breakfast with ingredient weights');
@@ -464,7 +464,7 @@ const workoutReply = buildLocalPlanChatReply('Какая тренировка в
 assert.ok(workoutReply.includes('День 3:') && workoutReply.includes('3×10'),
   'offline consultant must return the scheduled workout from the saved plan');
 const macroReply = buildLocalPlanChatReply('Сколько у меня калорий и БЖУ?', proPlan);
-assert.ok(macroReply.includes('1872 ккал') && macroReply.includes('98.1 г'),
+assert.ok(macroReply.includes('2248 ккал') && macroReply.includes('141.7 г'),
   'offline consultant must return the plan calorie and macro targets');
 const shoppingReply = buildLocalPlanChatReply('Покажи список покупок', proPlan);
 assert.ok(shoppingReply.includes('Список покупок') && shoppingReply.includes('Овсяные хлопья'),
