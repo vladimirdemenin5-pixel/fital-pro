@@ -836,10 +836,15 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
     { role: 'system', content: 'Ты Fital Pro. Отвечай только валидным JSON без Markdown и пояснений.' },
     { role: 'user', content: prompt }
   ];
-  // Groq GPT-OSS 20B is preferred when configured; Gemma 4 and Cloudflare GPT-OSS are bounded fallbacks.
+  // Preview can require Groq exclusively so exhausted Workers AI quota is never used as an implicit fallback.
+  const groqRequired = env.FITALPRO_REQUIRE_GROQ === '1';
+  const groqConfigured = !!clean(env.GROQ_API_KEY, 300);
+  if (groqRequired && !groqConfigured) {
+    throw new Error('Preview requires GROQ_API_KEY; Cloudflare Workers AI fallback is disabled.');
+  }
   const models = [
-    ...(clean(env.GROQ_API_KEY, 300) ? ['groq:openai/gpt-oss-20b'] : []),
-    ...(env.AI ? [MODEL, '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'] : [])
+    ...(groqConfigured ? ['groq:openai/gpt-oss-20b'] : []),
+    ...(!groqRequired && env.AI ? [MODEL, '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'] : [])
   ];
   const diagnostics = [];
   const rejectionDiagnostics = [];
