@@ -1,4 +1,30 @@
+import { request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
+
 const endpoint = process.env.FITALPRO_WORKER_URL || 'https://red-waterfall-2af8.vladimirdemenin5.workers.dev';
+
+function postJson(url, body, headers, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const requestClient = new URL(url).protocol === 'https:' ? httpsRequest : httpRequest;
+    const request = requestClient(url, { method: 'POST', headers }, response => {
+      let text = '';
+      response.setEncoding('utf8');
+      response.on('data', chunk => { text += chunk; });
+      response.on('end', () => {
+        let data = {};
+        try { data = JSON.parse(text); } catch {}
+        const status = response.statusCode || 0;
+        resolve({ ok: status >= 200 && status < 300, status, json: async () => data });
+      });
+    });
+    request.setTimeout(timeoutMs, () => {
+      request.destroy(new Error('Cloudflare Worker diagnostic did not respond within ' + timeoutMs + ' ms.'));
+    });
+    request.on('error', reject);
+    request.write(JSON.stringify(body));
+    request.end();
+  });
+}
 const oidcRequestUrl = process.env.ACTIONS_ID_TOKEN_REQUEST_URL;
 const oidcRequestToken = process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
 if (!oidcRequestUrl || !oidcRequestToken) {
@@ -35,15 +61,15 @@ for (const item of plans) {
   let result = {};
   const authPropagationDeadline = Date.now() + 90000;
   do {
-    response = await fetch(endpoint + '/api/ai-data-flow-diagnostic', {
-      method: 'POST',
-      headers: {
+    response = await postJson(
+      endpoint + '/api/ai-data-flow-diagnostic',
+      { plan: item.key },
+      {
         'Content-Type': 'application/json',
         Authorization: 'Bearer ' + oidcToken
       },
-      body: JSON.stringify({ plan: item.key }),
-      signal: AbortSignal.timeout(Math.max(240000, item.days * 30000 + 120000))
-    });
+      40 * 60 * 1000
+    );
     result = await response.json().catch(() => ({}));
     if (response.status !== 404 || result.error !== 'Диагностический доступ не настроен или ключ неверен.' ||
         Date.now() >= authPropagationDeadline) break;
