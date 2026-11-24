@@ -50,7 +50,7 @@ function runWrangler(args) {
     });
   } catch (error) {
     const detail = String(error.stderr || error.stdout || error.message || '').trim().slice(-1800);
-    if (/Authentication error \\[code: 10000\\]/i.test(detail)) {
+    if (detail.includes('Authentication error [code: 10000]')) {
       throw new Error('Cloudflare rejected D1 access: the API token stored in GitHub secret CLOUDFLARE_API_TOKEN needs Account → D1 → Edit permission. Keep its existing Workers Scripts permissions. Preview deployment stopped before any D1 database was created or changed.');
     }
     throw new Error('Wrangler command failed (' + args.join(' ') + '): ' + detail);
