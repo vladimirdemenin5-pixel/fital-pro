@@ -1,7 +1,12 @@
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 
-const endpoint = process.env.FITALPRO_WORKER_URL || '';\nif (!endpoint) throw new Error('FITALPRO_WORKER_URL must point to the isolated Preview Worker; Production is never a diagnostic default.');\nconst endpointUrl = new URL(endpoint);\nif (endpointUrl.protocol !== 'https:' || !endpointUrl.hostname.includes('fital-pro-redesign') || !endpointUrl.hostname.endsWith('.workers.dev')) {\n  throw new Error('Refusing live diagnostics: the endpoint is not the dedicated Fital Pro Preview Worker.');\n}
+const endpoint = process.env.FITALPRO_WORKER_URL || '';
+if (!endpoint) throw new Error('FITALPRO_WORKER_URL must point to the isolated Preview Worker; Production is never a diagnostic default.');
+const endpointUrl = new URL(endpoint);
+if (endpointUrl.protocol !== 'https:' || !endpointUrl.hostname.includes('fital-pro-redesign') || !endpointUrl.hostname.endsWith('.workers.dev')) {
+  throw new Error('Refusing live diagnostics: the endpoint is not the dedicated Fital Pro Preview Worker.');
+}
 
 function postJson(url, body, headers, timeoutMs) {
   return new Promise((resolve, reject) => {
