@@ -37,10 +37,12 @@ const plain = (value, status = 200) => new Response(value, {
 const clean = (value, max = 500) => String(value ?? '').trim().slice(0, max);
 const md5 = (value) => createHash('md5').update(String(value), 'utf8').digest('hex').toUpperCase();
 
-function buildRobokassaPaymentSignature({ merchant, outSum, invId, successUrl2, failUrl2, password1, clientRef }) {
-  // Robokassa's parameter order includes empty Receipt, StepByStep and ResultUrl2 slots.
-  const base = merchant + ':' + outSum + ':' + invId + '::::' +
-    successUrl2 + ':GET:' + failUrl2 + ':GET:' + password1 + ':Shp_ref=' + clientRef;
+function buildRobokassaPaymentSignature({ merchant, outSum, invId, receipt = '', successUrl2, failUrl2, password1, clientRef }) {
+  // Robokassa signs URL-encoded Receipt before the optional StepByStep and ResultUrl2 slots.
+  const base = [
+    merchant, outSum, invId, receipt, '', '',
+    successUrl2, 'GET', failUrl2, 'GET', password1, 'Shp_ref=' + clientRef
+  ].join(':');
   return md5(base);
 }
 
@@ -1378,6 +1380,19 @@ async function checkout(request, env, forceTestMode = false) {
   params.set('OutSum', product.amount);
   params.set('InvId', String(invId));
   params.set('Description', product.label);
+  const receipt = {
+    items: [{
+      name: product.label.slice(0, 128),
+      quantity: 1,
+      sum: Number(product.amount),
+      payment_method: 'full_prepayment',
+      payment_object: 'service',
+      tax: 'none'
+    }]
+  };
+  const receiptJson = JSON.stringify(receipt);
+  const receiptForSignature = encodeURIComponent(receiptJson);
+  params.set('Receipt', receiptJson);
   params.set('Culture', 'ru');
   params.set('Encoding', 'utf-8');
   const returnBase = new URL(testMode ? '/robokassa-test.html' : '/', request.url);
@@ -1396,6 +1411,7 @@ async function checkout(request, env, forceTestMode = false) {
     merchant,
     outSum: product.amount,
     invId,
+    receipt: receiptForSignature,
     successUrl2,
     failUrl2,
     password1,
