@@ -3,4 +3,3 @@
 node_modules/
 .wrangler/
 wrangler.preview.generated.jsonc
-wrangler.preview.generated.jsonc
