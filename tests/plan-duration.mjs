@@ -234,7 +234,7 @@ assert.equal(rebalanceDayNutrition(lowEnergyDay,{calories:1800,protein:90,fat:58
 assert.deepEqual(['breakfast','lunch','snack','dinner'].flatMap(key=>lowEnergyDay[key+'Ingredients'].map(item=>item.foodId)),lowEnergyFoodIds,
  'a failed correction must preserve the original selected foods');
 
-const timeoutSignalCapture =const timeoutSignalCapture = { signal: null };
+const timeoutSignalCapture = { signal: null };
 await assert.rejects(
   () => runAiInferenceWithTimeout({
     AI: {
