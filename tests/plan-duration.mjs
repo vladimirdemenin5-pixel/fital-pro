@@ -83,6 +83,14 @@ assert.ok(liveIntegrationSource.includes('day.calculatedNutrition.calories < res
   liveIntegrationSource.includes('day.calculatedNutrition.calories > result.targets.calories * 1.10') &&
   liveIntegrationSource.includes('day.calculatedNutrition[key] >= 0'),
   'live AI validation must enforce ±10% calories separately for every day and only finite nonnegative macros');
+assert.ok(liveIntegrationSource.includes("{ key: 'Питание', days: 7 }") &&
+  liveIntegrationSource.includes("{ key: 'PRO', days: 14 }") &&
+  liveIntegrationSource.includes("{ key: 'Premium', days: 30 }") &&
+  liveIntegrationSource.includes('expectedTrainingDays') &&
+  !liveIntegrationSource.includes('trainingDays !== 6'),
+  'live Preview AI validation must cover all three paid durations and derive the correct workout count for each');
+assert.ok(workerSource.includes('aiFailureDiagnostic(error, 1200)'),
+  'authenticated live AI diagnostics must preserve the sanitized nested provider failure reason');
 assert.ok(productionWorkflow.includes('FITALPRO_AI_TARGET: production') &&
   productionWorkflow.includes('FITALPRO_WORKER_URL: https://red-waterfall-2af8.vladimirdemenin5.workers.dev') &&
   productionWorkflow.includes('node scripts/live-ai-plan-validation.mjs') &&
@@ -110,7 +118,7 @@ function getWorkflowStepCondition(source, stepName) {
 
 const liveAiCondition = getWorkflowStepCondition(
   pullRequestWorkflow,
-  'Verify real 14-day PRO AI menu and training plan without database writes'
+  'Verify real 7-, 14-, and 30-day AI plans without database writes'
 );
 const livePaymentCondition = getWorkflowStepCondition(
   pullRequestWorkflow,
