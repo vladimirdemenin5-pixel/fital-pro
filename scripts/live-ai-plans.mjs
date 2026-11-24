@@ -2,10 +2,14 @@ import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 
 const endpoint = process.env.FITALPRO_WORKER_URL || '';
-if (!endpoint) throw new Error('FITALPRO_WORKER_URL must point to the isolated Preview Worker; Production is never a diagnostic default.');
+if (!endpoint) throw new Error('FIT​​ALPRO_WORKER_URL must point to the dedicated PR Preview Worker; Production is never a diagnostic default.');
 const endpointUrl = new URL(endpoint);
-if (endpointUrl.protocol !== 'https:' || !endpointUrl.hostname.includes('fital-pro-redesign') || !endpointUrl.hostname.endsWith('.workers.dev')) {
-  throw new Error('Refusing live diagnostics: the endpoint is not the dedicated Fital Pro Preview Worker.');
+if (
+  endpointUrl.protocol !== 'https:' ||
+  !endpointUrl.hostname.startsWith('design-tilda-inspired-bold-redesign-red-waterfall-2af8.') ||
+  !endpointUrl.hostname.endsWith('.workers.dev')
+) {
+  throw new Error('Refusing live diagnostics: only the PR #53 Preview Worker hostname is allowed.');
 }
 
 function postJson(url, body, headers, timeoutMs) {
