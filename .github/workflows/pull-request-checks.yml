@@ -1,4 +1,4 @@
-# The Preview job is mirrored in the base branch so GitHub can load it for pull_request events.
+      - name: Provision isolated Preview D1 and apply migrations\n        env:\n          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}\n          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}\n        run: node scripts/prepare-preview.mjs\n\n\n# The Preview job is mirrored in the base branch so GitHub can load it for pull_request events.
 name: Fital Pro pull request checks
 
 on:
@@ -63,7 +63,7 @@ jobs:
             echo "Cloudflare deployment credentials are not configured for this repository." >&2
             exit 1
           fi
-          npx wrangler preview --name fital-pro-redesign --message "Fital Pro PR #53 visual redesign" 2>&1 | tee "$RUNNER_TEMP/fitalpro-preview.log"
+          npx wrangler preview --config wrangler.preview.generated.jsonc --name fital-pro-redesign --message "Fital Pro PR #53 visual redesign" 2>&1 | tee "$RUNNER_TEMP/fitalpro-preview.log"
           preview_url="$(grep -Eo 'https://[a-zA-Z0-9.-]+workers\.dev' "$RUNNER_TEMP/fitalpro-preview.log" | head -n 1 || true)"
           if [ -z "$preview_url" ]; then
             echo "Wrangler completed without returning a workers.dev Preview URL." >&2
@@ -89,9 +89,9 @@ jobs:
         run: |
           set -euo pipefail
           if [ -n "$GROQ_API_KEY" ]; then
-            printf '%s' "$GROQ_API_KEY" | npx wrangler preview secret put GROQ_API_KEY --name fital-pro-redesign
+            printf '%s' "$GROQ_API_KEY" | npx wrangler preview secret put GROQ_API_KEY --config wrangler.preview.generated.jsonc --name fital-pro-redesign
           else
-            echo "GROQ_API_KEY is not configured as a repository secret; Preview will retain its existing provider configuration."
+            echo "::notice::GROQ_API_KEY is not available as a GitHub repository secret. Preview does not inherit the Production secret; Groq-based Preview checks remain unavailable until a separate Preview key is configured."
           fi
 
       # Workers AI has a shared 10,000-neuron daily free allowance. Run this costly integration only on explicit PR label.
