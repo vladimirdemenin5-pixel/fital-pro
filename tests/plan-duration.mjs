@@ -382,8 +382,8 @@ assert.ok(workerSource.includes('env.AI.run(model, inputs, { signal: controller.
 assert.ok(workerSource.includes('const AI_MODEL_TIMEOUT_MS = 45000;') && workerSource.includes('Promise.race([') && workerSource.includes('runAiInferenceWithTimeout(env, model'), 'each plan-model inference must have a hard timeout so a stalled model cannot block fallbacks');
 assert.ok(workerSource.includes("...(env.AI ? ['@cf/zai-org/glm-4.7-flash', '@cf/meta/llama-3.1-8b-instruct-fast', MODEL] : [])"),
   'general chat must retain Cloudflare fallbacks when the binding is present');
-assert.ok(workerSource.includes('max_tokens: 4200') && workerSource.includes('max_completion_tokens: 4200') && workerSource.includes('GPT_OSS_PLAN_TIMEOUT_MS = 60000') && workerSource.includes('AI_PLAN_FALLBACK_TIMEOUT_MS = 60000'), 'each Workers AI plan model must use its documented token-limit parameter and bounded timeout');
-assert.ok(workerSource.includes("const isGptOss = model === '@cf/openai/gpt-oss-120b' || model === '@cf/openai/gpt-oss-20b'") && workerSource.includes('max_tokens: 4200') && workerSource.includes("reasoning_effort: 'low'"), 'both GPT-OSS fallbacks must use supported token limits and bounded reasoning');
+assert.ok(workerSource.includes('max_tokens: 6200') && workerSource.includes('max_completion_tokens: 6200') && workerSource.includes('GPT_OSS_PLAN_TIMEOUT_MS = 60000') && workerSource.includes('AI_PLAN_FALLBACK_TIMEOUT_MS = 60000'), 'each Workers AI plan model must use its documented token-limit parameter and bounded timeout');
+assert.ok(workerSource.includes("const isGptOss = model === '@cf/openai/gpt-oss-120b' || model === '@cf/openai/gpt-oss-20b'") && workerSource.includes('max_tokens: 6200') && workerSource.includes("reasoning_effort: 'low'"), 'both GPT-OSS fallbacks must use supported token limits and bounded reasoning');
 assert.ok(!workerSource.includes('QWEN4_API_KEY') && !workerSource.includes('qwen4-max'), 'paid QwenCloud integration must be absent from the Cloudflare-only model chain');
 assert.ok(workerSource.includes('function buildPlanResponseSchema(menuDays)') && workerSource.includes('minItems: menuDays') && workerSource.includes('maxItems: menuDays'), 'the reusable server schema helper must still describe exact plan length');
 assert.ok(workerSource.includes("reasoning_effort: 'low'"), 'reasoning must be bounded to low for structured meal-plan generation');
@@ -427,7 +427,7 @@ const timeoutRecoveredPlan = await generateAiPlan(profile, 'Питание', { A
 } });
 assert.equal(timeoutRecoveredPlan.week.length, 7, 'a timed-out first model must fall back to the next available model');
 assert.equal(timeoutFallbackModelsByBlock.get(1)?.[1], '@cf/openai/gpt-oss-120b', 'a timed-out Gemma request must fall back to Cloudflare GPT-OSS 120B for the same block');
-assert.equal(timeoutFallbackModelsByBlock.get(3)?.[0], '@cf/google/gemma-4-26b-a4b-it', 'the next two-day block must start with its own Gemma primary call');
+assert.equal(timeoutFallbackModelsByBlock.get(4)?.[0], '@cf/google/gemma-4-26b-a4b-it', 'the next three-day block must start with its own Gemma primary call');
 let gemmaModelInput = null;
 const gemmaPrimaryPlan = await generateAiPlan(profile, 'Питание', { AI: {
   async run(model, input, options) {
@@ -440,7 +440,7 @@ const gemmaPrimaryPlan = await generateAiPlan(profile, 'Питание', { AI: {
 assert.equal(gemmaPrimaryPlan.week.length, 7);
 assert.equal(gemmaPrimaryPlan.generationMode, 'ai');
 assert.deepEqual(gemmaPrimaryPlan.aiProviders, ['cloudflare-ai']);
-assert.equal(gemmaModelInput.max_completion_tokens, 4200);
+assert.equal(gemmaModelInput.max_completion_tokens, 6200);
 assert.deepEqual(gemmaModelInput.response_format, { type: 'json_object' }, 'Gemma should receive a JSON output hint and remain subject to strict server validation');
 const gemmaPrompt = gemmaModelInput.messages[1].content;
 assert.ok(gemmaPrompt.includes('\"name\":\"Клиент\"') && !gemmaPrompt.includes('Тестовый клиент'), 'all Cloudflare AI models must receive an anonymized client name');
@@ -475,8 +475,8 @@ const gptRepairPlan = await generateAiPlan(profile, 'Питание', { AI: {
 assert.equal(gptRepairPlan.week.length, 7);
 assert.equal(gptRepairAttemptsByStart.get(1), 2, 'GPT-OSS 20B must receive the corrective rejection reasons after GPT-OSS 120B fails validation');
 assert.deepEqual(gptRepairModelsByStart.get(1), ['@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b']);
-assert.equal(gptRepairAttemptsByStart.get(3), 1, 'valid GPT-OSS 120B output must not trigger an unnecessary retry');
-assert.equal(gpt20ModelInput.max_tokens, 4200);
+assert.equal(gptRepairAttemptsByStart.get(4), 1, 'valid GPT-OSS 120B output must not trigger an unnecessary retry');
+assert.equal(gpt20ModelInput.max_tokens, 6200);
 assert.equal(gpt20ModelInput.reasoning_effort, 'low');
 
 const gptFallbackPlan = await generateAiPlan(profile, 'Питание', { AI: {
@@ -488,7 +488,7 @@ const gptFallbackPlan = await generateAiPlan(profile, 'Питание', { AI: {
   }
 } });
 assert.equal(gptFallbackPlan.week.length, 7, 'GPT-OSS fallback must produce a complete server-validated seven-day plan');
-assert.equal(gptModelInput.max_tokens, 4200);
+assert.equal(gptModelInput.max_tokens, 6200);
 assert.equal(gptModelInput.reasoning_effort, 'low');
 assert.equal(gptModelInput.response_format, undefined, 'do not send undocumented JSON Mode to GPT-OSS; validate its JSON response server-side');
 assert.ok(workerSource.includes('заменять или добавлять продукты') && workerSource.includes('Для углеводов используй подходящие крупи') === false && workerSource.includes('Для углеводов используй подходящие крупы'), 'AI fallback correction must be allowed to add catalog carbohydrate sources when needed');
