@@ -86,11 +86,22 @@ const profile = {
   days: 3,
   preferences: 'Обычное питание, без аллергий. Синтетические тестовые данные.'
 };
-const plans = [
+const availablePlans = [
   { key: 'Питание', days: 7 },
   { key: 'PRO', days: 14 },
   { key: 'Premium', days: 30 }
 ];
+const requestedPlanKeys = (process.env.FITALPRO_AI_PLANS || '')
+  .split(',')
+  .map(value => value.trim())
+  .filter(Boolean);
+const plans = requestedPlanKeys.length
+  ? availablePlans.filter(item => requestedPlanKeys.includes(item.key))
+  : availablePlans;
+if (requestedPlanKeys.length && plans.length !== new Set(requestedPlanKeys).size) {
+  throw new Error('FITALPRO_AI_PLANS contains an unknown or duplicate plan key.');
+}
+if (!plans.length) throw new Error('FITALPRO_AI_PLANS must select at least one plan.');
 
 for (const item of plans) {
   const token = await getOidcToken();
