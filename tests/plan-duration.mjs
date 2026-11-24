@@ -195,7 +195,7 @@ await assert.rejects(
 assert.equal(timeoutSignalCapture.signal.aborted, true, 'a model timeout must also abort the underlying AI call');
 assert.equal(timeoutSignalCapture.signal.aborted, true, 'a model timeout must also abort the underlying AI call');
 
-// Groq gets one bounded retry for transient HTTP/network failures before Cloudflare is considered.
+// Groq gets bounded retries for transient HTTP/network failures before provider fallback.
 const originalFetch = globalThis.fetch;
 let groqTransientCalls = 0;
 try {
@@ -226,6 +226,22 @@ try {
   const recoveredRateLimit = await runGroqInferenceWithTimeout({ GROQ_API_KEY: 'test-groq-key' }, 'openai/gpt-oss-20b', {}, 1000);
   assert.equal(groqRateLimitCalls, 2, 'a Groq 429 must retry after the provider token-reset header even when retry-after is absent');
   assert.equal(recoveredRateLimit.choices[0].message.content, '{"ok":true}');
+
+  let groqRepeatedRateLimitCalls = 0;
+  globalThis.fetch = async () => {
+    groqRepeatedRateLimitCalls++;
+    return groqRepeatedRateLimitCalls <= 2
+      ? new Response(JSON.stringify({ error: { message: 'TPM rate limit reached' } }), {
+          status: 429,
+          headers: { 'content-type': 'application/json', 'x-ratelimit-reset-tokens': '0.001s' }
+        })
+      : new Response(JSON.stringify({ choices: [{ message: { content: '{"ok":true}' } }] }), {
+          status: 200, headers: { 'content-type': 'application/json' }
+        });
+  };
+  const recoveredRepeatedRateLimit = await runGroqInferenceWithTimeout({ GROQ_API_KEY: 'test-groq-key' }, 'openai/gpt-oss-20b', {}, 1000);
+  assert.equal(groqRepeatedRateLimitCalls, 3, 'Groq inference must survive two consecutive TPM windows before succeeding on its third bounded attempt');
+  assert.equal(recoveredRepeatedRateLimit.choices[0].message.content, '{"ok":true}');
 
   let groqPermanentCalls = 0;
   globalThis.fetch = async () => {
