@@ -65,7 +65,7 @@ const appSource = await readFile(new URL('../public/app.js', import.meta.url), '
 const htmlSource = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
 const productionWorkflow = await readFile(new URL('../.github/workflows/main.yml', import.meta.url), 'utf8');
 const pullRequestWorkflow = await readFile(new URL('../.github/workflows/pull-request-checks.yml', import.meta.url), 'utf8');
-const liveIntegrationSource = await readFile(new URL('../scripts/live-ai-plans.mjs', import.meta.url), 'utf8');
+const liveIntegrationSource = await readFile(new URL('../scripts/live-ai-plan-validation.mjs', import.meta.url), 'utf8');
 assert.ok(pullRequestWorkflow.includes('--name fital-pro-redesign-groq-ready') &&
   liveIntegrationSource.includes("hostname.startsWith('fital-pro-redesign-groq-ready-red-waterfall-2af8.')"),
   'the full Preview integration script must accept the exact Worker Preview name published by the PR workflow');
