@@ -32,6 +32,34 @@ const paymentBase = [
 const expectedPaymentSignature = createHash('md5').update(paymentBase, 'utf8').digest('hex').toUpperCase();
 assert.equal(buildRobokassaPaymentSignature(paymentInput), expectedPaymentSignature,
   'payment signature must include the three empty Robokassa parameter slots in the documented order');
+const receiptJson = JSON.stringify({
+  items: [{
+    name: 'Fital Pro — Питание, 7 дней',
+    quantity: 1,
+    sum: 990,
+    payment_method: 'full_prepayment',
+    payment_object: 'service',
+    tax: 'none'
+  }]
+});
+const receiptInput = { ...paymentInput, receipt: encodeURIComponent(receiptJson) };
+const receiptBase = [
+  receiptInput.merchant,
+  receiptInput.outSum,
+  receiptInput.invId,
+  receiptInput.receipt,
+  '',
+  '',
+  receiptInput.successUrl2,
+  'GET',
+  receiptInput.failUrl2,
+  'GET',
+  receiptInput.password1,
+  'Shp_ref=' + receiptInput.clientRef
+].join(':');
+const expectedReceiptSignature = createHash('md5').update(receiptBase, 'utf8').digest('hex').toUpperCase();
+assert.equal(buildRobokassaPaymentSignature(receiptInput), expectedReceiptSignature,
+  'payment signature must include URL-encoded Receipt and preserve the documented modifier order');
 
 const fields = {
   OutSum: '990.00',
