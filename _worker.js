@@ -1478,7 +1478,8 @@ async function aiPlanDiagnostic(request, env) {
     return json({
       ok: false,
       error: 'Резервный расчёт плана работает, но генеративная модель недоступна.',
-      generationMode: plan.generationMode
+      generationMode: plan.generationMode,
+      ...(oidcAuthorized && plan.generationIssue ? { diagnostic: clean(plan.generationIssue, 1200) } : {})
     }, 503);
   }
 
