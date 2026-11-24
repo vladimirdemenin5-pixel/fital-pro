@@ -1392,7 +1392,7 @@ async function checkout(request, env, forceTestMode = false) {
   };
   const receiptJson = JSON.stringify(receipt);
   const receiptForSignature = encodeURIComponent(receiptJson);
-  params.set('Receipt', receiptJson);
+  params.set('Receipt', receiptForSignature);
   params.set('Culture', 'ru');
   params.set('Encoding', 'utf-8');
   const returnBase = new URL(testMode ? '/robokassa-test.html' : '/', request.url);
