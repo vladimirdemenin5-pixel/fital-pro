@@ -210,7 +210,23 @@ try {
   const recoveredGroq = await runGroqInferenceWithTimeout({ GROQ_API_KEY: 'test-groq-key' }, 'openai/gpt-oss-20b', {}, 1000);
   assert.equal(groqTransientCalls, 2, 'a transient Groq 5xx must be retried once');
   assert.equal(recoveredGroq.choices[0].message.content, '{"ok":true}');
-  
+
+  let groqRateLimitCalls = 0;
+  globalThis.fetch = async () => {
+    groqRateLimitCalls++;
+    return groqRateLimitCalls === 1
+      ? new Response(JSON.stringify({ error: { message: 'TPM rate limit reached' } }), {
+          status: 429,
+          headers: { 'content-type': 'application/json', 'x-ratelimit-reset-tokens': '0.001s' }
+        })
+      : new Response(JSON.stringify({ choices: [{ message: { content: '{"ok":true}' } }] }), {
+          status: 200, headers: { 'content-type': 'application/json' }
+        });
+  };
+  const recoveredRateLimit = await runGroqInferenceWithTimeout({ GROQ_API_KEY: 'test-groq-key' }, 'openai/gpt-oss-20b', {}, 1000);
+  assert.equal(groqRateLimitCalls, 2, 'a Groq 429 must retry after the provider token-reset header even when retry-after is absent');
+  assert.equal(recoveredRateLimit.choices[0].message.content, '{"ok":true}');
+
   let groqPermanentCalls = 0;
   globalThis.fetch = async () => {
     groqPermanentCalls++;
