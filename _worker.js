@@ -872,14 +872,13 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
   if (groqRequired && !groqConfigured) {
     throw new Error('Preview requires GROQ_API_KEY; Cloudflare Workers AI fallback is disabled.');
   }
-  // GPT-OSS gives strict schema-constrained plans. If both 8K-TPM model
-  // buckets are saturated, Compound Mini is a high-throughput JSON-mode fallback;
-  // the same full server-side nutrition and preference validator remains mandatory.
-  const groqModels = preferredGroqModel === 'groq/compound-mini'
-    ? ['groq/compound-mini', 'groq:openai/gpt-oss-20b', 'groq:openai/gpt-oss-120b']
+  // Use three currently supported Groq models with independent model-level TPM buckets.
+  // All three keep the same strict structured output and full server-side nutrition validation.
+  const groqModels = preferredGroqModel === 'qwen/qwen3.8-27b'
+    ? ['groq:qwen/qwen3.8-27b', 'groq:openai/gpt-oss-20b', 'groq:openai/gpt-oss-120b']
     : preferredGroqModel === 'openai/gpt-oss-120b'
-      ? ['groq:openai/gpt-oss-120b', 'groq:openai/gpt-oss-20b', 'groq/compound-mini']
-      : ['groq:openai/gpt-oss-20b', 'groq:openai/gpt-oss-120b', 'groq/compound-mini'];
+      ? ['groq:openai/gpt-oss-120b', 'groq:openai/gpt-oss-20b', 'groq:qwen/qwen3.8-27b']
+      : ['groq:openai/gpt-oss-20b', 'groq:openai/gpt-oss-120b', 'groq:qwen/qwen3.8-27b'];
   const models = [
     ...(groqConfigured ? groqModels : []),
     ...(!groqRequired && env.AI ? [MODEL, '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'] : [])
@@ -903,8 +902,8 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
     try {
       const isGemma = model === MODEL;
       const isGptOss = model === '@cf/openai/gpt-oss-120b' || model === '@cf/openai/gpt-oss-20b';
-      const isGroq = model.startsWith('groq:') || model === 'groq/compound-mini';
-      const isCompoundMini = model === 'groq/compound-mini';
+      const isGroq = model.startsWith('groq:');
+      const isQwenGroq = model === 'groq:qwen/qwen3.8-27b';
       const groqModelId = model.startsWith('groq:') ? model.slice(5) : model;
       const scheduleGroqCorrection = () => {
         if (isGroq && !groqCorrectionScheduled) {
@@ -917,20 +916,17 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
             messages: currentMessages,
             temperature: 0.2,
             max_completion_tokens: 6200,
-            ...(isCompoundMini ? {} : {
-              reasoning_effort: 'low',
-              include_reasoning: false
-            }),
-            response_format: isCompoundMini
-              ? { type: 'json_object' }
-              : {
-                  type: 'json_schema',
-                  json_schema: {
-                    name: 'fital_pro_plan',
-                    strict: true,
-                    schema: buildGroqStrictPlanSchema(menuDays)
-                  }
-                }
+            ...(isQwenGroq
+              ? { reasoning_effort: 'none' }
+              : { reasoning_effort: 'low', include_reasoning: false }),
+            response_format: {
+              type: 'json_schema',
+              json_schema: {
+                name: 'fital_pro_plan',
+                strict: true,
+                schema: buildGroqStrictPlanSchema(menuDays)
+              }
+            }
           }
         : {
             messages: currentMessages,
