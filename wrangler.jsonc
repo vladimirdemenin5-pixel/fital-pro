@@ -34,7 +34,8 @@
       "binding": "AI"
     },
     "vars": {
-      "FITALPRO_PREVIEW_CI": "1"
+      "FITALPRO_PREVIEW_CI": "1",
+      "FITALPRO_REQUIRE_GROQ": "1"
     }
   },
   "observability": {
