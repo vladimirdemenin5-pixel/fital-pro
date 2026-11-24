@@ -98,7 +98,7 @@ const requestedPlanKeys = (process.env.FITALPRO_AI_PLANS || '')
 const plans = requestedPlanKeys.length
   ? availablePlans.filter(item => requestedPlanKeys.includes(item.key))
   : availablePlans;
-if (requestedPlanKeys.length && plans.length !== new Set(requestedPlanKeys).size) {
+if (requestedPlanKeys.length && plans.length !== requestedPlanKeys.length) {
   throw new Error('FITALPRO_AI_PLANS contains an unknown or duplicate plan key.');
 }
 if (!plans.length) throw new Error('FITALPRO_AI_PLANS must select at least one plan.');
