@@ -5,6 +5,7 @@ on:
     branches:
       - design/tilda-inspired-bold-redesign
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
     branches:
       - main
 
