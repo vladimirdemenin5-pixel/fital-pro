@@ -544,7 +544,10 @@ assert.ok(workerSource.includes('function aiFailureDiagnostic(error, maxLength =
   'nested AI provider errors must reach authenticated Preview diagnostics without leaking into public checkout responses');
 assert.ok(workerSource.includes('const rejectionDiagnostics = [];') && workerSource.includes('rejectionDiagnostics.slice(-3)'), 'the next fallback model must receive concrete rejection reasons from the previous model');
 assert.ok(workerSource.includes("const groqRequired = env.FITALPRO_REQUIRE_GROQ === '1';") &&
-  workerSource.includes("const groqModels = preferredGroqModel === 'groq/compound-mini'") &&
+  workerSource.includes("const groqModels = preferredGroqModel === 'qwen/qwen3.8-27b'") &&
+  workerSource.includes("'groq:qwen/qwen3.8-27b'") &&
+  workerSource.includes("const isQwenGroq = model === 'groq:qwen/qwen3.8-27b'") &&
+  workerSource.includes("reasoning_effort: 'none'") &&
   workerSource.includes("preferredGroqModel === 'openai/gpt-oss-120b'") &&
   workerSource.includes("preferredGroqModel = generated.model.startsWith('groq:')") &&
   workerSource.includes("...(groqConfigured ? groqModels : [])") &&
