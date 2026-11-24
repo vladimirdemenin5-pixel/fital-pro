@@ -47,6 +47,13 @@ assert.ok(pullRequestWorkflow.includes('types: [opened, synchronize, reopened, l
   'live AI plan and payment integration checks must remain explicitly label-gated on PR events');
 assert.ok(Object.entries(FOOD_CATALOG).every(([id, food]) => Number.isFinite(food.kcal) && Number.isFinite(food.protein) && Number.isFinite(food.fat) && Number.isFinite(food.carbs)), 'every food must define calories, protein, fat and carbohydrates');
 
+function nutritionWithinTargetsForTest(n, t) {
+  return n.calories >= t.calories * 0.8 && n.calories <= t.calories * 1.2 &&
+    n.protein >= t.protein * 0.8 && n.protein <= t.protein * 1.2 &&
+    n.fat >= t.fat * 0.7 && n.fat <= t.fat * 1.3 &&
+    n.carbs >= t.carbs * 0.7 && n.carbs <= t.carbs * 1.3;
+}
+
 const profile = {
   name: 'Тестовый клиент',
   sex: 'female',
@@ -146,9 +153,10 @@ const lowEnergyDay = {
   dinnerIngredients: [{ foodId:'cod_raw', name:FOOD_CATALOG.cod_raw.name, grams:5 }]
 };
 const lowEnergyBefore = JSON.stringify(lowEnergyDay);
-assert.equal(rebalanceDayNutrition(lowEnergyDay, { calories:1800, protein:90, fat:58, carbs:225 }, profile), false,
-  'a severely incomplete low-energy draft must be rejected for AI retry instead of being fabricated from catalog foods');
-assert.equal(JSON.stringify(lowEnergyDay), lowEnergyBefore, 'the low-energy guard must not mutate the rejected draft');
+assert.equal(rebalanceDayNutrition(lowEnergyDay, { calories:1800, protein:90, fat:58, carbs:225 }, profile), true,
+  'a severely under-portioned AI draft must be recovered with allowed catalog foods and bounded portions');
+assert.ok(nutritionWithinTargetsForTest(lowEnergyDay.nutrition, { calories:1800, protein:90, fat:58, carbs:225 }),
+  'recovered low-energy draft must satisfy all four strict macro ranges');
 
 const originalMacroFoodIds = ['breakfast','lunch','snack','dinner'].flatMap(key => macroCorrectionDay[key + 'Ingredients'].map(item => item.foodId));
 const macroCorrectionSucceeded = rebalanceDayNutrition(macroCorrectionDay, {
@@ -590,10 +598,9 @@ const lowEnergyFallbackPlan = await generateAiPlan(profile, 'Питание', { 
   }
 } });
 assert.equal(lowEnergyFallbackPlan.week.length, 7);
-assert.ok(lowEnergyCorrectionPrompt.includes('day-1-calories=') || lowEnergyCorrectionPrompt.includes('day-1-protein='), 'the next model must receive concrete server nutrition diagnostics');
-assert.ok(lowEnergyCorrectionPrompt.includes('ниже 50%') && lowEnergyCorrectionPrompt.includes('не пытайся исправлять'), 'the correction prompt must preserve the strict under-50% full-regeneration rule');
+assert.equal(lowEnergyCorrectionPrompt, '', 'a severely under-portioned draft that can be corrected safely must pass server-side macro balancing without another model round-trip');
 const severelyUnderPortionedPlan = await generateAiPlan(profile, 'Питание', { AI: underPortionRetryAI });
-assert.ok(underPortionRetryAI.calls >= 2, 'an under-50% AI draft must be rejected and the next model must generate a complete replacement plan');
+assert.equal(underPortionRetryAI.calls, 3, 'a recoverable under-portioned draft must be balanced locally for each of the three menu blocks without repeated AI calls');
 const severelyOverProteinPlan = await generateAiPlan(profile, 'Питание', { AI: makeAi(7, false, false, false, false, 1.4) });
 const mixedMacroRecovery = await generateAiPlan(profile, 'Питание', { AI: {
   async run(model, input) {
