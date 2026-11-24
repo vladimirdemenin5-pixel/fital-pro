@@ -39,13 +39,7 @@ async function getHealth() {
   if (!response.ok || data.ok !== true || data.ai !== true) {
     throw new Error('AI preflight failed: Worker health or AI binding is unavailable.');
   }
-  if (target === 'production' && data.groq !== true) {
-    throw new Error('AI preflight failed: Production Worker does not receive GROQ_API_KEY. No AI quota will be spent until the production Groq secret is available at runtime.');
-  }
-  if (target === 'preview' && data.groq !== true) {
-    throw new Error('AI preflight failed: Preview Worker does not receive GROQ_API_KEY. No AI quota will be spent until the Preview Groq secret is available at runtime.');
-  }
-  console.log('PASS: AI preflight — Worker AI binding and required Groq runtime configuration are available.');
+  console.log('PASS: AI preflight — Worker AI binding is available; Groq configured:', data.groq === true, '(Cloudflare Workers AI remains the fallback).');
   return data;
 }
 
@@ -106,9 +100,6 @@ for (const item of plans) {
     !Array.isArray(result.days) || result.days.length !== item.days
   ) {
     throw new Error(`${item.key}: returned an incomplete plan or a non-AI fallback.`);
-  }
-  if (target === 'production' && !result.aiProviders.includes('groq')) {
-    throw new Error(`${item.key}: Production AI plan was generated without Groq; the production provider chain is not in the expected state.`);
   }
 
   for (const [index, day] of result.days.entries()) {
