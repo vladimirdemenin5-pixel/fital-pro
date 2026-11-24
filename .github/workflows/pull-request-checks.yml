@@ -87,7 +87,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -n "$GROQ_API_KEY" ]; then
-            printf '%s' "$GROQ_API_KEY" | npx wrangler secret put GROQ_API_KEY --name fital-pro-redesign
+            printf '%s' "$GROQ_API_KEY" | npx wrangler preview secret put GROQ_API_KEY --name fital-pro-redesign
           else
             echo "GROQ_API_KEY is not configured as a repository secret; Preview will retain its existing provider configuration."
           fi
