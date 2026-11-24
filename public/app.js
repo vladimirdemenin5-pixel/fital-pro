@@ -104,7 +104,9 @@ $('#intakeForm').addEventListener('submit', async function (event) {
     goal: fields.get('goal'),
     training: fields.get('training'),
     days: Number(fields.get('days')),
-    preferences: fields.get('preferences')
+    preferences: fields.get('preferences'),
+    diet: fields.get('diet') || 'classic',
+    exclusions: fields.getAll('exclusions')
   };
   try {
     const generatedCheckout = await api('/api/checkout', {
@@ -277,7 +279,11 @@ function fillProfileForm(profile) {
   if (!form || !profile) return;
   for (const [key, value] of Object.entries(profile)) {
     const field = form.elements.namedItem(key);
-    if (field && value !== null && value !== undefined) field.value = String(value);
+    if (!field || value === null || value === undefined) continue;
+    if (key === 'exclusions' && field.length !== undefined) {
+      const selected = new Set(Array.isArray(value) ? value : []);
+      Array.from(field).forEach(input => { input.checked = selected.has(input.value); });
+    } else field.value = String(value);
   }
 }
 
@@ -292,7 +298,9 @@ function profileFromFields(fields) {
     goal: fields.get('goal'),
     training: fields.get('training'),
     days: Number(fields.get('days')),
-    preferences: fields.get('preferences')
+    preferences: fields.get('preferences'),
+    diet: fields.get('diet') || 'classic',
+    exclusions: fields.getAll('exclusions')
   };
 }
 
