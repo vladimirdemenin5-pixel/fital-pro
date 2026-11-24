@@ -184,7 +184,7 @@ async function runAiTextWithFallback(env, options, purpose, validate = () => tru
             temperature: options?.temperature ?? 0.4,
             max_completion_tokens: options?.max_completion_tokens ?? 900,
             reasoning_effort: 'low',
-            reasoning_format: 'hidden'
+            include_reasoning: false
           }, 45000)
         : await env.AI.run(model, aiOptions, { rejectIfBusy: true });
       const text = extractAiText(result);
@@ -869,7 +869,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
             temperature: 0.2,
             max_completion_tokens: 6200,
             reasoning_effort: 'low',
-            reasoning_format: 'hidden',
+            include_reasoning: false,
             response_format: { type: 'json_object' }
           }
         : {
