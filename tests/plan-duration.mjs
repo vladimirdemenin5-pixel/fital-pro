@@ -608,8 +608,9 @@ assert.ok(workerSource.includes("const groqRequired = env.FITALPRO_REQUIRE_GROQ 
   workerSource.includes("reasoning_effort: 'low'") &&
   workerSource.includes("include_reasoning: false") &&
   workerSource.includes("preferredGroqModel = generated.model.startsWith('groq:')") &&
-  workerSource.includes("...(groqConfigured ? groqModels : [])") &&
-  workerSource.includes("...(!groqRequired && env.AI ? [MODEL, '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'] : [])"),
+  workerSource.includes("...(groqConfigured && !providerState.groqDailyQuotaExhausted ? groqModels : [])") &&
+  workerSource.includes("...(!groqRequired && env.AI ? [MODEL, '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b', '@cf/zai-org/glm-4.7-flash'] : [])") &&
+  workerSource.includes('providerState.groqDailyQuotaExhausted = true'),
   'plan generation must use only the approved GPT-OSS Groq models, enforce Groq-only Preview when required, and retain the bounded Cloudflare fallback chain elsewhere');
 assert.ok(workerSource.includes('const originalFoodIds = items.map(item => item.foodId)') &&
   workerSource.includes('const correctedGrams = gramsAtScale((low + high) / 2)') &&
@@ -820,6 +821,63 @@ assert.deepEqual(nutritionRetryModelsByBlock.get(1),['@cf/google/gemma-4-26b-a4b
 assert.deepEqual(nutritionRetryModelsByBlock.get(4),['@cf/google/gemma-4-26b-a4b-it']);
 assert.deepEqual(nutritionRetryModelsByBlock.get(7),['@cf/google/gemma-4-26b-a4b-it']);
 assert.ok(workerSource.includes('const generationBlockDays = 3;'));
+
+// A minor model rounding error on a single ingredient is normalized to the
+// documented 5 g minimum; the final plan still passes calorie validation.
+const minimumPortionPlan=await generateAiPlan(profile,'Питание',{AI:{async run(model,input){
+ const response=await makeAi(7).run(model,input),parsed=JSON.parse(response.response);
+ for(const day of parsed.week)day.dinnerIngredients[4].grams=3;
+ return {response:JSON.stringify(parsed)};
+}}});
+assert.ok(minimumPortionPlan.week.every(day=>day.dinnerIngredients[4].grams>=5),
+ 'AI portions below 5 g must be normalized to the safe 5 g minimum rather than rejecting an otherwise valid meal');
+
+// GLM-4.7 Flash is the final existing-Cloudflare fallback after the current
+// Gemma and GPT-OSS routes fail; its output remains subject to full validation.
+const glmFallbackModels=[];
+const glmFallbackPlan=await generateAiPlan(profile,'Питание',{AI:{async run(model,input){
+ glmFallbackModels.push(model);
+ if(model!=='@cf/zai-org/glm-4.7-flash')throw new Error('simulated earlier Cloudflare model failure');
+ assert.deepEqual(input.response_format,{type:'json_object'});
+ assert.deepEqual(input.chat_template_kwargs,{enable_thinking:false});
+ return makeAi(7).run(model,input);
+}}});
+assert.equal(glmFallbackPlan.week.length,7);
+assert.deepEqual(glmFallbackModels.slice(0,4),[
+ '@cf/google/gemma-4-26b-a4b-it',
+ '@cf/openai/gpt-oss-120b',
+ '@cf/openai/gpt-oss-20b',
+ '@cf/zai-org/glm-4.7-flash'
+]);
+
+// Premium must complete all 30 days. Once both Groq models report a daily
+// token quota, later three-day blocks must not retry the exhausted Groq quota.
+const originalPremiumQuotaFetch=globalThis.fetch;
+let premiumGroqQuotaCalls=0;
+const premiumCloudflareModels=[];
+try{
+ globalThis.fetch=async(_url,init)=>{
+  premiumGroqQuotaCalls++;
+  const payload=JSON.parse(init.body);
+  return new Response(JSON.stringify({error:{message:'Rate limit reached for model '+payload.model+' on tokens per day (TPD): Limit 200000, Used 200000'}}),{
+   status:429,headers:{'content-type':'application/json'}
+  });
+ };
+ const premiumQuotaPlan=await generateAiPlan(profile,'Premium',{
+  GROQ_API_KEY:'test-groq-key',
+  AI:{async run(model,input){
+   premiumCloudflareModels.push(model);
+   assert.equal(model,'@cf/google/gemma-4-26b-a4b-it');
+   return makeAi(30).run(model,input);
+  }}
+ });
+ assert.equal(premiumQuotaPlan.week.length,30);
+ assert.equal(premiumQuotaPlan.durationDays,30);
+ assert.equal(premiumGroqQuotaCalls,2,'daily Groq quota should be detected once per model, not retried for every 3-day block');
+ assert.equal(premiumCloudflareModels.length,10,'all ten Premium day-blocks must be generated and validated');
+}finally{
+ globalThis.fetch=originalPremiumQuotaFetch;
+}
 
 const modelCalls = [];
 const fallbackText = await runAiTextWithFallback({
