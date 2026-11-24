@@ -336,7 +336,8 @@ try {
 let groqModelFallbackCalls = [];
 let groqStrictSchemaCalls = 0;
 let groqUnboundedArraySchemaCalls = 0;
-let groqServerValidatedFoodIdSchemaCalls = 0;
+let groqCatalogEnumSchemaCalls = 0;
+let groqBoundedGramSchemaCalls = 0;
 try {
   globalThis.fetch = async (_url, init) => {
     const payload = JSON.parse(init.body);
@@ -349,8 +350,14 @@ try {
       if (schema.properties?.week?.minItems === undefined && schema.properties?.week?.maxItems === undefined) {
         groqUnboundedArraySchemaCalls++;
       }
-      if (!schema.properties?.week?.items?.properties?.breakfastIngredients?.items?.properties?.foodId?.enum) {
-        groqServerValidatedFoodIdSchemaCalls++;
+      const ingredientSchema = schema.properties?.week?.items?.properties?.breakfastIngredients?.items;
+      if (Array.isArray(ingredientSchema?.properties?.foodId?.enum) &&
+          ingredientSchema.properties.foodId.enum.length === Object.keys(FOOD_CATALOG).length) {
+        groqCatalogEnumSchemaCalls++;
+      }
+      if (ingredientSchema?.properties?.grams?.minimum === 5 &&
+          ingredientSchema.properties.grams.maximum === 500) {
+        groqBoundedGramSchemaCalls++;
       }
     }
     if (payload.model === 'openai/gpt-oss-20b') {
@@ -381,8 +388,10 @@ try {
     'the three bounded primary attempts and all three alternate-model blocks must use strict JSON Schema output');
   assert.equal(groqUnboundedArraySchemaCalls, 6,
     'Groq schema must avoid unsupported array-length constraints; the server enforces the exact number of days');
-  assert.equal(groqServerValidatedFoodIdSchemaCalls, 6,
-    'the server must validate catalog food IDs after structured generation rather than asking Groq to enforce a fragile enum');
+  assert.equal(groqCatalogEnumSchemaCalls, 6,
+    'Groq strict schema must restrict every generated foodId to the client-allowed food catalog');
+  assert.equal(groqBoundedGramSchemaCalls, 6,
+    'Groq strict schema must constrain ingredient grams to the safe 5–500 gram range');
 } finally {
   globalThis.fetch = originalGroqRequiredFetch;
 }
@@ -592,7 +601,7 @@ assert.ok(workerSource.includes('max_tokens: 6200') && workerSource.includes('ma
 assert.ok(workerSource.includes("const isGptOss = model === '@cf/openai/gpt-oss-120b' || model === '@cf/openai/gpt-oss-20b'") && workerSource.includes('max_tokens: 6200') && workerSource.includes("reasoning_effort: 'low'"), 'both GPT-OSS fallbacks must use supported token limits and bounded reasoning');
 assert.ok(!workerSource.includes('QWEN4_API_KEY') && !workerSource.includes('qwen4-max') &&
   !workerSource.includes('qwen/qwen3.8-27b'), 'Qwen integrations must remain absent from the plan-generation chain');
-assert.ok(workerSource.includes('function buildPlanResponseSchema(menuDays)') && workerSource.includes('minItems: menuDays') && workerSource.includes('maxItems: menuDays'), 'the reusable server schema helper must still describe exact plan length');
+assert.ok(workerSource.includes('function buildPlanResponseSchema(menuDays, allowedFoodIds = Object.keys(FOOD_CATALOG))') && workerSource.includes('minItems: menuDays') && workerSource.includes('maxItems: menuDays'), 'the reusable server schema helper must still describe exact plan length');
 assert.ok(workerSource.includes("reasoning_effort: 'low'"), 'reasoning must be bounded to low for structured meal-plan generation');
 assert.ok(workerSource.includes('const aiOptions = {') && workerSource.includes('env.AI.run(model, aiOptions, { rejectIfBusy: true })'), 'the AI chat fallback must also disable reasoning before inference');
 assert.ok(workerSource.includes("https://api.groq.com/openai/v1/chat/completions") &&
@@ -600,7 +609,7 @@ assert.ok(workerSource.includes("https://api.groq.com/openai/v1/chat/completions
   workerSource.includes("type: 'json_schema'") &&
   workerSource.includes("name: 'fital_pro_plan'") &&
   workerSource.includes('strict: true') &&
-  workerSource.includes('buildGroqStrictPlanSchema(menuDays)') &&
+  workerSource.includes('buildGroqStrictPlanSchema(menuDays, profile)') &&
   workerSource.includes('include_reasoning: false'),
   'optional Groq inference must use server-side API credentials, bounded output, and JSON-only structured generation');
 assert.ok(workerSource.includes('week должен содержать РОВНО'), 'the model prompt must explicitly require the exact block length');

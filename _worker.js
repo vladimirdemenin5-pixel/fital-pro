@@ -294,15 +294,19 @@ function normalizeMealIngredients(raw, enforceFoodPortionLimits = false) {
   return normalized;
 }
 
-function buildGroqStrictPlanSchema(menuDays) {
-  const schema = JSON.parse(JSON.stringify(buildPlanResponseSchema(menuDays)));
+function buildGroqStrictPlanSchema(menuDays, profile) {
+  const allowedFoodIds = Object.keys(FOOD_CATALOG).filter(id => foodAllowedByPreferences(id, profile));
+  const schema = JSON.parse(JSON.stringify(buildPlanResponseSchema(menuDays, allowedFoodIds)));
   const removeUnsupportedConstraints = value => {
     if (!value || typeof value !== 'object') return;
     if (Array.isArray(value)) {
       value.forEach(removeUnsupportedConstraints);
       return;
     }
-    for (const key of ['minLength','maxLength','minItems','maxItems','minimum','maximum','enum']) {
+    // Groq strict structured outputs support enum and numeric bounds. Keep them
+    // so the model cannot invent food IDs or emit impossible gram values.
+    // Array/string length limits remain enforced by the server after generation.
+    for (const key of ['minLength','maxLength','minItems','maxItems']) {
       delete value[key];
     }
     Object.values(value).forEach(removeUnsupportedConstraints);
@@ -311,11 +315,11 @@ function buildGroqStrictPlanSchema(menuDays) {
   return schema;
 }
 
-function buildPlanResponseSchema(menuDays) {
+function buildPlanResponseSchema(menuDays, allowedFoodIds = Object.keys(FOOD_CATALOG)) {
   const ingredient = {
     type: 'object',
     properties: {
-      foodId: { type: 'string', enum: Object.keys(FOOD_CATALOG) },
+      foodId: { type: 'string', enum: allowedFoodIds },
       grams: { type: 'integer', minimum: 5, maximum: 500 }
     },
     required: ['foodId', 'grams'],
@@ -952,7 +956,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
               json_schema: {
                 name: 'fital_pro_plan',
                 strict: true,
-                schema: buildGroqStrictPlanSchema(menuDays)
+                schema: buildGroqStrictPlanSchema(menuDays, profile)
               }
             }
           }
