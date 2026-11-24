@@ -3,6 +3,10 @@ import worker, { generateAiPlan, runAiTextWithFallback, runAiInferenceWithTimeou
 import { readFile } from 'node:fs/promises';
 
 const workerSource = await readFile(new URL('../_worker.js', import.meta.url), 'utf8');
+const wranglerSource = await readFile(new URL('../wrangler.jsonc', import.meta.url), 'utf8');
+assert.ok(wranglerSource.includes('"ROBOKASSA_IS_TEST": "0"') &&
+  wranglerSource.includes('"ROBOKASSA_IS_TEST": "1"'),
+  'Production must remain in live mode while Preview explicitly uses Robokassa test mode');
 const previewCheckoutBlocked = await worker.fetch(new Request('https://fitalpro.test/api/checkout', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
