@@ -46,7 +46,8 @@ function getWorkflowStepCondition(source, stepName) {
   if (start === -1) return '';
   const nextStep = source.indexOf('\n      - name:', start + marker.length);
   const stepBlock = source.slice(start, nextStep === -1 ? source.length : nextStep);
-  return stepBlock.match(/^\\s+if:\\s*(.+)$/m)?.[1] || '';
+  const conditionLine = stepBlock.split('\n').find(line => line.trimStart().startsWith('if:'));
+  return conditionLine ? conditionLine.slice(conditionLine.indexOf('if:') + 3).trim() : '';
 }
 
 const liveAiCondition = getWorkflowStepCondition(
