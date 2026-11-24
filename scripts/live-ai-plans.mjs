@@ -1,6 +1,9 @@
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 
+if (process.env.FITALPRO_PREVIEW_D1_ISOLATED !== 'true') {
+  throw new Error('Refusing AI/payment/D1 integration diagnostics: Preview currently shares the Production D1 binding. Configure an isolated Preview D1 binding first, then explicitly set FITALPRO_PREVIEW_D1_ISOLATED=true.');
+}
 const endpoint = process.env.FITALPRO_WORKER_URL || '';
 if (!endpoint) throw new Error('FITALPRO_WORKER_URL must point to the dedicated PR Preview Worker; Production is never a diagnostic default.');
 const endpointUrl = new URL(endpoint);
