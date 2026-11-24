@@ -2,7 +2,7 @@ name: Fital Pro pull request checks
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled]
+    types: [opened, synchronize, reopened]
     branches:
       - main
 
@@ -36,7 +36,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/design/tilda-inspired-bold-redesign') || (github.event_name == 'pull_request' && github.event.pull_request.number == 53 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'design/tilda-inspired-bold-redesign')
+    if: github.event_name == 'pull_request' && github.event.pull_request.number == 53 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'design/tilda-inspired-bold-redesign'
     needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 90
