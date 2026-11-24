@@ -505,7 +505,9 @@ assert.ok(workerSource.includes('function aiFailureDiagnostic(error, maxLength =
   'nested AI provider errors must reach authenticated Preview diagnostics without leaking into public checkout responses');
 assert.ok(workerSource.includes('const rejectionDiagnostics = [];') && workerSource.includes('rejectionDiagnostics.slice(-3)'), 'the next fallback model must receive concrete rejection reasons from the previous model');
 assert.ok(workerSource.includes("const groqRequired = env.FITALPRO_REQUIRE_GROQ === '1';") &&
-  workerSource.includes("...(groqConfigured ? ['groq:openai/gpt-oss-20b'] : [])") &&
+  workerSource.includes("const groqModels = preferredGroqModel === 'openai/gpt-oss-120b'") &&
+  workerSource.includes("...(groqConfigured ? groqModels : [])") &&
+  workerSource.includes("'groq:openai/gpt-oss-20b', 'groq:openai/gpt-oss-120b'") &&
   workerSource.includes("...(!groqRequired && env.AI ? [MODEL, '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'] : [])"),
   'plan generation must use Groq when configured, enforce Groq-only Preview when required, and retain the bounded Cloudflare fallback chain elsewhere');
 assert.ok(workerSource.includes('for (let move = 0; move < 20; move++)') && workerSource.includes('!foodFitsMeal(foodId, key)'), 'nutrition correction must search more composition changes and keep replacement foods compatible with their meal');
