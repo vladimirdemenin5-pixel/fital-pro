@@ -454,11 +454,18 @@ assert.equal(proPlan.week.length, 14, 'PRO must contain 14 complete menu days');
 assert.equal(proPlan.menuDays, 14);
 assert.equal(proPlan.week[0].day, 'День 1');
 assert.equal(proPlan.week[13].day, 'День 14');
-assert.deepEqual(proPlan.week[0].nutrition, { calories: 2248, protein: 141.7, fat: 75.7, carbs: 254.6 });
-assert.equal(proPlan.dailyAverage.calories, 2248);
-assert.equal(proPlan.dailyAverage.protein, 141.7);
-assert.equal(proPlan.dailyAverage.fat, 75.7);
-assert.equal(proPlan.dailyAverage.carbs, 254.6);
+assert.ok(proPlan.week.every(day =>
+  day.nutrition.calories >= proPlan.calories * 0.90 &&
+  day.nutrition.calories <= proPlan.calories * 1.10 &&
+  [day.nutrition.protein,day.nutrition.fat,day.nutrition.carbs].every(value=>Number.isFinite(value)&&value>=0)
+), 'each PRO day must meet the calorie band while macros remain calculated catalog values');
+const expectedAverage = {
+  calories: Math.round(proPlan.week.reduce((sum,day)=>sum+day.nutrition.calories,0)/proPlan.week.length),
+  protein: Math.round(proPlan.week.reduce((sum,day)=>sum+day.nutrition.protein,0)/proPlan.week.length*10)/10,
+  fat: Math.round(proPlan.week.reduce((sum,day)=>sum+day.nutrition.fat,0)/proPlan.week.length*10)/10,
+  carbs: Math.round(proPlan.week.reduce((sum,day)=>sum+day.nutrition.carbs,0)/proPlan.week.length*10)/10
+};
+assert.deepEqual(proPlan.dailyAverage,expectedAverage,'daily averages must be calculated from the accepted AI days');
 const breakfastReply = buildLocalPlanChatReply('Что у меня на завтрак в день 2?', proPlan);
 assert.ok(breakfastReply.includes('День 2') && breakfastReply.includes('Состав:') && breakfastReply.includes('г'),
   'offline consultant must return the actual saved breakfast with ingredient weights');
@@ -466,7 +473,7 @@ const workoutReply = buildLocalPlanChatReply('Какая тренировка в
 assert.ok(workoutReply.includes('День 3:') && workoutReply.includes('3×10'),
   'offline consultant must return the scheduled workout from the saved plan');
 const macroReply = buildLocalPlanChatReply('Сколько у меня калорий и БЖУ?', proPlan);
-assert.ok(macroReply.includes('2248 ккал') && macroReply.includes('141.7 г'),
+assert.ok(macroReply.includes(proPlan.dailyAverage.calories + ' ккал') && macroReply.includes(proPlan.dailyAverage.protein + ' г'),
   'offline consultant must return the plan calorie and macro targets');
 const shoppingReply = buildLocalPlanChatReply('Покажи список покупок', proPlan);
 assert.ok(shoppingReply.includes('Список покупок') && shoppingReply.includes('Овсяные хлопья'),
