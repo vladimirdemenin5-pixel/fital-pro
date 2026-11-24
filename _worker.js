@@ -792,7 +792,7 @@ async function runAiInferenceWithTimeout(env, model, inputs, timeoutMs = AI_MODE
   });
   try {
     return await Promise.race([
-      env.AI.run(model, inputs, { rejectIfBusy: true, signal: controller.signal }),
+      env.AI.run(model, inputs, { signal: controller.signal }),
       timeout
     ]);
   } finally {
@@ -808,7 +808,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
   // Cloudflare Qwen 3.8 is primary; GPT-OSS 120B is the first fallback and lower-latency 20B is the corrective alternative.
   const models = [
     ...(clean(env.GROQ_API_KEY, 300) ? ['groq:openai/gpt-oss-20b'] : []),
-    ...(env.AI ? ['@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'] : [])
+    ...(env.AI ? [MODEL, '@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'] : [])
   ];
   const diagnostics = [];
   const rejectionDiagnostics = [];
@@ -824,6 +824,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
         }]
       : messages;
     try {
+      const isGemma = model === MODEL;
       const isQwen = model === '@cf/qwen/qwen3.8-27b';
       const isGptOss = model === '@cf/openai/gpt-oss-120b' || model === '@cf/openai/gpt-oss-20b';
       const isGroq = model.startsWith('groq:');
@@ -845,6 +846,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
               reasoning_effort: 'low'
             } : {
               max_completion_tokens: 4200,
+              ...(isGemma ? { response_format: { type: 'json_object' } } : {}),
               ...(isQwen ? { reasoning_effort: 'low' } : {})
             })
           };
@@ -872,7 +874,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
           // Re-run the complete server validation for every model response:
           // meal titles, recipes, catalog IDs, gram ranges, preferences, calories and all macros.
           const week = normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, nutritionTargets(profile), startDay);
-          if (week) return text;
+          if (week) return { text, model, provider: isGroq ? 'groq' : 'cloudflare-ai' };
           const reason = diagnosePlanWeekFailure(parsed, profile, planKey, menuDays, nutritionTargets(profile), startDay);
           const detail = model + ': json-parsed-but-rejected; ' + reason;
           diagnostics.push(detail + '; outputLength=' + text.length);
@@ -1069,6 +1071,7 @@ async function generateAiPlan(profile, planKey, env) {
   const includesTraining = planKey !== 'Питание';
   const totalDays = PLANS[planKey].menuDays;
   const fullWeek = [];
+  const providersUsed = new Set();
   let intro = '';
   const tips = [];
 
@@ -1120,7 +1123,9 @@ async function generateAiPlan(profile, planKey, env) {
       'БЛОК: дни ' + (offset + 1) + '–' + (offset + chunkDays) + ' из ' + totalDays + '.'
     ].join('\n');
 
-    const raw = await runPlanModel(env, prompt, profile, planKey, chunkDays, offset + 1);
+    const generated = await runPlanModel(env, prompt, profile, planKey, chunkDays, offset + 1);
+    providersUsed.add(generated.provider);
+    const raw = generated.text;
     const normalized = raw.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
     const match = normalized.match(/\{[\s\S]*\}/);
     if (!match) throw new Error('ИИ вернул ответ без структуры плана. Повторите отправку анкеты.');
@@ -1171,7 +1176,8 @@ async function generateAiPlan(profile, planKey, env) {
     tips: [...new Set(tips)].slice(0, 12),
     trainingIncluded: includesTraining,
     durationDays: PLANS[planKey].days,
-    generationMode: clean(env.GROQ_API_KEY, 300) ? 'ai-provider' : 'cloudflare-ai',
+    generationMode: 'ai',
+    aiProviders: [...providersUsed],
     disclaimer: 'План носит информационный характер и не заменяет консультацию врача или специалиста по питанию.'
   };
 }
@@ -1289,6 +1295,10 @@ async function checkout(request, env, forceTestMode = false) {
     }
   }
 
+  if (plan.generationMode !== 'ai') {
+    return json({ error: 'Генеративный ИИ временно недоступен. Заказ и оплата не создавались. Повторите попытку позже.' }, 503);
+  }
+
   const clientRef = crypto.randomUUID().replaceAll('-', '');
   const now = new Date().toISOString();
   const order = await env.DB.prepare(
@@ -1341,6 +1351,7 @@ async function checkout(request, env, forceTestMode = false) {
     preview: {
       intro: plan.intro,
       generationMode: plan.generationMode,
+      aiProviders: plan.aiProviders || [],
       calories: plan.calories,
       protein: plan.protein,
       firstDay: plan.week[0],
@@ -1412,6 +1423,7 @@ async function aiPlanDiagnostic(request, env) {
   return json({
     ok: true,
     generationMode: plan.generationMode,
+    aiProviders: plan.aiProviders || [],
     plan: plan.plan,
     durationDays: plan.durationDays,
     menuDays: plan.menuDays,
@@ -1742,8 +1754,8 @@ async function aiDataFlowDiagnostic(request, env) {
     clientRef = clean(checkoutData.client_ref, 100);
     generationMode = clean(checkoutData.preview?.generationMode, 40);
     if (!clientRef) throw new Error('Checkout не вернул идентификатор заказа.');
-    if (generationMode === 'catalog-fallback' && diagnosticMode !== 'preview') {
-      throw new Error('Генеративный AI недоступен; production AI/D1 diagnostic остановлен до имитации оплаты.');
+    if (generationMode !== 'ai') {
+      throw new Error('Генеративный AI недоступен; AI/D1 diagnostic остановлен до имитации оплаты.');
     }
 
     stage = 'checkout-signature';
@@ -1831,6 +1843,7 @@ async function aiDataFlowDiagnostic(request, env) {
       ok: true,
       plan: planKey,
       generationMode,
+      aiProviders: checkoutData.preview?.aiProviders || [],
       days: savedPlan.plan.week.length,
       meals: savedPlan.plan.week.length * MEAL_KEYS.length,
       checkoutCreated: true,
