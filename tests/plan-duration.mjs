@@ -338,16 +338,16 @@ assert.ok(workerSource.includes('function aiFailureDiagnostic(error, maxLength =
   workerSource.includes("checkoutError.cause = new Error(clean(checkoutData.diagnostic, 1000))"),
   'nested AI provider errors must reach authenticated Preview diagnostics without leaking into public checkout responses');
 assert.ok(workerSource.includes('const rejectionDiagnostics = [];') && workerSource.includes('rejectionDiagnostics.slice(-3)'), 'the next fallback model must receive concrete rejection reasons from the previous model');
-assert.ok(workerSource.includes("...(env.AI ? [MODEL, '@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'] : [])") &&
+assert.ok(workerSource.includes("...(env.AI ? [MODEL, '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'] : [])") &&
   workerSource.includes("...(clean(env.GROQ_API_KEY, 300) ? ['groq:openai/gpt-oss-20b'] : [])"),
-  'plan generation must use an optional Groq GPT-OSS 20B provider and only the bounded Cloudflare Qwen/GPT-OSS fallback chain');
+  'plan generation must use an optional Groq GPT-OSS 20B provider and only the bounded Cloudflare Gemma/GPT-OSS fallback chain');
 assert.ok(workerSource.includes('for (let move = 0; move < 20; move++)') && workerSource.includes('!foodFitsMeal(foodId, key)'), 'nutrition correction must search more composition changes and keep replacement foods compatible with their meal');
 assert.ok(workerSource.includes('env.AI.run(model, inputs, { signal: controller.signal })') && workerSource.includes('env.AI.run(model, aiOptions, { rejectIfBusy: true })'),
   'plan generation may wait for capacity within its hard timeout while interactive chat remains fail-fast');
 assert.ok(workerSource.includes('const AI_MODEL_TIMEOUT_MS = 45000;') && workerSource.includes('Promise.race([') && workerSource.includes('runAiInferenceWithTimeout(env, model'), 'each plan-model inference must have a hard timeout so a stalled model cannot block fallbacks');
 assert.ok(workerSource.includes("...(env.AI ? ['@cf/zai-org/glm-4.7-flash', '@cf/meta/llama-3.1-8b-instruct-fast', MODEL] : [])"),
   'general chat must retain Cloudflare fallbacks when the binding is present');
-assert.ok(workerSource.includes('max_tokens: 4200') && workerSource.includes('max_completion_tokens: 4200') && workerSource.includes('QWEN_PLAN_TIMEOUT_MS = 75000') && workerSource.includes('GPT_OSS_PLAN_TIMEOUT_MS = 60000') && workerSource.includes('AI_PLAN_FALLBACK_TIMEOUT_MS = 60000'), 'each Workers AI plan model must use its documented token-limit parameter and bounded timeout');
+assert.ok(workerSource.includes('max_tokens: 4200') && workerSource.includes('max_completion_tokens: 4200') && workerSource.includes('GPT_OSS_PLAN_TIMEOUT_MS = 60000') && workerSource.includes('AI_PLAN_FALLBACK_TIMEOUT_MS = 60000'), 'each Workers AI plan model must use its documented token-limit parameter and bounded timeout');
 assert.ok(workerSource.includes("const isGptOss = model === '@cf/openai/gpt-oss-120b' || model === '@cf/openai/gpt-oss-20b'") && workerSource.includes('max_tokens: 4200') && workerSource.includes("reasoning_effort: 'low'"), 'both GPT-OSS fallbacks must use supported token limits and bounded reasoning');
 assert.ok(!workerSource.includes('QWEN4_API_KEY') && !workerSource.includes('qwen4-max'), 'paid QwenCloud integration must be absent from the Cloudflare-only model chain');
 assert.ok(workerSource.includes('function buildPlanResponseSchema(menuDays)') && workerSource.includes('minItems: menuDays') && workerSource.includes('maxItems: menuDays'), 'the reusable server schema helper must still describe exact plan length');
@@ -391,7 +391,7 @@ const timeoutRecoveredPlan = await generateAiPlan(profile, 'Питание', { A
   }
 } });
 assert.equal(timeoutRecoveredPlan.week.length, 7, 'a timed-out first model must fall back to the next available model');
-assert.equal(timeoutFallbackModelsByBlock.get(1)?.[1], '@cf/qwen/qwen3.8-27b', 'a timed-out Gemma request must fall back to Qwen 3.8 for the same block');
+assert.equal(timeoutFallbackModelsByBlock.get(1)?.[1], '@cf/openai/gpt-oss-120b', 'a timed-out Gemma request must fall back to Cloudflare GPT-OSS 120B for the same block');
 assert.equal(timeoutFallbackModelsByBlock.get(3)?.[0], '@cf/google/gemma-4-26b-a4b-it', 'the next two-day block must start with its own Gemma primary call');
 let gemmaModelInput = null;
 const gemmaPrimaryPlan = await generateAiPlan(profile, 'Питание', { AI: {
@@ -419,7 +419,7 @@ const gptRepairAttemptsByStart = new Map();
 const gptRepairModelsByStart = new Map();
 const gptRepairPlan = await generateAiPlan(profile, 'Питание', { AI: {
   async run(model, input) {
-    if (model === '@cf/google/gemma-4-26b-a4b-it' || model === '@cf/qwen/qwen3.8-27b') throw new Error('Cloudflare primary models unavailable for repair regression');
+    if (model === '@cf/google/gemma-4-26b-a4b-it') throw new Error('Cloudflare primary models unavailable for repair regression');
     assert.ok(['@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'].includes(model));
     const prompt = input.messages[1].content;
     const startDay = Number(prompt.match(/БЛОК: дни ([0-9]+)[–-]/)?.[1] || 0);
@@ -446,8 +446,8 @@ assert.equal(gpt20ModelInput.reasoning_effort, 'low');
 
 const gptFallbackPlan = await generateAiPlan(profile, 'Питание', { AI: {
   async run(model, input) {
-    if (model === '@cf/google/gemma-4-26b-a4b-it' || model === '@cf/qwen/qwen3.8-27b') throw new Error('Gemma and Qwen intentionally unavailable in this test');
-    assert.equal(model, '@cf/openai/gpt-oss-120b', 'GPT-OSS must follow Gemma and Qwen when both are unavailable');
+    if (model === '@cf/google/gemma-4-26b-a4b-it' || model === '@cf/qwen/qwen3.8-27b') throw new Error('Gemma intentionally unavailable in this test');
+    assert.equal(model, '@cf/openai/gpt-oss-120b', 'GPT-OSS must follow Gemma when it is unavailable');
     gptModelInput = input;
     return makeAi(7).run(model, input);
   }
@@ -472,9 +472,6 @@ let lowEnergyCorrectionPrompt = '';
 const lowEnergyFallbackPlan = await generateAiPlan(profile, 'Питание', { AI: {
   async run(model, input) {
     if (model === '@cf/google/gemma-4-26b-a4b-it') throw new Error('Gemma intentionally unavailable for low-energy retry test');
-    if (model === '@cf/qwen/qwen3.8-27b') {
-      return makeAi(7, false, false, false, true).run(model, input);
-    }
     if (model === '@cf/openai/gpt-oss-120b') {
       lowEnergyCorrectionPrompt = input.messages.at(-1).content;
       return makeAi(7).run(model, input);
@@ -595,15 +592,15 @@ const nutritionRetryAi = {
     const models = nutritionRetryModelsByBlock.get(startDay) || [];
     models.push(model);
     nutritionRetryModelsByBlock.set(startDay, models);
-    const firstBlockNeedsTwoRetries = startDay === 1 && models.length <= 3;
+    const firstBlockNeedsTwoRetries = startDay === 1 && models.length <= 2;
     const fixture = firstBlockNeedsTwoRetries ? makeAi(7, false, false, false, true) : makeAi(7);
     return fixture.run(model, input);
   }
 };
 const recoveredNutritionPlan = await generateAiPlan(profile, 'Питание', { AI: nutritionRetryAi });
 assert.equal(recoveredNutritionPlan.week.length, 7, 'a corrected fallback-model response must produce a complete plan');
-assert.equal(nutritionRetryCalls, 7, 'the full fallback chain is exercised for the first block only; later blocks begin with Gemma');
-assert.deepEqual(nutritionRetryModelsByBlock.get(1), ['@cf/google/gemma-4-26b-a4b-it', '@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'], 'an invalid block must try Gemma, Qwen and both GPT-OSS models in order');
+assert.equal(nutritionRetryCalls, 6, 'the full fallback chain is exercised for the first block only; later blocks begin with Gemma');
+assert.deepEqual(nutritionRetryModelsByBlock.get(1), ['@cf/google/gemma-4-26b-a4b-it', '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'], 'an invalid block must try Gemma and both GPT-OSS models in order');
 assert.deepEqual(nutritionRetryModelsByBlock.get(3), ['@cf/google/gemma-4-26b-a4b-it'], 'the next block must start with Gemma after the previous block is validated');
 assert.deepEqual(nutritionRetryModelsByBlock.get(5), ['@cf/google/gemma-4-26b-a4b-it'], 'the third block must start with Gemma');
 assert.deepEqual(nutritionRetryModelsByBlock.get(7), ['@cf/google/gemma-4-26b-a4b-it'], 'the final block must also start with Gemma');
