@@ -7,9 +7,9 @@ const AI_PLAN_FALLBACK_TIMEOUT_MS = 60000;
 const NUTRITION_CONFIG = Object.freeze({
   activity: Object.freeze({ minimal: 1.2, light: 1.375, medium: 1.55, high: 1.725, athlete: 1.9 }),
   goals: Object.freeze({
-    loss: Object.freeze({ adjustment: -0.15, split: Object.freeze({ protein: 0.35, fat: 0.30, carbs: 0.35 }) }),
-    maintenance: Object.freeze({ adjustment: 0, split: Object.freeze({ protein: 0.25, fat: 0.30, carbs: 0.45 }) }),
-    gain: Object.freeze({ adjustment: 0.12, split: Object.freeze({ protein: 0.25, fat: 0.25, carbs: 0.50 }) })
+    loss: Object.freeze({ adjustment: -0.15, waterLiters: 2.0, split: Object.freeze({ protein: 0.35, fat: 0.30, carbs: 0.35 }) }),
+    maintenance: Object.freeze({ adjustment: 0, waterLiters: 2.5, split: Object.freeze({ protein: 0.25, fat: 0.30, carbs: 0.45 }) }),
+    gain: Object.freeze({ adjustment: 0.12, waterLiters: 3.0, split: Object.freeze({ protein: 0.25, fat: 0.25, carbs: 0.50 }) })
   }),
   mealSchedule: Object.freeze([
     Object.freeze({ id: 'breakfast', title: 'Завтрак', time: '08:00', kcalShare: 0.25 }),
@@ -149,7 +149,7 @@ function nutritionTargets(profile) {
   const tdee = bmr * activity;
   const floor = profile.sex === 'female' ? 1300 : 1500;
   const calories = Math.round(Math.max(floor, tdee * (1 + goal.adjustment)) / 10) * 10;
-  return { calories, protein: Math.round(calories * goal.split.protein / 4), fat: Math.round(calories * goal.split.fat / 9), carbs: Math.round(calories * goal.split.carbs / 4), waterLiters: (profile.sex === 'female' ? 2.0 : 2.5) + (['high','athlete'].includes(profile.activity) ? 0.3 : 0), bmr: Math.round(bmr), tdee: Math.round(tdee) };
+  return { calories, protein: Math.round(calories * goal.split.protein / 4), fat: Math.round(calories * goal.split.fat / 9), carbs: Math.round(calories * goal.split.carbs / 4), waterLiters: goal.waterLiters, bmr: Math.round(bmr), tdee: Math.round(tdee) };
 }
 
 function extractAiText(result) {
