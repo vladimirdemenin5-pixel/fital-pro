@@ -285,7 +285,7 @@ function buildGroqStrictPlanSchema(menuDays) {
       value.forEach(removeUnsupportedConstraints);
       return;
     }
-    for (const key of ['minLength','maxLength','minItems','maxItems','minimum','maximum','enum']) {
+    for (const key of ['minLength','maxLength','minimum','maximum','enum']) {
       delete value[key];
     }
     Object.values(value).forEach(removeUnsupportedConstraints);
