@@ -848,10 +848,13 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
   ];
   const diagnostics = [];
   const rejectionDiagnostics = [];
+  let groqCorrectionScheduled = false;
 
   // Each fallback receives the previous model's concrete rejection reasons.
+  // Groq gets one corrective retry after a structurally valid but nutritionally rejected draft.
   // A rejected draft is never repaired by weakening server-side validation.
-  for (const model of models) {
+  for (let modelIndex = 0; modelIndex < models.length; modelIndex++) {
+    const model = models[modelIndex];
     const modelStartedAt = Date.now();
     const currentMessages = rejectionDiagnostics.length
       ? [...messages, {
@@ -863,6 +866,12 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
       const isGemma = model === MODEL;
       const isGptOss = model === '@cf/openai/gpt-oss-120b' || model === '@cf/openai/gpt-oss-20b';
       const isGroq = model.startsWith('groq:');
+      const scheduleGroqCorrection = () => {
+        if (isGroq && !groqCorrectionScheduled) {
+          models.splice(modelIndex + 1, 0, model);
+          groqCorrectionScheduled = true;
+        }
+      };
       const modelInput = isGroq
         ? {
             messages: currentMessages,
@@ -898,10 +907,12 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
         const reason = model + ': empty-text; resultKeys=' + resultKeys;
         diagnostics.push(reason);
         rejectionDiagnostics.push(reason);
+        scheduleGroqCorrection();
       } else if (!match) {
         const reason = model + ': no-json-object; outputLength=' + text.length + '; preview=' + text.slice(0, 100).replace(/\s+/g, ' ');
         diagnostics.push(reason);
         rejectionDiagnostics.push(reason);
+        scheduleGroqCorrection();
       } else {
         try {
           const parsed = JSON.parse(match[0]);
@@ -913,10 +924,12 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
           const detail = model + ': json-parsed-but-rejected; ' + reason;
           diagnostics.push(detail + '; outputLength=' + text.length);
           rejectionDiagnostics.push(detail);
+          scheduleGroqCorrection();
         } catch (error) {
           const reason = model + ': json-parse-error=' + clean(error?.message, 140);
           diagnostics.push(reason + '; outputLength=' + text.length);
           rejectionDiagnostics.push(reason);
+          scheduleGroqCorrection();
         }
       }
       const finishReason = result?.choices?.[0]?.finish_reason || result?.result?.choices?.[0]?.finish_reason || null;
