@@ -952,7 +952,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
       if (/(?:4006|3036|daily free allocation|used up your daily free allocation)/i.test(detail)) {
         throw new Error('Дневной бесплатный лимит ИИ Cloudflare исчерпан. Сейчас новый план создать нельзя; заказ и оплата не создаются. Попробуйте позже.', { cause: error });
       }
-      if (/Groq inference HTTP (?:401|403)\\b/i.test(detail)) throw error;
+      if (/Groq inference HTTP (?:401|403)\b/i.test(detail)) throw error;
     }
   }
   const diagnostic = new Error(diagnostics.join(' | ').slice(0, 1800));
