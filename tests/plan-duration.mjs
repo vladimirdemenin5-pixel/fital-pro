@@ -79,6 +79,10 @@ assert.ok(productionWorkflowSource.includes('if [ -n "$GROQ_API_KEY" ]') &&
 assert.ok(liveIntegrationSource.includes("data.groq === true") &&
   !liveIntegrationSource.includes("result.aiProviders.includes('groq')"),
   'the live AI validator must accept either configured Groq or the Cloudflare Workers AI fallback');
+assert.ok(liveIntegrationSource.includes('day.calculatedNutrition.calories < result.targets.calories * 0.90') &&
+  liveIntegrationSource.includes('day.calculatedNutrition.calories > result.targets.calories * 1.10') &&
+  liveIntegrationSource.includes('day.calculatedNutrition[key] >= 0'),
+  'live AI validation must enforce ±10% calories separately for every day and only finite nonnegative macros');
 assert.ok(productionWorkflow.includes('FITALPRO_AI_TARGET: production') &&
   productionWorkflow.includes('FITALPRO_WORKER_URL: https://red-waterfall-2af8.vladimirdemenin5.workers.dev') &&
   productionWorkflow.includes('node scripts/live-ai-plan-validation.mjs') &&
