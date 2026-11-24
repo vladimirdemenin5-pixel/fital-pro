@@ -72,13 +72,13 @@ assert.ok(pullRequestWorkflow.includes('--name fital-pro-redesign-groq-ready') &
   liveIntegrationSource.includes("hostname.startsWith('fital-pro-redesign-groq-ready-red-waterfall-2af8.')"),
   'the full Preview integration script must accept the exact Worker Preview name published by the PR workflow');
 const productionWorkflowSource = productionWorkflow;
-assert.ok(productionWorkflowSource.includes('wrangler secret put GROQ_API_KEY --name red-waterfall-2af8') &&
-  productionWorkflowSource.includes('secrets.GROQ_API_KEY') &&
-  productionWorkflowSource.includes('d.groq!==true'),
-  'Production deployment must synchronize the existing Groq secret and fail health verification if Groq is unavailable at runtime');
-assert.ok(liveIntegrationSource.includes("data.groq !== true") &&
-  liveIntegrationSource.includes("result.aiProviders.includes('groq')"),
-  'the live AI validator must preflight Groq runtime availability and reject Production plans generated without Groq');
+assert.ok(productionWorkflowSource.includes('if [ -n "$GROQ_API_KEY" ]') &&
+  productionWorkflowSource.includes('wrangler secret put GROQ_API_KEY --name red-waterfall-2af8') &&
+  !productionWorkflowSource.includes('d.groq!==true'),
+  'Production deployment must treat Groq as optional and retain the Cloudflare Workers AI fallback');
+assert.ok(liveIntegrationSource.includes("data.groq === true") &&
+  !liveIntegrationSource.includes("result.aiProviders.includes('groq')"),
+  'the live AI validator must accept either configured Groq or the Cloudflare Workers AI fallback');
 assert.ok(productionWorkflow.includes('FITALPRO_AI_TARGET: production') &&
   productionWorkflow.includes('FITALPRO_WORKER_URL: https://red-waterfall-2af8.vladimirdemenin5.workers.dev') &&
   productionWorkflow.includes('node scripts/live-ai-plan-validation.mjs') &&
@@ -90,7 +90,10 @@ assert.ok(productionWorkflow.includes("if: github.event_name == 'workflow_dispat
   'live AI generation must require an explicit manual workflow dispatch so ordinary production deployments do not consume Workers AI quota');
 assert.ok(productionWorkflow.includes('run_live_ai:') && productionWorkflow.includes('type: boolean') && productionWorkflow.includes('default: false'),
   'manual live AI checks must default to off');
-assert.ok(liveIntegrationSource.includes("FITALPRO_PREVIEW_D1_ISOLATED !== 'true'"), 'live AI/payment/D1 integration must refuse to run while Preview shares Production D1');
+assert.ok(liveIntegrationSource.includes("endpoint + '/api/ai-diagnostic'") &&
+  liveIntegrationSource.includes('payment: \'not created\'') &&
+  liveIntegrationSource.includes('persistence: \'not performed\''),
+  'the AI-only Preview validation must use the no-D1-write diagnostic and must not require an isolated Preview database');
 function getWorkflowStepCondition(source, stepName) {
   const marker = `      - name: ${stepName}`;
   const start = source.indexOf(marker);
