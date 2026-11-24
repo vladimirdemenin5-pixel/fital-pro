@@ -747,35 +747,67 @@ function isScheduledTrainingDay(absoluteDay, weeklyTarget) {
 async function runGroqInferenceWithTimeout(env, model, inputs, timeoutMs = 60000) {
   const apiKey = clean(env.GROQ_API_KEY, 300);
   if (!apiKey) throw new Error('Groq API key is not configured.');
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(new Error('Groq inference timed out.')), timeoutMs);
-  try {
-    const payload = { ...inputs, model };
-    if (payload.max_tokens && !payload.max_completion_tokens) {
-      payload.max_completion_tokens = payload.max_tokens;
-    }
-    delete payload.max_tokens;
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: 'Bearer ' + apiKey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload),
-      signal: controller.signal
-    });
-    const responseText = await response.text();
-    if (!response.ok) {
-      throw new Error('Groq inference HTTP ' + response.status + ': ' + clean(responseText, 360));
-    }
-    try {
-      return JSON.parse(responseText);
-    } catch {
-      throw new Error('Groq returned an invalid JSON envelope.');
-    }
-  } finally {
-    clearTimeout(timer);
+  const payload = { ...inputs, model };
+  if (payload.max_tokens && !payload.max_completion_tokens) {
+    payload.max_completion_tokens = payload.max_tokens;
   }
+  delete payload.max_tokens;
+
+  // Retry Groq once for transient transport, timeout, rate-limit and server failures.
+  // Permanent request/authentication errors go straight to the existing Cloudflare fallback.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      const timeoutError = new Error('Groq inference timed out.');
+      timeoutError.name = 'TimeoutError';
+      controller.abort(timeoutError);
+    }, timeoutMs);
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer ' + apiKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+      const responseText = await response.text();
+      if (!response.ok) {
+        const error = new Error('Groq inference HTTP ' + response.status + ': ' + clean(responseText, 360));
+        error.status = response.status;
+        const retryAfter = response.headers?.get('retry-after');
+        if (retryAfter) {
+          const seconds = Number(retryAfter);
+          const retryAt = Date.parse(retryAfter);
+          error.retryAfterMs = Number.isFinite(seconds) && seconds >= 0
+            ? Math.min(2000, seconds * 1000)
+            : (Number.isFinite(retryAt) ? Math.max(0, Math.min(2000, retryAt - Date.now())) : 0);
+        }
+        throw error;
+      }
+      try {
+        return JSON.parse(responseText);
+      } catch {
+        throw new Error('Groq returned an invalid JSON envelope.');
+      }
+    } catch (error) {
+      const status = Number(error?.status) || 0;
+      const transient = status === 408 || status === 425 || status === 429 || status >= 500 ||
+        error?.name === 'AbortError' || error?.name === 'TimeoutError' ||
+        error instanceof TypeError || /network|fetch failed|timed out/i.test(clean(error?.message, 180));
+      if (attempt === 0 && transient) {
+        const delayMs = error?.retryAfterMs ?? 700;
+        console.warn('Fital Pro Groq transient failure; retrying once before provider fallback:', status || error?.name || 'network-error');
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        continue;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw new Error('Groq inference failed after bounded retry.');
 }
 
 async function runAiInferenceWithTimeout(env, model, inputs, timeoutMs = AI_MODEL_TIMEOUT_MS) {
