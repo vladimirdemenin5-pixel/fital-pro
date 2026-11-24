@@ -19,6 +19,16 @@ const previewDiagnosticStillProtected = await worker.fetch(new Request('https://
   body: JSON.stringify({ plan: 'Питание' })
 }), { FITALPRO_PREVIEW_CI: '1' });
 assert.equal(previewDiagnosticStillProtected.status, 404, 'Preview diagnostic must remain available only to authenticated CI');
+const healthWithGroq = await worker.fetch(new Request('https://fitalpro.test/health'), {
+  AI: {},
+  DB: {},
+  GROQ_API_KEY: 'test-groq-secret'
+});
+const healthWithGroqBody = await healthWithGroq.json();
+assert.equal(healthWithGroqBody.groq, true, 'health must report Groq configuration without exposing its value');
+assert.equal(Object.values(healthWithGroqBody).includes('test-groq-secret'), false, 'health must never expose the Groq secret');
+const healthWithoutGroq = await worker.fetch(new Request('https://fitalpro.test/health'), { AI: {}, DB: {} });
+assert.equal((await healthWithoutGroq.json()).groq, false, 'health must report when the Preview Groq secret is missing');
 const appSource = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
 const htmlSource = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
 const productionWorkflow = await readFile(new URL('../.github/workflows/main.yml', import.meta.url), 'utf8');
