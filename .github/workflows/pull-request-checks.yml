@@ -1,3 +1,4 @@
+# The Preview job is mirrored in the base branch so GitHub can load it for pull_request events.
 name: Fital Pro pull request checks
 
 on:
