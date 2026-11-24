@@ -1176,7 +1176,9 @@ async function generateAiPlan(profile, planKey, env) {
   const providersUsed = new Set();
   let intro = '';
   const tips = [];
-  let preferredGroqModel = 'openai/gpt-oss-20b';
+  // Premium is generated after shorter plans and needs many more blocks; start it on
+  // the separate 120B model budget instead of exhausting the 20B TPM window first.
+  let preferredGroqModel = planKey === 'Premium' ? 'openai/gpt-oss-120b' : 'openai/gpt-oss-20b';
 
   try {
     if (!env.AI && !clean(env.GROQ_API_KEY, 300)) throw new Error('Нет доступного подключения к генеративной модели.');
