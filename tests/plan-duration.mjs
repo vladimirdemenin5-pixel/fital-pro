@@ -505,7 +505,7 @@ assert.ok(oversizedIngredientPlan.week.every(day => {
     day.nutrition.calories >= oversizedIngredientPlan.calories * 0.90 &&
     day.nutrition.calories <= oversizedIngredientPlan.calories * 1.10 &&
     [day.nutrition.protein,day.nutrition.fat,day.nutrition.carbs].every(value=>Number.isFinite(value)&&value>=0);
-}), 'a globally valid ingredient portion above its product-specific ceiling must be clamped and the resulting full day must still pass strict nutrition validation');
+}), 'an ingredient above its product-specific ceiling must be clamped and the resulting day must still pass calorie and structural validation');
 const invalidPortionFallback = await generateAiPlan(profile, 'Питание', { AI: {
   async run(model, input) {
     const result = await makeAi(7).run(model, input);
@@ -587,7 +587,10 @@ assert.ok(workerSource.includes("const groqRequired = env.FITALPRO_REQUIRE_GROQ 
   workerSource.includes("...(groqConfigured ? groqModels : [])") &&
   workerSource.includes("...(!groqRequired && env.AI ? [MODEL, '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'] : [])"),
   'plan generation must use only the approved GPT-OSS Groq models, enforce Groq-only Preview when required, and retain the bounded Cloudflare fallback chain elsewhere');
-assert.ok(workerSource.includes('for (let move = 0; move < 20; move++)') && workerSource.includes('!foodFitsMeal(foodId, key)'), 'nutrition correction must search more composition changes and keep replacement foods compatible with their meal');
+assert.ok(workerSource.includes('const originalFoodIds = items.map(item => item.foodId)') &&
+  workerSource.includes('const correctedGrams = gramsAtScale((low + high) / 2)') &&
+  !workerSource.includes('for (let move = 0; move < 20; move++)'),
+  'nutrition correction must keep the selected food IDs unchanged and adjust only bounded gram amounts');
 assert.ok(workerSource.includes('env.AI.run(model, inputs, { signal: controller.signal })') && workerSource.includes('env.AI.run(model, aiOptions, { rejectIfBusy: true })'),
   'plan generation may wait for capacity within its hard timeout while interactive chat remains fail-fast');
 assert.ok(workerSource.includes('const AI_MODEL_TIMEOUT_MS = 45000;') && workerSource.includes('Promise.race([') && workerSource.includes('runAiInferenceWithTimeout(env, model'), 'each plan-model inference must have a hard timeout so a stalled model cannot block fallbacks');
