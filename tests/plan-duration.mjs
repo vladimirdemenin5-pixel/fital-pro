@@ -23,11 +23,13 @@ const appSource = await readFile(new URL('../public/app.js', import.meta.url), '
 const htmlSource = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
 const productionWorkflow = await readFile(new URL('../.github/workflows/main.yml', import.meta.url), 'utf8');
 const pullRequestWorkflow = await readFile(new URL('../.github/workflows/pull-request-checks.yml', import.meta.url), 'utf8');
+const liveIntegrationSource = await readFile(new URL('../scripts/live-ai-plans.mjs', import.meta.url), 'utf8');
 assert.ok(Object.entries(FOOD_CATALOG).length >= 30, 'food reference catalog must remain populated');
 assert.ok(productionWorkflow.includes("if: github.event_name == 'workflow_dispatch' && inputs.run_live_ai == true"),
   'live AI generation must require an explicit manual workflow dispatch so ordinary production deployments do not consume Workers AI quota');
 assert.ok(productionWorkflow.includes('run_live_ai:') && productionWorkflow.includes('type: boolean') && productionWorkflow.includes('default: false'),
   'manual live AI checks must default to off');
+assert.ok(liveIntegrationSource.includes("FITALPRO_PREVIEW_D1_ISOLATED !== 'true'"), 'live AI/payment/D1 integration must refuse to run while Preview shares Production D1');
 assert.ok(pullRequestWorkflow.includes('types: [opened, synchronize, reopened, labeled]') &&
   pullRequestWorkflow.includes("if: contains(github.event.pull_request.labels.*.name, 'run-live-ai-check')"),
   'expensive live AI integration checks must run only when the PR is explicitly labeled, not on every code update');
