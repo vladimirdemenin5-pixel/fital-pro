@@ -119,8 +119,11 @@ assert.ok(worker.includes('runPlanModel(env, prompt, profile, planKey, chunkDays
 assert.ok(worker.includes('normalizeAndValidatePlanWeek(parsed, profile, planKey, chunkDays, targets, offset + 1)'), 'the server must validate every chunk using its absolute start day and calculated nutrition targets');
 assert.ok(worker.includes('day.trainingDay === isScheduledTrainingDay(startDay + index, profile.days)'), 'training schedule must be checked by the server across chunk boundaries');
 assert.ok(worker.includes('function buildShoppingList(week)'), 'shopping quantities must be derived from exact ingredients in the saved plan');
-assert.ok(worker.includes('calculateDayNutrition(day)'), 'daily calories and protein must be calculated from ingredient weights');
-assert.ok(worker.includes('targets.protein * 0.90') && worker.includes('targets.protein * 1.10'), 'daily protein must stay within the strict validated tolerance');
+assert.ok(worker.includes('calculateDayNutrition(day)'), 'daily calories, protein, fat and carbohydrates must be calculated from ingredient weights');
+assert.ok(worker.includes('values.every(value => Number.isFinite(value) && value >= 0)') &&
+  worker.includes('nutrition.calories >= targets.calories * 0.90') &&
+  worker.includes('nutrition.calories <= targets.calories * 1.10'),
+  'daily calories must stay within ±10%, while all macro values remain finite and nonnegative without strict target ranges');
 assert.ok(worker.includes('profile.age < 18'), 'adult nutrition calculations must reject minors');
 
 assert.ok(worker.includes("Не удалось пересобрать план. Сохранённая программа не изменена."));
