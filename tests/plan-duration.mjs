@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import worker, { generateAiPlan, runAiTextWithFallback, runAiInferenceWithTimeout, aiPlanDiagnostic, aiDataFlowDiagnostic, buildLocalPlanChatReply, buildLocalPremiumDiaryReview, FOOD_CATALOG, buildPlanResponseSchema, diagnosePlanWeekFailure, rebalanceDayNutrition, foodAllowedByPreferences, foodRole, foodCanReplaceFood, foodFitsMeal } from '../_worker.js';
+import worker, { generateAiPlan, runAiTextWithFallback, runAiInferenceWithTimeout, runGroqInferenceWithTimeout, aiPlanDiagnostic, aiDataFlowDiagnostic, buildLocalPlanChatReply, buildLocalPremiumDiaryReview, FOOD_CATALOG, buildPlanResponseSchema, diagnosePlanWeekFailure, rebalanceDayNutrition, foodAllowedByPreferences, foodRole, foodCanReplaceFood, foodFitsMeal } from '../_worker.js';
 import { readFile } from 'node:fs/promises';
 
 const workerSource = await readFile(new URL('../_worker.js', import.meta.url), 'utf8');
@@ -171,6 +171,39 @@ await assert.rejects(
   'the inference wrapper must reject even if the AI binding never settles'
 );
 assert.equal(timeoutSignalCapture.signal.aborted, true, 'a model timeout must also abort the underlying AI call');
+assert.equal(timeoutSignalCapture.signal.aborted, true, 'a model timeout must also abort the underlying AI call');
+
+// Groq gets one bounded retry for transient HTTP/network failures before Cloudflare is considered.
+const originalFetch = globalThis.fetch;
+let groqTransientCalls = 0;
+try {
+  globalThis.fetch = async () => {
+    groqTransientCalls++;
+    return groqTransientCalls === 1
+      ? new Response('temporary upstream failure', { status: 503 })
+      : new Response(JSON.stringify({ choices: [{ message: { content: '{"ok":true}' } }] }), {
+          status: 200, headers: { 'content-type': 'application/json' }
+        });
+  };
+  const recoveredGroq = await runGroqInferenceWithTimeout({ GROQ_API_KEY: 'test-groq-key' }, 'openai/gpt-oss-20b', {}, 1000);
+  assert.equal(groqTransientCalls, 2, 'a transient Groq 5xx must be retried once');
+  assert.equal(recoveredGroq.choices[0].message.content, '{"ok":true}');
+  
+  let groqPermanentCalls = 0;
+  globalThis.fetch = async () => {
+    groqPermanentCalls++;
+    return new Response('invalid credentials', { status: 401 });
+  };
+  await assert.rejects(
+    () => runGroqInferenceWithTimeout({ GROQ_API_KEY: 'test-groq-key' }, 'openai/gpt-oss-20b', {}, 1000),
+    /Groq inference HTTP 401/,
+    'permanent Groq authentication errors must be passed to the existing fallback without retry'
+  );
+  assert.equal(groqPermanentCalls, 1, 'a Groq 401 must not be retried');
+} finally {
+  globalThis.fetch = originalFetch;
+}
+
 
 const quotaAttemptedModels = [];
 const quotaFallbackPlan = await generateAiPlan(profile, 'Питание', { AI: {
