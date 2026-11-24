@@ -264,7 +264,7 @@ const MEAL_KEYS = ['breakfast','lunch','snack','dinner'];
 
 function diagnoseMealIngredients(raw) {
   if (!Array.isArray(raw)) return 'ingredients-not-array';
-  if (raw.length < 1 || raw.length > 6) return 'ingredients-count-' + raw.length;
+  if (raw.length < 2 || raw.length > 6) return 'ingredients-count-' + raw.length;
   for (let index = 0; index < raw.length; index++) {
     const item = raw[index];
     const foodId = Array.isArray(item) && item.length === 2 ? item[0] : item?.foodId;
@@ -278,7 +278,7 @@ function diagnoseMealIngredients(raw) {
 }
 
 function normalizeMealIngredients(raw, enforceFoodPortionLimits = false) {
-  if (!Array.isArray(raw) || raw.length < 1 || raw.length > 6) return null;
+  if (!Array.isArray(raw) || raw.length < 2 || raw.length > 6) return null;
   const normalized = [];
   for (const item of raw) {
     const foodId = Array.isArray(item) && item.length === 2 ? item[0] : item?.foodId;
@@ -307,7 +307,7 @@ function buildGroqStrictPlanSchema(menuDays, profile) {
     }
     // Groq strict structured outputs support enum and numeric bounds. Keep them
     // so the model cannot invent food IDs or emit impossible gram values.
-    // Array/string length limits remain enforced by the server after generation.
+    // Ingredient array minimums are enforced by the schema and again by server validation.
     for (const key of ['minLength','maxLength','minItems','maxItems']) {
       delete value[key];
     }
@@ -338,7 +338,7 @@ function buildPlanResponseSchema(menuDays, allowedFoodIds = Object.keys(FOOD_CAT
     dayProperties[key + 'Recipe'] = { type: 'string', minLength: 15, maxLength: 300 };
     dayProperties[key + 'Ingredients'] = {
       type: 'array',
-      minItems: 1,
+      minItems: 2,
       maxItems: 6,
       items: ingredient
     };
