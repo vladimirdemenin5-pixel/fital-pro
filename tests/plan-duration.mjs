@@ -295,8 +295,8 @@ try {
     'Groq must recover from a nutritionally rejected first draft using its corrective retry');
   assert.deepEqual(correctedGroqPlan.aiProviders, ['groq']);
   assert.equal(correctedGroqPlan.week.length, 7);
-  assert.equal(groqCorrectionCalls, 4,
-    'Groq must retry only the rejected first block once, then generate the remaining two blocks');
+  assert.equal(groqCorrectionCalls, 3,
+    'server-side macro balancing must recover the first Groq block without an unnecessary corrective API round-trip, then generate the remaining two blocks');
   assert.equal(groqCorrectionCloudflareCalls, 0,
     'a Groq-only Preview must keep Workers AI disabled during corrective plan generation');
 } finally {
