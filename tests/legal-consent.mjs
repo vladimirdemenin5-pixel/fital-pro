@@ -64,6 +64,12 @@ assert.ok(worker.includes("params.set('FailUrl2Method', 'GET')"), 'Robokassa fai
 assert.ok(worker.includes("successUrl.searchParams.set('ref', clientRef)"), 'successful return must carry the order reference for activation polling');
 assert.ok(worker.includes("successUrl.searchParams.set('payment', 'success')"), 'successful return must be distinguishable from a failed payment');
 assert.ok(worker.includes('buildRobokassaPaymentSignature({'), 'checkout must use the tested Robokassa payment signature helper');
+assert.ok(worker.includes("params.set('Receipt', receiptJson)") &&
+  worker.includes('receipt: receiptForSignature') &&
+  worker.includes("payment_method: 'full_prepayment'") &&
+  worker.includes("payment_object: 'service'") &&
+  worker.includes("tax: 'none'"),
+  'Robokassa checkout must sign and transmit the service receipt itemization required for NPD fiscalization');
 assert.ok(!worker.includes("params.set('SuccessURL',"), 'legacy unrecognized success return parameter must not be sent');
 assert.ok(!worker.includes("params.set('FailURL',"), 'legacy unrecognized fail return parameter must not be sent');
 
