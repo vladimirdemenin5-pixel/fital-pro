@@ -87,7 +87,9 @@ const profile = {
   preferences: 'Обычное питание, без аллергий. Синтетические тестовые данные.'
 };
 const plans = [
-  { key: 'PRO', days: 14 }
+  { key: 'Питание', days: 7 },
+  { key: 'PRO', days: 14 },
+  { key: 'Premium', days: 30 }
 ];
 
 for (const item of plans) {
@@ -105,7 +107,9 @@ for (const item of plans) {
   if (
     result.generationMode !== 'ai' ||
     !Array.isArray(result.aiProviders) || result.aiProviders.length === 0 ||
+    result.plan !== item.key ||
     result.durationDays !== item.days ||
+    result.menuDays !== item.days ||
     !Array.isArray(result.days) || result.days.length !== item.days
   ) {
     throw new Error(`${item.key}: returned an incomplete plan or a non-AI fallback.`);
@@ -146,8 +150,11 @@ for (const item of plans) {
   }
 
   const trainingDays = result.days.filter(day => day.trainingDay).length;
-  if (trainingDays !== 6) {
-    throw new Error(item.key + ': expected six scheduled training days across two complete weeks, received ' + trainingDays + '.');
+  const expectedTrainingDays = result.days.reduce((count, day, index) => count + (
+    Math.floor(((index % 7) + 1) * profile.days / 7) > Math.floor((index % 7) * profile.days / 7) ? 1 : 0
+  ), 0);
+  if (trainingDays !== expectedTrainingDays) {
+    throw new Error(item.key + ': expected ' + expectedTrainingDays + ' scheduled training days for ' + item.days + ' days, received ' + trainingDays + '.');
   }
   if (!Array.isArray(result.shopping) || result.shopping.length === 0 ||
       typeof result.nutritionSource !== 'string' || !result.nutritionSource.includes('USDA FoodData Central')) {
@@ -167,4 +174,4 @@ for (const item of plans) {
     payment: 'not created'
   }));
 }
-console.log('PASS: real AI generated and validated the complete 14-day PRO menu and training schedule without writing to D1 or creating payments.');
+console.log('PASS: real AI generated and validated the complete 7-, 14-, and 30-day plans without writing to D1 or creating payments.');
