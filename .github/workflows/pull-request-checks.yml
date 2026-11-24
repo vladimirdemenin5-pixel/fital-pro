@@ -93,9 +93,16 @@ jobs:
             echo "GROQ_API_KEY is not configured as a repository secret; Preview will retain its existing provider configuration."
           fi
 
-      # Live AI integration is opt-in only; never spend AI quota on routine PR checks.
-      - name: Verify real AI, Robokassa signatures, D1 persistence, and member access for all tariffs
-        if: contains(github.event.pull_request.labels.*.name, 'run-live-ai-check')
+      # Live AI plan generation is opt-in; this diagnostic never writes to D1 or creates payments.
+      - name: Verify real AI plans for all three tariffs without database writes
+        if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-live-ai-check')
+        env:
+          FITALPRO_WORKER_URL: ${{ steps.preview.outputs.url }}
+        run: node scripts/live-ai-plan-validation.mjs
+
+      # Full payment/member-flow diagnostics remain separately gated and require an isolated Preview D1.
+      - name: Verify Robokassa, D1 persistence, and member access for all tariffs
+        if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-live-payment-flow')
         env:
           FITALPRO_WORKER_URL: ${{ steps.preview.outputs.url }}
         run: node scripts/live-ai-plans.mjs
