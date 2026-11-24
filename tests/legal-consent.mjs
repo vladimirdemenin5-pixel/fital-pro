@@ -22,7 +22,7 @@ for (const page of ['oferta.html', 'privacy.html', 'delivery-refund.html', 'requ
 }
 assert.ok(html.includes('href="/oferta.html"'));
 assert.ok(html.includes('href="/privacy.html"'));
-assert.ok(html.includes('Cloudflare Workers AI') && html.includes('OpenAI GPT-OSS'), 'the questionnaire must disclose the actual Cloudflare-hosted AI models before consent');
+assert.ok(html.includes('Groq API (GPT-OSS 20B)') && html.includes('Cloudflare Workers AI') && html.includes('Qwen 3.8 из цепочки генерации планов исключён'), 'the questionnaire must disclose Groq and the current Cloudflare fallback models before consent');
 assert.ok(read('public/privacy.html').includes('Cloudflare Workers AI') && read('public/privacy.html').includes('Groq') && read('public/privacy.html').includes('GPT-OSS 20B'), 'the privacy policy must identify the configured Groq provider and Cloudflare fallback model family');
 assert.ok(read('public/privacy.html').includes('Редакция от 23 ноября 2026 года.'), 'the privacy policy revision date must match the updated provider disclosure');
 assert.ok(read('public/privacy.html').includes('если в существующем Worker настроен серверный секрет GROQ_API_KEY') && read('public/privacy.html').includes('Модель Qwen 3.8 в текущей цепочке генерации планов не используется.'), 'the privacy policy must disclose conditional Groq routing and the removed Qwen plan model');
