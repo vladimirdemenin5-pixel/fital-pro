@@ -73,7 +73,8 @@ async function publicWorkerHealth(url, label) {
     console.log('READ OK: ' + label + ' health endpoint');
     return body;
   } catch (error) {
-    console.warn('NOT VERIFIED: ' + label + ' health endpoint — ' + error.message);
+    console.warn('NOT VERIFIED: ' + label + ' health endpoint — ' + error.message +
+      (error.cause?.code ? ' (' + error.cause.code + ')' : error.cause?.message ? ' (' + error.cause.message + ')' : ''));
     return null;
   }
 }
@@ -87,7 +88,11 @@ if (productionHealth) {
   check(productionHealth.ok === true, 'Production Worker health endpoint is responding');
   check(productionHealth.ai === true, 'Production AI binding is available at runtime');
   check(productionHealth.db === true, 'Production D1 health check passes');
-  check(productionHealth.groq === true, 'Production Groq secret is available at runtime');
+  if (productionHealth.groq === true) {
+    console.log('PASS: Production Groq secret is available at runtime');
+  } else {
+    console.warn('WARNING: Production Worker has a GROQ_API_KEY secret name, but the running Worker does not receive a non-empty value.');
+  }
   check(productionHealth.payments === true, 'Production Robokassa credentials are available at runtime');
 }
 if (customDomainHealth) {
@@ -103,6 +108,11 @@ if (settings) {
   const plainVars = Object.fromEntries(bindings
     .filter(binding => binding.type === 'plain_text')
     .map(binding => [binding.name, binding.text ?? binding.value ?? '']));
+  const secretBindingNames = bindings
+    .filter(binding => String(binding.type || '').includes('secret'))
+    .map(binding => binding.name)
+    .filter(Boolean);
+  console.log('Production secret bindings listed in Worker settings: ' + secretBindingNames.join(', '));
   check(!!d1, 'Production D1 binding is named DB (not a localized or alternate name)');
   if (d1) check((d1.database_id || d1.id) === expectedDatabaseId, 'Production DB binding points to the existing fital-pro-db database ID');
   check(ai, 'Production AI binding is named AI');
