@@ -437,7 +437,7 @@ assert.ok(workerSource.includes('const aiOptions = {') && workerSource.includes(
 assert.ok(workerSource.includes("https://api.groq.com/openai/v1/chat/completions") &&
   workerSource.includes("Authorization: 'Bearer ' + apiKey") &&
   workerSource.includes("response_format: { type: 'json_object' }") &&
-  workerSource.includes("reasoning_format: 'hidden'"),
+  workerSource.includes('include_reasoning: false'),
   'optional Groq inference must use server-side API credentials, bounded output, and JSON-only structured generation');
 assert.ok(workerSource.includes('week должен содержать РОВНО'), 'the model prompt must explicitly require the exact block length');
 assert.equal(proPlan.week.slice(0, 7).filter(day => day.trainingDay).length, 3);
