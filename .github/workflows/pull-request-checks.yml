@@ -88,8 +88,8 @@ jobs:
           printf '%s' "$page" | node --input-type=module -e 'let s=""; for await (const c of process.stdin) s+=c; if (!s.includes("<html") || !s.includes("Fital")) throw new Error("Preview homepage did not load"); console.log("PASS: redesigned Fital Pro homepage is served")'
           echo "Cloudflare Preview: $FITALPRO_PREVIEW_URL"
 
-      # Live AI plan generation is opt-in; this diagnostic never writes to D1 or creates payments.
-      - name: Verify real 14-day PRO AI menu and training plan without database writes
+      # Live 7/14/30-day AI generation is opt-in; diagnostics never write to D1 or create payments.
+      - name: Verify real 7-, 14-, and 30-day AI plans without database writes
         if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-live-ai-check')
         env:
           FITALPRO_WORKER_URL: ${{ steps.preview.outputs.url }}
