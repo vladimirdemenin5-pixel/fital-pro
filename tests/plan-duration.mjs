@@ -31,8 +31,10 @@ assert.ok(productionWorkflow.includes('run_live_ai:') && productionWorkflow.incl
   'manual live AI checks must default to off');
 assert.ok(liveIntegrationSource.includes("FITALPRO_PREVIEW_D1_ISOLATED !== 'true'"), 'live AI/payment/D1 integration must refuse to run while Preview shares Production D1');
 assert.ok(pullRequestWorkflow.includes('types: [opened, synchronize, reopened, labeled]') &&
-  pullRequestWorkflow.includes("if: contains(github.event.pull_request.labels.*.name, 'run-live-ai-check')"),
-  'expensive live AI integration checks must run only when the PR is explicitly labeled, not on every code update');
+  pullRequestWorkflow.includes("contains(github.event.pull_request.labels.*.name, 'run-live-ai-check')") &&
+  pullRequestWorkflow.includes("contains(github.event.pull_request.labels.*.name, 'run-live-payment-flow')") &&
+  pullRequestWorkflow.includes("if: github.event_name == 'pull_request'"),
+  'live AI plan and payment integration checks must remain explicitly label-gated on PR events');
 assert.ok(Object.entries(FOOD_CATALOG).every(([id, food]) => Number.isFinite(food.kcal) && Number.isFinite(food.protein) && Number.isFinite(food.fat) && Number.isFinite(food.carbs)), 'every food must define calories, protein, fat and carbohydrates');
 
 const profile = {
