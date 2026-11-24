@@ -916,7 +916,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
       const detail = clean(error?.message, 240) || 'unknown model error';
       diagnostics.push(model + ': request-error=' + detail);
       console.error('Fital Pro AI model failed:', model, detail, 'elapsedMs=' + (Date.now() - modelStartedAt));
-      if (error?.dailyQuota || /Groq inference HTTP 429\b[\s\S]{0,240}(?:tokens? per day|\\bTPD\\b)/i.test(detail)) {
+      if (error?.dailyQuota || /Groq inference HTTP 429\b[\s\S]{0,240}(?:tokens? per day|TPD)/i.test(detail)) {
         // A daily Groq quota will not reset during this plan generation. Do not
         // waste every later day-block retrying both exhausted Groq models.
         providerState.groqDailyQuotaExhausted = true;
