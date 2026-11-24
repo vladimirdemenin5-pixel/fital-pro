@@ -314,12 +314,12 @@ async function loadProfileEditor() {
   }
 }
 
-function renderMeal(day, label, key) {
+function renderMeal(day, label, key, time) {
   const ingredients = Array.isArray(day[key + 'Ingredients']) ? day[key + 'Ingredients'] : [];
   const composition = ingredients.map(item =>
     escapeHtml(item.name) + ' — ' + Number(item.grams).toLocaleString('ru-RU') + ' г'
   ).join(' · ');
-  return '<p><strong>' + label + '</strong> · ' + escapeHtml(day[key]) +
+  return '<p><strong>' + label + (time ? ' · ' + escapeHtml(time) : '') + '</strong> · ' + escapeHtml(day[key]) +
     (composition ? '<br><small>Состав, вес до приготовления: ' + composition + '</small>' : '') +
     (day[key + 'Recipe'] ? '<br><small>Приготовление: ' + escapeHtml(day[key + 'Recipe']) + '</small>' : '') + '</p>';
 }
@@ -347,10 +347,10 @@ function renderFullPlan(plan, targetSelector) {
     const nutrition = day.nutrition || {};
     return '<article class="day-card">' +
       '<h3>' + escapeHtml(day.day) + '</h3>' +
-      renderMeal(day, 'Завтрак', 'breakfast') +
-      renderMeal(day, 'Обед', 'lunch') +
-      renderMeal(day, 'Перекус', 'snack') +
-      renderMeal(day, 'Ужин', 'dinner') +
+      renderMeal(day, 'Завтрак', 'breakfast', '08:00') +
+      renderMeal(day, 'Обед', 'lunch', '13:00') +
+      renderMeal(day, 'Перекус', 'snack', '16:30') +
+      renderMeal(day, 'Ужин', 'dinner', '19:30') +
       (day.nutrition ? '<p class="day-nutrition"><strong>Расчёт по продуктам:</strong> ' +
         Number(nutrition.calories).toLocaleString('ru-RU') + ' ккал · ' +
         Number(nutrition.protein).toLocaleString('ru-RU') + ' г белка' +
