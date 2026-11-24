@@ -2,7 +2,7 @@ name: Fital Pro pull request checks
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, labeled]
     branches:
       - main
 
