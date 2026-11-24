@@ -909,7 +909,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
         ? {
             messages: currentMessages,
             temperature: 0.2,
-            max_completion_tokens: 3500,
+            max_completion_tokens: 6200,
             reasoning_effort: 'low',
             include_reasoning: false,
             response_format: {
