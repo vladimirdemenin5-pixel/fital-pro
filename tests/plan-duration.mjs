@@ -691,11 +691,14 @@ assert.equal(missingWorkoutFallback.generationMode, 'catalog-fallback');
 assert.ok(missingWorkoutFallback.week.every(day => !day.trainingDay || /\d+×\d+/.test(day.workout)),
   'missing workout prescriptions must be replaced with a complete scheduled session');
 const lowNutritionFallback = await generateAiPlan(profile, 'PRO', { AI: makeAi(14, false, false, false, true) });
-assert.equal(lowNutritionFallback.generationMode, 'catalog-fallback');
-assert.ok(lowNutritionFallback.week.every(day =>
-  day.nutrition.calories >= lowNutritionFallback.calories * 0.8 &&
-  day.nutrition.calories <= lowNutritionFallback.calories * 1.2
-), 'implausibly low AI nutrition must be replaced by a server-calculated plan that passes nutrition validation');
+assert.equal(lowNutritionFallback.generationMode, 'ai',
+  'severely under-portioned but structurally complete AI meals must be recovered without replacing the AI plan');
+assert.ok(lowNutritionFallback.week.every(day => nutritionWithinTargetsForTest(day.nutrition, {
+  calories: lowNutritionFallback.calories,
+  protein: lowNutritionFallback.protein,
+  fat: lowNutritionFallback.fat,
+  carbs: lowNutritionFallback.carbs
+})), 'every recovered AI day must pass strict calories and all three macro ranges');
 
 let nutritionRetryCalls = 0;
 const nutritionRetryModelsByBlock = new Map();
