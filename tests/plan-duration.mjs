@@ -212,7 +212,6 @@ await assert.rejects(
   'the inference wrapper must reject even if the AI binding never settles'
 );
 assert.equal(timeoutSignalCapture.signal.aborted, true, 'a model timeout must also abort the underlying AI call');
-assert.equal(timeoutSignalCapture.signal.aborted, true, 'a model timeout must also abort the underlying AI call');
 
 // Groq gets bounded retries for transient HTTP/network failures before provider fallback.
 const originalFetch = globalThis.fetch;
