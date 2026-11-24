@@ -610,7 +610,7 @@ assert.ok(workerSource.includes("const groqRequired = env.FITALPRO_REQUIRE_GROQ 
   workerSource.includes("preferredGroqModel = generated.model.startsWith('groq:')") &&
   workerSource.includes("...(groqConfigured && !providerState.groqDailyQuotaExhausted ? groqModels : [])") &&
   workerSource.includes("...(!groqRequired && env.AI ? [MODEL, '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b', '@cf/zai-org/glm-4.7-flash'] : [])") &&
-  workerSource.includes('providerState.groqDailyQuotaExhausted = true'),
+  workerSource.includes('providerState.groqDailyQuotaExhaustedModels.add(model.slice(5))'),
   'plan generation must use only the approved GPT-OSS Groq models, enforce Groq-only Preview when required, and retain the bounded Cloudflare fallback chain elsewhere');
 assert.ok(workerSource.includes('const originalFoodIds = items.map(item => item.foodId)') &&
   workerSource.includes('const correctedGrams = gramsAtScale((low + high) / 2)') &&
@@ -877,6 +877,38 @@ try{
  assert.equal(premiumCloudflareModels.length,10,'all ten Premium day-blocks must be generated and validated');
 }finally{
  globalThis.fetch=originalPremiumQuotaFetch;
+}
+
+// Quotas are model-specific: if 120B is exhausted but 20B remains available,
+// keep using 20B for every remaining Premium block instead of disabling Groq.
+const originalSingleGroqQuotaFetch=globalThis.fetch;
+let exhausted120bCalls=0;
+let available20bCalls=0;
+try{
+ globalThis.fetch=async(_url,init)=>{
+  const payload=JSON.parse(init.body);
+  if(payload.model==='openai/gpt-oss-120b'){
+   exhausted120bCalls++;
+   return new Response(JSON.stringify({error:{message:'Rate limit reached for tokens per day (TPD)'}}),{
+    status:429,headers:{'content-type':'application/json'}
+   });
+  }
+  available20bCalls++;
+  const fixture=await makeAi(30).run(payload.model,{messages:payload.messages});
+  return new Response(JSON.stringify({choices:[{message:{content:fixture.response},finish_reason:'stop'}]}),{
+   status:200,headers:{'content-type':'application/json'}
+  });
+ };
+ const premiumGroqFallback=await generateAiPlan(profile,'Premium',{
+  GROQ_API_KEY:'test-groq-key',
+  AI:{async run(){throw new Error('Cloudflare must not be called while Groq 20B is available');}}
+ });
+ assert.equal(premiumGroqFallback.week.length,30);
+ assert.deepEqual(premiumGroqFallback.aiProviders,['groq']);
+ assert.equal(exhausted120bCalls,1,'the exhausted 120B endpoint must not be retried on later blocks');
+ assert.equal(available20bCalls,10,'the available 20B endpoint must generate all ten Premium blocks');
+}finally{
+ globalThis.fetch=originalSingleGroqQuotaFetch;
 }
 
 const modelCalls = [];
