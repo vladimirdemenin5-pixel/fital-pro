@@ -352,7 +352,7 @@ try{
  assert.equal(groqRequiredCloudflareCalls,0);
 }finally{globalThis.fetch=originalGroqRequiredFetch;}
 
-let groqModelFallbackCalls = [];let groqModelFallbackCalls = [];
+let groqModelFallbackCalls = [];
 let groqStrictSchemaCalls = 0;
 let groqUnboundedArraySchemaCalls = 0;
 let groqCatalogEnumSchemaCalls = 0;
@@ -787,7 +787,7 @@ assert.deepEqual(nutritionRetryModelsByBlock.get(4),['@cf/google/gemma-4-26b-a4b
 assert.deepEqual(nutritionRetryModelsByBlock.get(7),['@cf/google/gemma-4-26b-a4b-it']);
 assert.ok(workerSource.includes('const generationBlockDays = 3;'));
 
-const modelCalls = []const modelCalls = [];
+const modelCalls = [];
 const fallbackText = await runAiTextWithFallback({
   AI: {
     async run(model) {
