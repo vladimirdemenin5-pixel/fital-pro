@@ -2311,6 +2311,7 @@ export default {
           service: 'Fital Pro',
           ai: !!env.AI,
           db: !!env.DB,
+          groq: !!clean(env.GROQ_API_KEY, 300),
           payments: !!(env.ROBOKASSA_MERCHANT_LOGIN && robokassaPassword(env, 1) && robokassaPassword(env, 2))
         });
       }
