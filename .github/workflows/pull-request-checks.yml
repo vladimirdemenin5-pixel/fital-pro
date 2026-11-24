@@ -12,6 +12,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: fital-pro-pr-53-preview
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
