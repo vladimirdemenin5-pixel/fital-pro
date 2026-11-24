@@ -788,8 +788,8 @@ async function runGroqInferenceWithTimeout(env, model, inputs, timeoutMs = 60000
   delete payload.max_tokens;
 
   // Respect Groq's own reset window on 429 instead of retrying after an arbitrary 700 ms.
-  // The wait is bounded so a single customer request cannot remain open indefinitely.
-  for (let attempt = 0; attempt < 2; attempt++) {
+  // The wait is bounded, but may cover a full Groq TPM window (up to 60 seconds).
+  for (let attempt = 0; attempt < 3; attempt++) {
     const controller = new AbortController();
     const timer = setTimeout(() => {
       const timeoutError = new Error('Groq inference timed out.');
@@ -825,9 +825,9 @@ async function runGroqInferenceWithTimeout(env, model, inputs, timeoutMs = 60000
       const transient = status === 408 || status === 425 || status === 429 || status >= 500 ||
         error?.name === 'AbortError' || error?.name === 'TimeoutError' ||
         error instanceof TypeError || /network|fetch failed|timed out/i.test(clean(error?.message, 180));
-      if (attempt === 0 && transient) {
+      if (attempt < 2 && transient) {
         const requestedDelay = Number(error?.retryAfterMs) || 700;
-        const delayMs = Math.min(30000, Math.max(250, requestedDelay));
+        const delayMs = Math.min(60000, Math.max(250, requestedDelay));
         console.warn('Fital Pro Groq transient failure; retrying after provider reset window:', status || error?.name || 'network-error', 'delayMs=' + delayMs);
         await new Promise(resolve => setTimeout(resolve, delayMs));
         continue;
