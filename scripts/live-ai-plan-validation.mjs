@@ -109,7 +109,7 @@ for (const item of plans) {
       day.trainingDay !== expectedTrainingDay ||
       typeof day.workout !== 'string' ||
       day.workout.trim().length < 15 ||
-      (expectedTrainingDay && !/\\d+\\s*[×xх]\\s*\\d+/.test(day.workout)) ||
+      (expectedTrainingDay && !/[0-9]+[ \t]*[×xх][ \t]*[0-9]+/.test(day.workout)) ||
       meals.length !== 4 ||
       meals.some(meal =>
         typeof meal.title !== 'string' || !meal.title.trim() ||
