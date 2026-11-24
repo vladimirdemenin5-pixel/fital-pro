@@ -1512,6 +1512,8 @@ async function aiPlanDiagnostic(request, env) {
     dailyAverage: plan.dailyAverage,
     days: plan.week.map(day => ({
       day: day.day,
+      trainingDay: day.trainingDay,
+      workout: day.workout,
       meals: Object.fromEntries(MEAL_KEYS.map(key => [key, {
         title: day[key],
         recipe: day[key + 'Recipe'],
