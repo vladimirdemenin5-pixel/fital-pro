@@ -338,6 +338,7 @@ function renderFullPlan(plan, targetSelector) {
       Number(average.calories || 0).toLocaleString('ru-RU') + ' ккал · белки ' +
       Number(average.protein || 0).toLocaleString('ru-RU') + ' г' +
       (hasFullMacros ? ' · жиры ' + Number(average.fat).toLocaleString('ru-RU') + ' г · углеводы ' + Number(average.carbs).toLocaleString('ru-RU') + ' г' : ' · жиры и углеводы не рассчитаны в сохранённой старой версии') +
+      (plan.waterLiters ? ' · ориентир воды ' + Number(plan.waterLiters).toLocaleString('ru-RU') + ' л/сутки' : '') +
       '.</p>'
     : '<p class="nutrition-summary">Эта программа создана до обновления расчёта по ингредиентам. Чтобы получить проверяемые порции, калории и список покупок, пересоберите план в анкете.</p>';
   const generationNotice = plan.generationMode === 'catalog-fallback'
