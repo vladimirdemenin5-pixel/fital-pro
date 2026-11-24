@@ -406,9 +406,10 @@ assert.ok(workerSource.includes('function aiFailureDiagnostic(error, maxLength =
   workerSource.includes("checkoutError.cause = new Error(clean(checkoutData.diagnostic, 1000))"),
   'nested AI provider errors must reach authenticated Preview diagnostics without leaking into public checkout responses');
 assert.ok(workerSource.includes('const rejectionDiagnostics = [];') && workerSource.includes('rejectionDiagnostics.slice(-3)'), 'the next fallback model must receive concrete rejection reasons from the previous model');
-assert.ok(workerSource.includes("...(env.AI ? [MODEL, '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'] : [])") &&
-  workerSource.includes("...(clean(env.GROQ_API_KEY, 300) ? ['groq:openai/gpt-oss-20b'] : [])"),
-  'plan generation must use an optional Groq GPT-OSS 20B provider and only the bounded Cloudflare Gemma/GPT-OSS fallback chain');
+assert.ok(workerSource.includes("const groqRequired = env.FITALPRO_REQUIRE_GROQ === '1';") &&
+  workerSource.includes("...(groqConfigured ? ['groq:openai/gpt-oss-20b'] : [])") &&
+  workerSource.includes("...(!groqRequired && env.AI ? [MODEL, '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'] : [])"),
+  'plan generation must use Groq when configured, enforce Groq-only Preview when required, and retain the bounded Cloudflare fallback chain elsewhere');
 assert.ok(workerSource.includes('for (let move = 0; move < 20; move++)') && workerSource.includes('!foodFitsMeal(foodId, key)'), 'nutrition correction must search more composition changes and keep replacement foods compatible with their meal');
 assert.ok(workerSource.includes('env.AI.run(model, inputs, { signal: controller.signal })') && workerSource.includes('env.AI.run(model, aiOptions, { rejectIfBusy: true })'),
   'plan generation may wait for capacity within its hard timeout while interactive chat remains fail-fast');
