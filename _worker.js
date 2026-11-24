@@ -811,8 +811,9 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
   const groqModels = preferredGroqModel === 'openai/gpt-oss-120b'
     ? ['groq:openai/gpt-oss-120b', 'groq:openai/gpt-oss-20b']
     : ['groq:openai/gpt-oss-20b', 'groq:openai/gpt-oss-120b'];
+  providerState.groqDailyQuotaExhaustedModels ||= new Set();
   const models = [
-    ...(groqConfigured && !providerState.groqDailyQuotaExhausted ? groqModels : []),
+    ...(groqConfigured ? groqModels.filter(model => !providerState.groqDailyQuotaExhaustedModels.has(model.slice(5))) : []),
     ...(!groqRequired && env.AI ? [MODEL, '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b', '@cf/zai-org/glm-4.7-flash'] : [])
   ];
   const diagnostics = [];
@@ -916,10 +917,11 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
       const detail = clean(error?.message, 240) || 'unknown model error';
       diagnostics.push(model + ': request-error=' + detail);
       console.error('Fital Pro AI model failed:', model, detail, 'elapsedMs=' + (Date.now() - modelStartedAt));
-      if (error?.dailyQuota || /Groq inference HTTP 429\b[\s\S]{0,240}(?:tokens? per day|TPD)/i.test(detail)) {
-        // A daily Groq quota will not reset during this plan generation. Do not
-        // waste every later day-block retrying both exhausted Groq models.
-        providerState.groqDailyQuotaExhausted = true;
+      if (model.startsWith('groq:') &&
+          (error?.dailyQuota || /Groq inference HTTP 429\b[\s\S]{0,240}(?:tokens? per day|TPD)/i.test(detail))) {
+        // Groq quotas are model-specific. Skip only the exhausted model while
+        // keeping the other GPT-OSS endpoint available for the remaining blocks.
+        providerState.groqDailyQuotaExhaustedModels.add(model.slice(5));
       }
       if (/(?:4006|3036|daily free allocation|used up your daily free allocation)/i.test(detail)) {
         throw new Error('Дневной бесплатный лимит ИИ Cloudflare исчерпан. Сейчас новый план создать нельзя; заказ и оплата не создаются. Попробуйте позже.', { cause: error });
@@ -1133,7 +1135,7 @@ async function generateAiPlan(profile, planKey, env) {
   const totalDays = PLANS[planKey].menuDays;
   const fullWeek = [];
   const providersUsed = new Set();
-  const providerState = { groqDailyQuotaExhausted: false };
+  const providerState = { groqDailyQuotaExhaustedModels: new Set() };
   let intro = '';
   const tips = [];
   // Premium is generated after shorter plans and needs many more blocks; start it on
