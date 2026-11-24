@@ -26,12 +26,30 @@ function postJson(url, body, headers, timeoutMs) {
         resolve({ ok: status >= 200 && status < 300, status, data });
       });
     });
-    request.setTimeout(timeoutMs, () => request.destroy(new Error('Preview AI diagnostic timed out.')));
+    request.setTimeout(timeoutMs, () => request.destroy(new Error('AI diagnostic timed out.')));
     request.on('error', reject);
     request.write(JSON.stringify(body));
     request.end();
   });
 }
+
+async function getHealth() {
+  const response = await fetch(endpoint + '/health', { signal: AbortSignal.timeout(30000) });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.ok !== true || data.ai !== true) {
+    throw new Error('AI preflight failed: Worker health or AI binding is unavailable.');
+  }
+  if (target === 'production' && data.groq !== true) {
+    throw new Error('AI preflight failed: Production Worker does not receive GROQ_API_KEY. No AI quota will be spent until the production Groq secret is available at runtime.');
+  }
+  if (target === 'preview' && data.groq !== true) {
+    throw new Error('AI preflight failed: Preview Worker does not receive GROQ_API_KEY. No AI quota will be spent until the Preview Groq secret is available at runtime.');
+  }
+  console.log('PASS: AI preflight — Worker AI binding and required Groq runtime configuration are available.');
+  return data;
+}
+
+await getHealth();
 
 const oidcRequestUrl = process.env.ACTIONS_ID_TOKEN_REQUEST_URL;
 const oidcRequestToken = process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
@@ -87,7 +105,10 @@ for (const item of plans) {
     result.durationDays !== item.days ||
     !Array.isArray(result.days) || result.days.length !== item.days
   ) {
-    throw new Error(`${item.key}: Preview returned an incomplete plan or a non-AI fallback.`);
+    throw new Error(`${item.key}: returned an incomplete plan or a non-AI fallback.`);
+  }
+  if (target === 'production' && !result.aiProviders.includes('groq')) {
+    throw new Error(`${item.key}: Production AI plan was generated without Groq; the production provider chain is not in the expected state.`);
   }
 
   for (const [index, day] of result.days.entries()) {
@@ -124,4 +145,4 @@ for (const item of plans) {
     payment: 'not created'
   }));
 }
-console.log('PASS: real AI generated complete 7-, 14-, and 30-day plans in Preview without writing to D1 or creating payments.');
+console.log('PASS: real AI generated complete 7-, 14-, and 30-day plans without writing to D1 or creating payments.');
