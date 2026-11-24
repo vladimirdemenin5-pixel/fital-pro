@@ -282,10 +282,43 @@ try {
     AI: { async run() { groqRequiredCloudflareCalls++; throw new Error('Cloudflare fallback must remain disabled'); } }
   });
   assert.equal(groqRequiredAuthFailurePlan.generationMode, 'catalog-fallback');
-  assert.equal(groqRequiredHttpCalls, 1, 'a permanent Groq 401 must not be retried');
+  assert.equal(groqRequiredHttpCalls, 1, 'a permanent Groq 401 must not be retried or sent to a second model');
   assert.equal(groqRequiredCloudflareCalls, 0,
     'Preview must not switch to Workers AI after a permanent Groq authentication failure');
   assert.ok(groqRequiredAuthFailurePlan.generationIssue.includes('HTTP 401'));
+} finally {
+  globalThis.fetch = originalGroqRequiredFetch;
+}
+
+let groqModelFallbackCalls = [];
+try {
+  globalThis.fetch = async (_url, init) => {
+    const payload = JSON.parse(init.body);
+    groqModelFallbackCalls.push(payload.model);
+    if (payload.model === 'openai/gpt-oss-20b') {
+      return new Response(JSON.stringify({ error: { message: 'TPM rate limit reached' } }), {
+        status: 429,
+        headers: { 'content-type': 'application/json', 'x-ratelimit-reset-tokens': '0.001s' }
+      });
+    }
+    const fixture = await makeAi(7).run(payload.model, { messages: payload.messages });
+    return new Response(JSON.stringify({
+      choices: [{ message: { content: fixture.response }, finish_reason: 'stop' }]
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  const alternateGroqPlan = await generateAiPlan(profile, 'Питание', {
+    FITALPRO_REQUIRE_GROQ: '1',
+    GROQ_API_KEY: 'test-groq-key',
+    AI: { async run() { throw new Error('Cloudflare fallback must remain disabled'); } }
+  });
+  assert.equal(alternateGroqPlan.generationMode, 'ai',
+    'a rate-limited GPT-OSS 20B must fall back to the independent Groq GPT-OSS 120B model');
+  assert.deepEqual(alternateGroqPlan.aiProviders, ['groq']);
+  assert.equal(alternateGroqPlan.week.length, 7);
+  assert.equal(groqModelFallbackCalls.filter(model => model === 'openai/gpt-oss-20b').length, 2,
+    'the rate-limited primary model gets one bounded retry');
+  assert.equal(groqModelFallbackCalls.filter(model => model === 'openai/gpt-oss-120b').length, 3,
+    'after GPT-OSS 120B succeeds, all remaining plan blocks must continue using it');
 } finally {
   globalThis.fetch = originalGroqRequiredFetch;
 }
