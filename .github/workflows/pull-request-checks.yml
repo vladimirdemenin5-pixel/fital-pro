@@ -1,9 +1,6 @@
 name: Fital Pro pull request checks
 
 on:
-  push:
-    branches:
-      - design/tilda-inspired-bold-redesign
   pull_request:
     types: [opened, synchronize, reopened, labeled]
     branches:
