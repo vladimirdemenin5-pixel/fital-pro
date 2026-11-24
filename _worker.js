@@ -845,6 +845,11 @@ async function runGroqInferenceWithTimeout(env, model, inputs, timeoutMs = 60000
       if (!response.ok) {
         const error = new Error('Groq inference HTTP ' + response.status + ': ' + clean(responseText, 360));
         error.status = response.status;
+        // A daily token quota cannot recover inside this request's short retry window.
+        // Fail over immediately to the next approved model/provider instead of burning
+        // three long waits on a quota that resets hours later.
+        error.dailyQuota = response.status === 429 &&
+          /tokens? per day|\\bTPD\\b|daily.{0,24}tokens?|tokens?.{0,24}daily/i.test(responseText);
         const retryAfterMs = parseGroqDelayMs(response.headers?.get('retry-after'));
         const tokenResetMs = parseGroqDelayMs(response.headers?.get('x-ratelimit-reset-tokens'));
         // A short retry-after can precede the actual TPM reset; wait for the later signal.
@@ -861,7 +866,7 @@ async function runGroqInferenceWithTimeout(env, model, inputs, timeoutMs = 60000
       const transient = status === 408 || status === 425 || status === 429 || status >= 500 ||
         error?.name === 'AbortError' || error?.name === 'TimeoutError' ||
         error instanceof TypeError || /network|fetch failed|timed out/i.test(clean(error?.message, 180));
-      if (attempt < 2 && transient) {
+      if (attempt < 2 && transient && !error?.dailyQuota) {
         const requestedDelay = Number(error?.retryAfterMs) || 700;
         const delayMs = Math.min(60000, Math.max(250, requestedDelay));
         console.warn('Fital Pro Groq transient failure; retrying after provider reset window:', status || error?.name || 'network-error', 'delayMs=' + delayMs);
