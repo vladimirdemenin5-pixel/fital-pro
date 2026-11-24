@@ -805,7 +805,7 @@ async function runPlanModel(env, prompt, profile, planKey, menuDays, startDay = 
     { role: 'system', content: 'Ты Fital Pro. Отвечай только валидным JSON без Markdown и пояснений.' },
     { role: 'user', content: prompt }
   ];
-  // Cloudflare Qwen 3.8 is primary; GPT-OSS 120B is the first fallback and lower-latency 20B is the corrective alternative.
+  // Gemma 4 is the lower-cost primary model; Qwen 3.8 and GPT-OSS remain bounded Cloudflare fallbacks.
   const models = [
     ...(clean(env.GROQ_API_KEY, 300) ? ['groq:openai/gpt-oss-20b'] : []),
     ...(env.AI ? [MODEL, '@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'] : [])
@@ -1009,6 +1009,25 @@ function buildCatalogFallbackDay(profile, planKey, absoluteDay, targets) {
   return day;
 }
 
+function aiFailureDiagnostic(error, maxLength = 1200) {
+  const messages = [];
+  const seen = new Set();
+  let current = error;
+  for (let depth = 0; current && depth < 5; depth++) {
+    if (seen.has(current)) break;
+    seen.add(current);
+    let message = clean(current?.message, 900);
+    if (message) {
+      message = message
+        .replace(/Bearer\s+[^\s"'<>]+/gi, 'Bearer [REDACTED]')
+        .replace(/((?:api[_-]?key|authorization|access[_-]?token)\s*[:=]\s*)[^\s,;]+/gi, '$1[REDACTED]');
+      if (!messages.includes(message)) messages.push(message);
+    }
+    current = current?.cause;
+  }
+  return messages.join(' <- ').slice(0, maxLength);
+}
+
 function generateCatalogFallbackPlan(profile, planKey, targets, cause) {
   const includesTraining = planKey !== 'Питание';
   const totalDays = PLANS[planKey].menuDays;
@@ -1061,7 +1080,7 @@ function generateCatalogFallbackPlan(profile, planKey, targets, cause) {
     trainingIncluded: includesTraining,
     durationDays: PLANS[planKey].days,
     generationMode: 'catalog-fallback',
-    generationIssue: clean(cause?.message, 180) || 'Генеративная модель временно недоступна.',
+    generationIssue: aiFailureDiagnostic(cause, 1200) || 'Генеративная модель временно недоступна.',
     disclaimer: 'План носит информационный характер и не заменяет консультацию врача или специалиста по питанию.'
   };
 }
@@ -1149,7 +1168,7 @@ async function generateAiPlan(profile, planKey, env) {
     }
     }
   } catch (error) {
-    console.error('Fital Pro generation provider unavailable; switching to validated catalog planner:', clean(error?.message, 240));
+    console.error('Fital Pro generation provider unavailable; switching to validated catalog planner:', aiFailureDiagnostic(error, 1800) || 'unknown AI error');
     return generateCatalogFallbackPlan(profile, planKey, targets, error);
   }
 
@@ -1296,7 +1315,15 @@ async function checkout(request, env, forceTestMode = false) {
   }
 
   if (plan.generationMode !== 'ai') {
-    return json({ error: 'Генеративный ИИ временно недоступен. Заказ и оплата не создавались. Повторите попытку позже.' }, 503);
+    const responseBody = {
+      error: 'Генеративный ИИ временно недоступен. Заказ и оплата не создавались. Повторите попытку позже.'
+    };
+    // Detailed provider errors are returned only to the authenticated Preview CI flow.
+    // Public checkout responses never expose model/provider diagnostics.
+    if (forceTestMode && env.FITALPRO_PREVIEW_CI === '1' && plan.generationIssue) {
+      responseBody.diagnostic = clean(plan.generationIssue, 1200);
+    }
+    return json(responseBody, 503);
   }
 
   const clientRef = crypto.randomUUID().replaceAll('-', '');
@@ -1749,7 +1776,9 @@ async function aiDataFlowDiagnostic(request, env) {
     const checkoutResponse = await checkout(checkoutRequest, diagnosticEnv, true);
     const checkoutData = await checkoutResponse.json().catch(() => ({}));
     if (!checkoutResponse.ok || checkoutData.ok !== true || !checkoutData.confirmation_url) {
-      throw new Error('Тестовый checkout не создал заказ: ' + clean(checkoutData.error, 180));
+      const checkoutError = new Error('Тестовый checkout не создал заказ: ' + clean(checkoutData.error, 180));
+      if (checkoutData.diagnostic) checkoutError.cause = new Error(clean(checkoutData.diagnostic, 1000));
+      throw checkoutError;
     }
     clientRef = clean(checkoutData.client_ref, 100);
     generationMode = clean(checkoutData.preview?.generationMode, 40);
@@ -1859,7 +1888,7 @@ async function aiDataFlowDiagnostic(request, env) {
     });
   } catch (error) {
     const detail = clean(error?.message, 240) || 'unknown error';
-    const diagnostic = clean(error?.cause?.message, 600);
+    const diagnostic = clean(error?.cause?.message, 1000);
     console.error('Fital Pro AI/payment/D1 diagnostic failed:', stage, detail, diagnostic);
     return json({ ok: false, stage, error: detail, diagnostic: diagnostic || undefined }, stage === 'checkout-create' ? 502 : 500);
   } finally {

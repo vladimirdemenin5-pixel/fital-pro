@@ -22,11 +22,15 @@ assert.equal(previewDiagnosticStillProtected.status, 404, 'Preview diagnostic mu
 const appSource = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
 const htmlSource = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
 const productionWorkflow = await readFile(new URL('../.github/workflows/main.yml', import.meta.url), 'utf8');
+const pullRequestWorkflow = await readFile(new URL('../.github/workflows/pull-request-checks.yml', import.meta.url), 'utf8');
 assert.ok(Object.entries(FOOD_CATALOG).length >= 30, 'food reference catalog must remain populated');
 assert.ok(productionWorkflow.includes("if: github.event_name == 'workflow_dispatch' && inputs.run_live_ai == true"),
   'live AI generation must require an explicit manual workflow dispatch so ordinary production deployments do not consume Workers AI quota');
 assert.ok(productionWorkflow.includes('run_live_ai:') && productionWorkflow.includes('type: boolean') && productionWorkflow.includes('default: false'),
   'manual live AI checks must default to off');
+assert.ok(pullRequestWorkflow.includes('types: [opened, synchronize, reopened, labeled]') &&
+  pullRequestWorkflow.includes("if: contains(github.event.pull_request.labels.*.name, 'run-live-ai-check')"),
+  'expensive live AI integration checks must run only when the PR is explicitly labeled, not on every code update');
 assert.ok(Object.entries(FOOD_CATALOG).every(([id, food]) => Number.isFinite(food.kcal) && Number.isFinite(food.protein) && Number.isFinite(food.fat) && Number.isFinite(food.carbs)), 'every food must define calories, protein, fat and carbohydrates');
 
 const profile = {
@@ -180,6 +184,8 @@ assert.equal(quotaFallbackPlan.generationMode, 'catalog-fallback',
 assert.equal(quotaFallbackPlan.week.length, 7);
 assert.equal(quotaAttemptedModels.length, 1, 'generation must stop after the first block detects exhausted quota');
 assert.equal(quotaAttemptedModels[0], '@cf/google/gemma-4-26b-a4b-it');
+assert.ok(quotaFallbackPlan.generationIssue.includes('4006') && quotaFallbackPlan.generationIssue.includes('10,000 neurons'),
+  'the fallback plan must retain the original Cloudflare quota response in its private diagnostic');
 assert.ok(quotaFallbackPlan.week.every(day => day.nutrition.calories >= quotaFallbackPlan.calories * 0.8 &&
   day.nutrition.calories <= quotaFallbackPlan.calories * 1.2 &&
   day.nutrition.protein >= quotaFallbackPlan.protein * 0.8 &&
@@ -327,6 +333,10 @@ assert.ok(proPlan.nutritionSource.includes('USDA FoodData Central'));
 assert.ok(workerSource.includes('fdcId:173904'), 'oats reference must retain its USDA food record identifier');
 assert.ok(workerSource.includes('for (let offset = 0; offset < totalDays; offset += 2)') && workerSource.includes('const chunkDays = Math.min(2, totalDays - offset)') && !workerSource.includes('Promise.all([0, 2, 4, 6]'), 'long plans must be generated as sequential validated two-day blocks');
 assert.ok(workerSource.includes('MAX_MEAL_INGREDIENT_GRAMS') && workerSource.includes('min:5,max:') && workerSource.includes('for (let iteration=0;iteration<120;iteration++)') && workerSource.includes('const nutrientTargets = [targets.calories, targets.protein, targets.fat, targets.carbs];') && workerSource.includes('const derivatives=values.map(') && workerSource.includes('let learningRate=1000;') && workerSource.includes('const allowedFoods = Object.keys(FOOD_CATALOG).filter(id => foodAllowedByPreferences(id, profile));'), 'portion and food-choice correction must use bounded catalog search without relaxing nutrition ranges');
+assert.ok(workerSource.includes('function aiFailureDiagnostic(error, maxLength = 1200)') &&
+  workerSource.includes("forceTestMode && env.FITALPRO_PREVIEW_CI === '1' && plan.generationIssue") &&
+  workerSource.includes("checkoutError.cause = new Error(clean(checkoutData.diagnostic, 1000))"),
+  'nested AI provider errors must reach authenticated Preview diagnostics without leaking into public checkout responses');
 assert.ok(workerSource.includes('const rejectionDiagnostics = [];') && workerSource.includes('rejectionDiagnostics.slice(-3)'), 'the next fallback model must receive concrete rejection reasons from the previous model');
 assert.ok(workerSource.includes("...(env.AI ? [MODEL, '@cf/qwen/qwen3.8-27b', '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'] : [])") &&
   workerSource.includes("...(clean(env.GROQ_API_KEY, 300) ? ['groq:openai/gpt-oss-20b'] : [])"),
