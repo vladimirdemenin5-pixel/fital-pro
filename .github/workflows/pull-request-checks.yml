@@ -94,7 +94,7 @@ jobs:
 
       # Live AI integration is opt-in only; never spend AI quota on routine PR checks.
       - name: Verify real AI, Robokassa signatures, D1 persistence, and member access for all tariffs
-        if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-live-ai-check')
+        if: contains(github.event.pull_request.labels.*.name, 'run-live-ai-check')
         env:
           FITALPRO_WORKER_URL: ${{ steps.preview.outputs.url }}
         run: node scripts/live-ai-plans.mjs
