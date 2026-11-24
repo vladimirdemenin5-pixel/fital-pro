@@ -719,8 +719,8 @@ const nutritionRetryAi = {
 };
 const recoveredNutritionPlan = await generateAiPlan(profile, 'Питание', { AI: nutritionRetryAi });
 assert.equal(recoveredNutritionPlan.week.length, 7, 'a corrected fallback-model response must produce a complete plan');
-assert.equal(nutritionRetryCalls, 5, 'the full fallback chain is exercised for the first three-day block only; later blocks begin with Gemma');
-assert.deepEqual(nutritionRetryModelsByBlock.get(1), ['@cf/google/gemma-4-26b-a4b-it', '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b'], 'an invalid block must try Gemma and both GPT-OSS models in order');
+assert.equal(nutritionRetryCalls, 3, 'a structurally complete low-energy block must be corrected server-side without consuming additional model calls');
+assert.deepEqual(nutritionRetryModelsByBlock.get(1), ['@cf/google/gemma-4-26b-a4b-it'], 'a recoverable low-energy block must pass after the first model response');
 assert.deepEqual(nutritionRetryModelsByBlock.get(4), ['@cf/google/gemma-4-26b-a4b-it'], 'the next three-day block must start with Gemma after the previous block is validated');
 assert.deepEqual(nutritionRetryModelsByBlock.get(7), ['@cf/google/gemma-4-26b-a4b-it'], 'the third block must start with Gemma');
 assert.ok(workerSource.includes('const generationBlockDays = 3;'), 'plan generation must use three-day blocks to reduce serial model requests');
