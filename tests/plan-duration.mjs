@@ -221,6 +221,39 @@ assert.equal(quotaAttemptedModels.length, 1, 'generation must stop after the fir
 assert.equal(quotaAttemptedModels[0], '@cf/google/gemma-4-26b-a4b-it');
 assert.ok(quotaFallbackPlan.generationIssue.includes('4006') && quotaFallbackPlan.generationIssue.includes('10,000 neurons'),
   'the fallback plan must retain the original Cloudflare quota response in its private diagnostic');
+const groqRequiredCalls = [];
+const groqRequiredMissingKeyPlan = await generateAiPlan(profile, 'Питание', {
+  FITALPRO_REQUIRE_GROQ: '1',
+  AI: { async run(model) { groqRequiredCalls.push(model); throw new Error('Cloudflare AI must not be called'); } }
+});
+assert.equal(groqRequiredMissingKeyPlan.generationMode, 'catalog-fallback');
+assert.equal(groqRequiredCalls.length, 0,
+  'Preview must not call Workers AI when Groq is required but its secret is missing');
+assert.ok(groqRequiredMissingKeyPlan.generationIssue.includes('GROQ_API_KEY'),
+  'missing required Groq configuration must be explicit in the private diagnostic');
+
+const originalGroqRequiredFetch = globalThis.fetch;
+let groqRequiredHttpCalls = 0;
+let groqRequiredCloudflareCalls = 0;
+try {
+  globalThis.fetch = async () => {
+    groqRequiredHttpCalls++;
+    return new Response('invalid credentials', { status: 401 });
+  };
+  const groqRequiredAuthFailurePlan = await generateAiPlan(profile, 'Питание', {
+    FITALPRO_REQUIRE_GROQ: '1',
+    GROQ_API_KEY: 'test-groq-key',
+    AI: { async run() { groqRequiredCloudflareCalls++; throw new Error('Cloudflare fallback must remain disabled'); } }
+  });
+  assert.equal(groqRequiredAuthFailurePlan.generationMode, 'catalog-fallback');
+  assert.equal(groqRequiredHttpCalls, 1, 'a permanent Groq 401 must not be retried');
+  assert.equal(groqRequiredCloudflareCalls, 0,
+    'Preview must not switch to Workers AI after a permanent Groq authentication failure');
+  assert.ok(groqRequiredAuthFailurePlan.generationIssue.includes('HTTP 401'));
+} finally {
+  globalThis.fetch = originalGroqRequiredFetch;
+}
+
 assert.ok(quotaFallbackPlan.week.every(day => day.nutrition.calories >= quotaFallbackPlan.calories * 0.8 &&
   day.nutrition.calories <= quotaFallbackPlan.calories * 1.2 &&
   day.nutrition.protein >= quotaFallbackPlan.protein * 0.8 &&
