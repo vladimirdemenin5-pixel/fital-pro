@@ -52,6 +52,13 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      # Read-only audit: inspect Production settings/schema without changing Worker or D1.
+      - name: Audit existing Production Worker and D1 (read-only)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/cloudflare-readonly-audit.mjs
+
       - name: Publish Cloudflare Worker Preview (non-production)
         id: preview
         env:
