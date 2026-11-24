@@ -66,7 +66,7 @@ jobs:
             echo "Cloudflare deployment credentials are not configured for this repository." >&2
             exit 1
           fi
-          npx wrangler preview --name fital-pro-redesign --message "Fital Pro PR #53 visual redesign" 2>&1 | tee "$RUNNER_TEMP/fitalpro-preview.log"
+          npx wrangler preview --name fital-pro-redesign-groq-ready --message "Fital Pro PR #53 visual redesign" 2>&1 | tee "$RUNNER_TEMP/fitalpro-preview.log"
           preview_url="$(grep -Eo 'https://[a-zA-Z0-9.-]+workers\.dev' "$RUNNER_TEMP/fitalpro-preview.log" | head -n 1 || true)"
           if [ -z "$preview_url" ]; then
             echo "Wrangler completed without returning a workers.dev Preview URL." >&2
