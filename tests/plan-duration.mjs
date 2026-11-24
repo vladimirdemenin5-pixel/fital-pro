@@ -118,7 +118,7 @@ function getWorkflowStepCondition(source, stepName) {
 
 const liveAiCondition = getWorkflowStepCondition(
   pullRequestWorkflow,
-  'Verify real 7-, 14-, and 30-day AI plans without database writes'
+  'Verify the real 30-day Premium AI plan without database writes'
 );
 const livePaymentCondition = getWorkflowStepCondition(
   pullRequestWorkflow,
