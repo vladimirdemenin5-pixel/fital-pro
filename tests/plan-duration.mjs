@@ -608,7 +608,7 @@ assert.ok(workerSource.includes("const groqRequired = env.FITALPRO_REQUIRE_GROQ 
   workerSource.includes("reasoning_effort: 'low'") &&
   workerSource.includes("include_reasoning: false") &&
   workerSource.includes("preferredGroqModel = generated.model.startsWith('groq:')") &&
-  workerSource.includes("...(groqConfigured && !providerState.groqDailyQuotaExhausted ? groqModels : [])") &&
+  workerSource.includes("...(groqConfigured ? groqModels.filter(model => !providerState.groqDailyQuotaExhaustedModels.has(model.slice(5))) : [])") &&
   workerSource.includes("...(!groqRequired && env.AI ? [MODEL, '@cf/openai/gpt-oss-120b', '@cf/openai/gpt-oss-20b', '@cf/zai-org/glm-4.7-flash'] : [])") &&
   workerSource.includes('providerState.groqDailyQuotaExhaustedModels.add(model.slice(5))'),
   'plan generation must use only the approved GPT-OSS Groq models, enforce Groq-only Preview when required, and retain the bounded Cloudflare fallback chain elsewhere');
