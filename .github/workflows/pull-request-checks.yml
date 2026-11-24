@@ -88,11 +88,13 @@ jobs:
           printf '%s' "$page" | node --input-type=module -e 'let s=""; for await (const c of process.stdin) s+=c; if (!s.includes("<html") || !s.includes("Fital")) throw new Error("Preview homepage did not load"); console.log("PASS: redesigned Fital Pro homepage is served")'
           echo "Cloudflare Preview: $FITALPRO_PREVIEW_URL"
 
-      # Live 7/14/30-day AI generation is opt-in; diagnostics never write to D1 or create payments.
-      - name: Verify real 7-, 14-, and 30-day AI plans without database writes
+      # Premium is checked first and alone so shorter-plan diagnostics cannot consume its AI quota.
+      # The endpoint is read-only: it does not write to D1 or create payments.
+      - name: Verify the real 30-day Premium AI plan without database writes
         if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-live-ai-check')
         env:
           FITALPRO_WORKER_URL: ${{ steps.preview.outputs.url }}
+          FITALPRO_AI_PLANS: Premium
         run: node scripts/live-ai-plan-validation.mjs
 
       # Full payment/member-flow diagnostics remain separately gated and require an isolated Preview D1.
