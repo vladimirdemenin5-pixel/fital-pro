@@ -291,10 +291,16 @@ try {
 }
 
 let groqModelFallbackCalls = [];
+let groqStrictSchemaCalls = 0;
 try {
   globalThis.fetch = async (_url, init) => {
     const payload = JSON.parse(init.body);
     groqModelFallbackCalls.push(payload.model);
+    if (payload.response_format?.type === 'json_schema' &&
+        payload.response_format.json_schema?.strict === true &&
+        payload.response_format.json_schema.schema?.required?.includes('week')) {
+      groqStrictSchemaCalls++;
+    }
     if (payload.model === 'openai/gpt-oss-20b') {
       return new Response(JSON.stringify({ error: { message: 'TPM rate limit reached' } }), {
         status: 429,
@@ -319,6 +325,8 @@ try {
     'the rate-limited primary model gets one bounded retry');
   assert.equal(groqModelFallbackCalls.filter(model => model === 'openai/gpt-oss-120b').length, 3,
     'after GPT-OSS 120B succeeds, all remaining plan blocks must continue using it');
+  assert.equal(groqStrictSchemaCalls, 3,
+    'every Groq block must use strict JSON Schema output for the exact required plan structure');
 } finally {
   globalThis.fetch = originalGroqRequiredFetch;
 }
