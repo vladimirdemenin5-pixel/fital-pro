@@ -1215,6 +1215,15 @@ function generateCatalogFallbackPlan(profile, planKey, targets, cause) {
 }
 
 async function generateAiPlan(profile, planKey, env) {
+  // Keep older saved profiles and internal callers compatible with the new optional diet fields.
+  profile = {
+    ...profile,
+    activity: ({ low: 'minimal', medium: 'medium', high: 'high' })[profile?.activity] || profile?.activity || 'medium',
+    diet: NUTRITION_CONFIG.diets.includes(profile?.diet) ? profile.diet : 'classic',
+    exclusions: Array.isArray(profile?.exclusions)
+      ? [...new Set(profile.exclusions.filter(value => NUTRITION_CONFIG.exclusions.includes(value)))]
+      : []
+  };
   const targets = nutritionTargets(profile);
   const includesTraining = planKey !== 'Питание';
   const totalDays = PLANS[planKey].menuDays;
