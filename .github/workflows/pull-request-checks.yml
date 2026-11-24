@@ -1,6 +1,9 @@
 name: Fital Pro pull request checks
 
 on:
+  push:
+    branches:
+      - design/tilda-inspired-bold-redesign
   pull_request:
     branches:
       - main
@@ -31,7 +34,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    if: github.event.pull_request.number == 53 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'design/tilda-inspired-bold-redesign'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/design/tilda-inspired-bold-redesign') || (github.event_name == 'pull_request' && github.event.pull_request.number == 53 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'design/tilda-inspired-bold-redesign')
     needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -91,7 +94,7 @@ jobs:
 
       # Live AI integration is opt-in only; never spend AI quota on routine PR checks.
       - name: Verify real AI, Robokassa signatures, D1 persistence, and member access for all tariffs
-        if: contains(github.event.pull_request.labels.*.name, 'run-live-ai-check')
+        if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-live-ai-check')
         env:
           FITALPRO_WORKER_URL: ${{ steps.preview.outputs.url }}
         run: node scripts/live-ai-plans.mjs
