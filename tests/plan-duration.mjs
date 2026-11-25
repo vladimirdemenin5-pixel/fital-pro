@@ -72,6 +72,11 @@ assert.equal(healthWithoutGroqBody.groq, false, 'health must report when the Pre
 assert.equal(healthWithoutGroqBody.db, true, 'D1 schema readiness must be independent of Groq configuration');
 const healthWithBrokenD1 = await worker.fetch(new Request('https://fitalpro.test/health'), { AI: {}, DB: makeHealthDb('payments') });
 assert.equal((await healthWithBrokenD1.json()).db, false, 'health must fail closed when a required D1 table is missing');
+assert.ok(htmlSource.includes('Если ИИ временно недоступен или не может сформировать полный проверенный план, заказ и оплата не создаются') &&
+  htmlSource.includes('Если все генеративные модели недоступны или не формируют полный проверенный план, заказ и оплата не создаются') &&
+  !htmlSource.includes('иначе план рассчитывается сервером по справочнику продуктов') &&
+  !htmlSource.includes('При недоступности генеративных моделей план рассчитывается по серверному справочнику продуктов и формулам Fital Pro'),
+  'the public questionnaire must not promise a catalog fallback when checkout correctly fails closed without a complete AI plan');
 const appSource = await readFile(new URL('../public/app.js', import.meta.url), 'utf8');
 const htmlSource = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
 const productionWorkflow = await readFile(new URL('../.github/workflows/main.yml', import.meta.url), 'utf8');
