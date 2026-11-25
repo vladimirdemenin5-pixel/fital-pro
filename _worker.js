@@ -1330,12 +1330,12 @@ async function ensurePendingOrdersSchema(env) {
 }
 
 async function checkout(request, env, forceTestMode = false) {
+  if (!env.DB) return json({ error: 'База данных пока не подключена. Оплата не создавалась.' }, 503);
   await ensurePendingOrdersSchema(env);
   const testMode = forceTestMode || env.ROBOKASSA_IS_TEST === '1';
   if (!(await rateLimit(request, env, testMode ? 'checkout-test' : 'checkout', 5, 3600000))) {
     return json({ error: 'Слишком много попыток. Попробуйте позже.' }, 429);
   }
-  if (!env.DB) return json({ error: 'База данных пока не подключена. Оплата не создавалась.' }, 503);
   const password1 = robokassaPassword(env, 1, testMode);
   if (!env.ROBOKASSA_MERCHANT_LOGIN || !password1 || !robokassaPassword(env, 2, testMode)) {
     return json({ error: 'Приём оплаты ещё не активирован: не настроены секреты Robokassa.' }, 503);
