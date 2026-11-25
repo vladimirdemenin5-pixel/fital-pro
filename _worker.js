@@ -1584,35 +1584,34 @@ async function robokassaWebhook(request, env) {
   }
 
   const paymentId = 'robokassa-' + (testMode ? 'test-' : '') + invId;
-  await env.DB.prepare(
-    'INSERT INTO payments (id,status,plan,amount,currency,created_at) VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,plan=excluded.plan,amount=excluded.amount,currency=excluded.currency'
-  ).bind(paymentId, 'succeeded', order.plan, order.amount, 'RUB', new Date().toISOString()).run();
+  const accessToken = crypto.randomUUID().replaceAll('-', '');
+  const duration = PLANS[order.plan]?.days || 7;
+  const now = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + duration * 24 * 60 * 60 * 1000).toISOString();
 
-  const existing = await env.DB.prepare(
-    'SELECT access_token FROM subscriptions WHERE payment_id=?'
-  ).bind(paymentId).first();
-
-  let accessToken = existing?.access_token;
-  if (!accessToken) {
-    accessToken = crypto.randomUUID().replaceAll('-', '');
-    const duration = PLANS[order.plan]?.days || 7;
-    const now = new Date().toISOString();
-    const expiresAt = new Date(Date.now() + duration * 24 * 60 * 60 * 1000).toISOString();
-    await env.DB.prepare(
+  // Commit payment, subscription, profile, full plan and paid status together.
+  // D1 batch is transactional: any failed statement rolls the whole activation
+  // back, leaving the order retryable and never exposing a partial cabinet.
+  await env.DB.batch([
+    env.DB.prepare(
+      'INSERT INTO payments (id,status,plan,amount,currency,created_at) VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,plan=excluded.plan,amount=excluded.amount,currency=excluded.currency'
+    ).bind(paymentId, 'succeeded', order.plan, order.amount, 'RUB', now),
+    env.DB.prepare(
       'INSERT INTO subscriptions (id,payment_id,client_ref,plan,status,access_token,customer_contact,created_at,updated_at,expires_at) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(payment_id) DO NOTHING'
-    ).bind(crypto.randomUUID(), paymentId, order.client_ref, order.plan, 'active', accessToken, order.customer_contact, now, now, expiresAt).run();
-    const activated = await env.DB.prepare(
-      'SELECT access_token FROM subscriptions WHERE payment_id=?'
-    ).bind(paymentId).first();
-    accessToken = activated?.access_token || accessToken;
-  }
-
-  const profile = JSON.parse(order.profile_json);
-  const plan = JSON.parse(order.plan_json);
-  await saveMemberPlan(env, accessToken, profile, plan);
-  await env.DB.prepare(
-    "UPDATE pending_orders SET status='paid',updated_at=? WHERE inv_id=?"
-  ).bind(new Date().toISOString(), invId).run();
+    ).bind(crypto.randomUUID(), paymentId, order.client_ref, order.plan, 'active', accessToken, order.customer_contact, now, now, expiresAt),
+    env.DB.prepare(
+      'INSERT INTO profiles (access_token,profile_json,updated_at) SELECT access_token,?,? FROM subscriptions WHERE payment_id=? AND 1=1 ON CONFLICT(access_token) DO UPDATE SET profile_json=excluded.profile_json,updated_at=excluded.updated_at'
+    ).bind(order.profile_json, now, paymentId),
+    env.DB.prepare(
+      'UPDATE weekly_plans SET plan_json=?,updated_at=? WHERE access_token=(SELECT access_token FROM subscriptions WHERE payment_id=?)'
+    ).bind(order.plan_json, now, paymentId),
+    env.DB.prepare(
+      'INSERT INTO weekly_plans (id,access_token,plan_json,created_at,updated_at) SELECT s.access_token,s.access_token,?,?,? FROM subscriptions s WHERE s.payment_id=? AND NOT EXISTS (SELECT 1 FROM weekly_plans w WHERE w.access_token=s.access_token)'
+    ).bind(order.plan_json, now, now, paymentId),
+    env.DB.prepare(
+      "UPDATE pending_orders SET status='paid',updated_at=? WHERE inv_id=? AND EXISTS (SELECT 1 FROM payments p WHERE p.id=? AND p.status='succeeded') AND EXISTS (SELECT 1 FROM subscriptions s WHERE s.payment_id=?) AND EXISTS (SELECT 1 FROM profiles p JOIN subscriptions s ON s.access_token=p.access_token WHERE s.payment_id=?) AND EXISTS (SELECT 1 FROM weekly_plans w JOIN subscriptions s ON s.access_token=w.access_token WHERE s.payment_id=?)"
+    ).bind(now, invId, paymentId, paymentId, paymentId, paymentId)
+  ]);
 
   return plain('OK' + invId);
 }
