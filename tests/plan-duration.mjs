@@ -1112,7 +1112,7 @@ const flowDiagnosticDenied = await aiDataFlowDiagnostic(new Request('https://fit
 });
 assert.equal(flowDiagnosticDenied.status, 404, 'D1 and cabinet integration diagnostic must reject an incorrect test key');
 assert.ok(workerSource.includes("url.pathname === '/api/ai-data-flow-diagnostic'"), 'protected D1 and cabinet diagnostic route must be registered');
-assert.ok(workerSource.includes('await saveMemberPlan(env, accessToken, profile, plan)'), 'integration diagnostic must save the generated plan and profile to D1');
+assert.ok(workerSource.includes('Commit payment, subscription, profile, full plan and paid status together.'), 'integration diagnostic must persist the generated plan and profile in the atomic payment activation');
 assert.ok(workerSource.includes('verifyGitHubActionsOidc(request, env, diagnosticMode)'), 'live diagnostic must authenticate GitHub Actions using production or restricted Preview OIDC');
 assert.ok(workerSource.includes("claims.aud !== 'fitalpro-ai-data-flow'"), 'OIDC authorization must restrict the token audience');
 assert.ok(workerSource.includes("claims.ref === 'refs/heads/main'") &&
