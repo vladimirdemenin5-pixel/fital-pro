@@ -97,6 +97,15 @@ jobs:
           FITALPRO_AI_PLANS: Питание,PRO
         run: node scripts/live-ai-plan-validation.mjs
 
+      # Premium is a separate, explicit opt-in because 30-day generation consumes more provider quota.
+      # This read-only diagnostic validates all 30 real AI days without D1 writes or payment creation.
+      - name: Verify the real 30-day Premium AI plan without database writes
+        if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-live-premium-ai-check')
+        env:
+          FITALPRO_WORKER_URL: ${{ steps.preview.outputs.url }}
+          FITALPRO_AI_PLANS: Premium
+        run: node scripts/live-ai-plan-validation.mjs
+
       # Full payment/member-flow diagnostics remain separately gated and require an isolated Preview D1.
       - name: Verify Robokassa, D1 persistence, and member access for all tariffs
         if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-live-payment-flow')
