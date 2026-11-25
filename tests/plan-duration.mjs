@@ -118,7 +118,7 @@ function getWorkflowStepCondition(source, stepName) {
 
 const liveAiCondition = getWorkflowStepCondition(
   pullRequestWorkflow,
-  'Verify the real 30-day Premium AI plan without database writes'
+  'Verify the real 7-day and 14-day AI plans without database writes'
 );
 const livePaymentCondition = getWorkflowStepCondition(
   pullRequestWorkflow,
@@ -791,6 +791,19 @@ for(const [label,plan] of [['under-portioned',severelyUnderPortionedPlan],['over
 assert.equal(correctedPortionPlan.week.length,14);
 assert.ok(correctedPortionPlan.week.every(day=>nutritionWithinTargetsForTest(day.nutrition,{calories:correctedPortionPlan.calories})));
 
+
+// The production validator must reject a meal with only one ingredient even if its calories fit.
+await assert.rejects(
+  () => generateAiPlan(profile, 'Питание', { AI: { async run(model, input) {
+    const response = await makeAi(7).run(model, input);
+    const parsed = JSON.parse(response.response);
+    parsed.week[0].breakfastIngredients = [parsed.week[0].breakfastIngredients[0]];
+    return { response: JSON.stringify(parsed) };
+  } } }),
+  /временно не смог подготовить полный персональный план/i,
+  'a meal with one ingredient must be rejected by server-side validation'
+);
+
 for(const [label,createPlan] of [
  ['missing recipe',()=>generateAiPlan(profile,'Питание',{AI:{async run(model,input){const response=await makeAi(7).run(model,input),parsed=JSON.parse(response.response);parsed.week[0].breakfastRecipe='';return {response:JSON.stringify(parsed)};}}})],
  ['wrong 14-day length',()=>generateAiPlan(profile,'PRO',{AI:makeAi(14,true)})],
@@ -989,7 +1002,7 @@ assert.equal(diagnosticResponse.status, 200, 'authorized diagnostic must generat
 const diagnosticData = await diagnosticResponse.json();
 assert.equal(diagnosticData.ok, true);
 assert.equal(diagnosticData.days.length, 7);
-assert.ok(diagnosticData.days[0].meals.breakfast.ingredients.length > 0);
+assert.ok(diagnosticData.days[0].meals.breakfast.ingredients.length >= 2);
 assert.ok(diagnosticData.days[0].meals.breakfast.recipe.length >= 15, 'diagnostic must expose practical cooking instructions');
 assert.ok(diagnosticData.days[0].calculatedNutrition.calories > 0);
 assert.ok(diagnosticData.days[0].calculatedNutrition.protein > 0);
@@ -1027,7 +1040,7 @@ assert.ok(proDiagnosticData.days.every(day => typeof day.workout === 'string' &&
 assert.ok(proDiagnosticData.days.every(day =>
   Object.keys(day.meals || {}).length === 4 &&
   Object.values(day.meals).every(meal =>
-    meal.title && meal.recipe.length >= 15 && Array.isArray(meal.ingredients) && meal.ingredients.length > 0
+    meal.title && meal.recipe.length >= 15 && Array.isArray(meal.ingredients) && meal.ingredients.length >= 2
   ) &&
   day.calculatedNutrition.calories >= proDiagnosticData.targets.calories * 0.90 &&
   day.calculatedNutrition.calories <= proDiagnosticData.targets.calories * 1.10
