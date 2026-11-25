@@ -96,8 +96,8 @@ const profile = {
 };
 
 const plans = [
-  { key: 'PRO', days: 14 },
-  { key: 'Premium', days: 30 }
+  { key: 'Питание', days: 7 },
+  { key: 'PRO', days: 14 }
 ];
 
 for (const item of plans) {
@@ -184,4 +184,4 @@ for (const item of plans) {
   }));
 }
 
-console.log('PASS: real Cloudflare Workers AI generated and server-validated both 14-day and 30-day plans in an isolated remote preview. No checkout or D1 writes were performed.');
+console.log('PASS: real Cloudflare Workers AI generated and server-validated both 7-day and 14-day plans in an isolated remote preview. No checkout or D1 writes were performed.');
