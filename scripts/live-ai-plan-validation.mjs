@@ -133,7 +133,9 @@ for (const item of plans) {
 
   for (const [index, day] of result.days.entries()) {
     const meals = Object.values(day.meals || {});
-    const expectedTrainingDay = Math.floor(((index % 7) + 1) * profile.days / 7) >
+    const includesTraining = item.key !== 'Питание';
+    const expectedTrainingDay = includesTraining &&
+      Math.floor(((index % 7) + 1) * profile.days / 7) >
       Math.floor((index % 7) * profile.days / 7);
     if (
       day.day !== 'День ' + (index + 1) ||
@@ -166,7 +168,7 @@ for (const item of plans) {
   }
 
   const trainingDays = result.days.filter(day => day.trainingDay).length;
-  const expectedTrainingDays = result.days.reduce((count, day, index) => count + (
+  const expectedTrainingDays = item.key === 'Питание' ? 0 : result.days.reduce((count, day, index) => count + (
     Math.floor(((index % 7) + 1) * profile.days / 7) > Math.floor((index % 7) * profile.days / 7) ? 1 : 0
   ), 0);
   if (trainingDays !== expectedTrainingDays) {
