@@ -17,6 +17,7 @@ class MockD1 {
     this.profiles = new Map();
     this.plans = new Map();
     this.failNextBatch = false;
+    this.failBatchAt = null;
     this.batchCalls = 0;
     this.nextInvId = 100;
   }
@@ -110,7 +111,12 @@ class MockD1 {
     const profiles = new Map(this.profiles);
     const plans = new Map(this.plans);
     const orders = new Map([...this.orders].map(([id, row]) => [id, { ...row }]));
-    for (const statement of statements) {
+    for (let index = 0; index < statements.length; index++) {
+      if (this.failBatchAt === index) {
+        this.failBatchAt = null;
+        throw new Error('simulated D1 mid-batch failure');
+      }
+      const statement = statements[index];
       const sql = statement.sql;
       const args = statement.args;
       if (sql.startsWith('INSERT INTO payments')) {
@@ -262,8 +268,12 @@ assert.equal(env.DB.subscriptions.size, beforeSubs);
 // or release access. Retrying the same notification must finish activation.
 const retryEnv = { ...env, DB: new MockD1() };
 retryEnv.DB.orders.set(42, { ...order });
-retryEnv.DB.failNextBatch = true;
-await assert.rejects(() => robokassaWebhook(callback(), retryEnv), /simulated D1 batch failure/);
+retryEnv.DB.failBatchAt = 2;
+await assert.rejects(() => robokassaWebhook(callback(), retryEnv), /simulated D1 mid-batch failure/);
+assert.equal(retryEnv.DB.payments.size, 0, 'mid-batch failure must roll back the payment record');
+assert.equal(retryEnv.DB.subscriptions.size, 0, 'mid-batch failure must roll back the subscription');
+assert.equal(retryEnv.DB.profiles.size, 0, 'mid-batch failure must not leave a partial profile');
+assert.equal(retryEnv.DB.plans.size, 0, 'mid-batch failure must not leave a partial plan');
 assert.equal(retryEnv.DB.orders.get(42).status, 'pending');
 let retryResponse = await paymentStatus(new Request(
   'https://fitalpro.test/api/payment-status?ref=' + order.client_ref,
