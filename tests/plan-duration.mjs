@@ -3,6 +3,15 @@ import worker, { generateAiPlan, runAiTextWithFallback, runAiInferenceWithTimeou
 import { readFile } from 'node:fs/promises';
 
 const workerSource = await readFile(new URL('../_worker.js', import.meta.url), 'utf8');
+for (const example of [
+  '"breakfastIngredients":[{"foodId":"oats_dry","grams":60},{"foodId":"banana","grams":50}]',
+  '"lunchIngredients":[{"foodId":"chicken_raw","grams":120},{"foodId":"rice_dry","grams":50}]',
+  '"snackIngredients":[{"foodId":"greek_yogurt","grams":150},{"foodId":"blueberries","grams":50}]',
+  '"dinnerIngredients":[{"foodId":"salmon_raw","grams":120},{"foodId":"broccoli","grams":100}]'
+]) {
+  assert.ok(workerSource.includes(example),
+    'the AI prompt example must show at least two real catalog ingredients in every meal');
+}
 const wranglerSource = await readFile(new URL('../wrangler.jsonc', import.meta.url), 'utf8');
 assert.ok(!wranglerSource.includes('"FITALPRO_REQUIRE_GROQ": "1"'),
   'Preview must use the same provider fallback chain as Production when Groq quota is exhausted');
