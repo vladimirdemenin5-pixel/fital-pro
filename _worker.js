@@ -2347,12 +2347,14 @@ const REQUIRED_D1_HEALTH_SCHEMA = Object.freeze({
 async function d1SchemaIsReady(db) {
   if (!db || typeof db.prepare !== 'function') return false;
   try {
-    const checks = await Promise.all(Object.entries(REQUIRED_D1_HEALTH_SCHEMA).map(async ([table, requiredColumns]) => {
+    // D1 allows at most six simultaneous connections per Worker invocation.
+    // Check schema tables sequentially so /health cannot exceed that limit.
+    for (const [table, requiredColumns] of Object.entries(REQUIRED_D1_HEALTH_SCHEMA)) {
       const result = await db.prepare('PRAGMA table_info(' + table + ')').all();
       const actualColumns = new Set((result?.results || []).map(column => column.name));
-      return requiredColumns.every(column => actualColumns.has(column));
-    }));
-    return checks.every(Boolean);
+      if (!requiredColumns.every(column => actualColumns.has(column))) return false;
+    }
+    return true;
   } catch (error) {
     console.error('Fital Pro D1 schema health check failed:', error?.message || 'unknown error');
     return false;
