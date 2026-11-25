@@ -38,10 +38,12 @@ const clean = (value, max = 500) => String(value ?? '').trim().slice(0, max);
 const md5 = (value) => createHash('md5').update(String(value), 'utf8').digest('hex').toUpperCase();
 
 function setRobokassaReceiptParameter(params, receiptJson) {
-  // URLSearchParams performs the single transport encoding required by Robokassa.
-  // The signature uses the separately URL-encoded JSON value.
-  params.set('Receipt', receiptJson);
-  return encodeURIComponent(receiptJson);
+  // Robokassa expects the URL-encoded JSON as the Receipt value. URLSearchParams
+  // then encodes the percent signs for transport; the signature uses this same
+  // URL-encoded value before transport encoding.
+  const encodedReceipt = encodeURIComponent(receiptJson);
+  params.set('Receipt', encodedReceipt);
+  return encodedReceipt;
 }
 
 function buildRobokassaPaymentSignature({ merchant, outSum, invId, receipt = '', successUrl2, failUrl2, password1, clientRef }) {
