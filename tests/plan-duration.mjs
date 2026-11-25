@@ -137,6 +137,14 @@ const livePaymentCondition = getWorkflowStepCondition(
   pullRequestWorkflow,
   'Verify Robokassa, D1 persistence, and member access for all tariffs'
 );
+const livePremiumAiCondition = getWorkflowStepCondition(
+  pullRequestWorkflow,
+  'Verify the real 30-day Premium AI plan without database writes'
+);
+assert.ok(livePremiumAiCondition.includes("github.event_name == 'pull_request'") &&
+  livePremiumAiCondition.includes("contains(github.event.pull_request.labels.*.name, 'run-live-premium-ai-check')") &&
+  pullRequestWorkflow.includes('FITALPRO_AI_PLANS: Premium'),
+  '30-day Premium live generation must be an explicit separate opt-in and must validate Premium only');
 assert.ok(pullRequestWorkflow.includes('types: [opened, synchronize, reopened, labeled]') &&
   liveAiCondition.includes("github.event_name == 'pull_request'") &&
   liveAiCondition.includes("contains(github.event.pull_request.labels.*.name, 'run-live-ai-check')") &&
