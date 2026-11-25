@@ -103,8 +103,13 @@ if (requestedPlanKeys.length && plans.length !== requestedPlanKeys.length) {
 }
 if (!plans.length) throw new Error('FITALPRO_AI_PLANS must select at least one plan.');
 
+const results = [];
+const failures = [];
+
 for (const item of plans) {
-  const token = await getOidcToken();
+  const started = Date.now();
+  try {
+    const token = await getOidcToken();
   const response = await postJson(
     endpoint + '/api/ai-diagnostic',
     { plan: item.key, profile },
@@ -171,8 +176,9 @@ for (const item of plans) {
       typeof result.nutritionSource !== 'string' || !result.nutritionSource.includes('USDA FoodData Central')) {
     throw new Error(item.key + ': shopping list or nutrition reference is missing.');
   }
-  console.log(JSON.stringify({
-    plan: item.key,
+    const summary = {
+      status: 'PASS',
+      plan: item.key,
     generationMode: result.generationMode,
     aiProviders: result.aiProviders,
     days: result.days.length,
@@ -182,7 +188,25 @@ for (const item of plans) {
     shoppingItems: Array.isArray(result.shopping) ? result.shopping.length : 0,
     dailyAverage: result.dailyAverage,
     persistence: 'not performed',
-    payment: 'not created'
-  }));
+      payment: 'not created',
+      durationSeconds: Math.round((Date.now() - started) / 1000)
+    };
+    results.push(summary);
+    console.log(JSON.stringify(summary));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const failure = { status: 'FAIL', plan: item.key, error: message, durationSeconds: Math.round((Date.now() - started) / 1000) };
+    failures.push(failure);
+    console.error(JSON.stringify(failure));
+  }
 }
-console.log('PASS: real AI generated and validated the complete 7-, 14-, and 30-day plans without writing to D1 or creating payments.');
+console.log(JSON.stringify({
+  status: failures.length ? 'FAIL' : 'PASS',
+  results,
+  failures,
+  summary: `Independent AI plan validation: ${results.length} PASS, ${failures.length} FAIL.`
+}));
+if (failures.length) {
+  throw new Error('One or more selected AI plans failed validation: ' + failures.map(item => item.plan).join(', ') + '. Each selected tariff was evaluated independently.');
+}
+console.log('PASS: all selected real AI plans were independently generated and validated without writing to D1 or creating payments.');
