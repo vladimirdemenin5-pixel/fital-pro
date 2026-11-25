@@ -77,6 +77,9 @@ const htmlSource = await readFile(new URL('../public/index.html', import.meta.ur
 const productionWorkflow = await readFile(new URL('../.github/workflows/main.yml', import.meta.url), 'utf8');
 const pullRequestWorkflow = await readFile(new URL('../.github/workflows/pull-request-checks.yml', import.meta.url), 'utf8');
 const liveIntegrationSource = await readFile(new URL('../scripts/live-ai-plan-validation.mjs', import.meta.url), 'utf8');
+assert.ok(liveIntegrationSource.includes("[0-9]+\\s*(?:[×xх]\\s*[0-9]+|подход(?:а|ов)?|повтор(?:а|ений)?)") &&
+  !liveIntegrationSource.includes("[0-9]+[ \\t]*"),
+  'live workout validation must accept line breaks between set counts and repetitions just like the server validator');
 assert.ok(liveIntegrationSource.includes("const includesTraining = item.key !== 'Питание'") &&
   liveIntegrationSource.includes("const expectedTrainingDays = item.key === 'Питание' ? 0") &&
   liveIntegrationSource.includes('const expectedTrainingDay = includesTraining &&'),
