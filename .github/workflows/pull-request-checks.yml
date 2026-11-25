@@ -83,7 +83,7 @@ jobs:
         run: |
           set -euo pipefail
           health="$(curl --fail --silent --show-error --retry 8 --retry-delay 3 --retry-all-errors --max-time 20 "$FITALPRO_PREVIEW_URL/health")"
-          printf '%s' "$health" | node --input-type=module -e 'let s=""; for await (const c of process.stdin) s+=c; const d=JSON.parse(s); if (d.ok!==true || d.ai!==true || d.db!==true) throw new Error("Preview health check failed: Worker, AI, or D1 binding is missing"); console.log("PASS: Preview Worker, AI, and D1 are available; Groq secret configured:", d.groq===true)'
+          printf '%s' "$health" | node --input-type=module -e 'let s=""; for await (const c of process.stdin) s+=c; const d=JSON.parse(s); if (d.ok!==true || d.ai!==true) throw new Error("Preview health check failed: Worker or AI binding is missing"); if (d.db!==true) console.log("NOTICE: Preview D1 is intentionally unbound to protect Production; database and payment flows are not tested in Preview."); console.log("PASS: Preview Worker and AI are available; isolated Preview D1:", d.db===true, "Groq secret configured:", d.groq===true)'
           page="$(curl --fail --silent --show-error --retry 5 --retry-delay 2 --retry-all-errors --max-time 20 "$FITALPRO_PREVIEW_URL/")"
           printf '%s' "$page" | node --input-type=module -e 'let s=""; for await (const c of process.stdin) s+=c; if (!s.includes("<html") || !s.includes("Fital")) throw new Error("Preview homepage did not load"); console.log("PASS: redesigned Fital Pro homepage is served")'
           echo "Cloudflare Preview: $FITALPRO_PREVIEW_URL"
