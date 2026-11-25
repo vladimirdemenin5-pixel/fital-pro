@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {
+  setRobokassaReceiptParameter,
   buildRobokassaPaymentSignature,
   robokassaResultSignature,
   verifyRobokassaResultSignature
@@ -42,7 +43,15 @@ const receiptJson = JSON.stringify({
     tax: 'none'
   }]
 });
-const receiptInput = { ...paymentInput, receipt: encodeURIComponent(receiptJson) };
+const receiptParams = new URLSearchParams();
+const receiptForSignature = setRobokassaReceiptParameter(receiptParams, receiptJson);
+assert.equal(receiptParams.get('Receipt'), receiptJson,
+  'Robokassa Receipt query parameter must decode to raw JSON, not a percent-encoded string');
+assert.equal(new URLSearchParams(receiptParams.toString()).get('Receipt'), receiptJson,
+  'Robokassa Receipt must be encoded exactly once in the final query string');
+assert.equal(receiptForSignature, encodeURIComponent(receiptJson),
+  'Robokassa payment signature must use the URL-encoded Receipt value');
+const receiptInput = { ...paymentInput, receipt: receiptForSignature };
 const receiptBase = [
   receiptInput.merchant,
   receiptInput.outSum,
