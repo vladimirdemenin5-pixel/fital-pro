@@ -163,7 +163,7 @@ if (failures) {
   console.error('Production read-only audit found ' + failures + ' confirmed configuration/schema mismatch(es).');
   process.exitCode = 1;
 } else if (!database || !schemaResult) {
-  console.warn('AUDIT PARTIAL: no confirmed mismatch was found in readable settings, but D1 metadata/schema and/or custom-domain health could not be verified. Do not treat this as a complete Production audit.');
+  console.warn('AUDIT PARTIAL: no confirmed mismatch was found in readable settings, but D1 metadata/schema could not be verified. Do not treat this as a complete Production audit.');
 } else {
   console.log('PASS: Production read-only audit completed; Worker settings, D1 metadata/schema, and custom-domain health were verified.');
 }
