@@ -665,10 +665,9 @@ assert.equal(premiumPlan.durationDays, 30);
 assert.equal(premiumPlan.week[0].day, 'День 1');
 assert.equal(premiumPlan.week[29].day, 'День 30');
 assert.ok(premiumPlan.week.every(day =>
-  Object.keys(day.meals || {}).length === 4 &&
-  Object.values(day.meals).every(meal =>
-    meal.title && meal.recipe.length >= 15 &&
-    Array.isArray(meal.ingredients) && meal.ingredients.length >= 2
+  ['breakfast', 'lunch', 'snack', 'dinner'].every(key =>
+    day[key] && day[key + 'Recipe'].length >= 15 &&
+    Array.isArray(day[key + 'Ingredients']) && day[key + 'Ingredients'].length >= 2
   ) &&
   Number.isFinite(day.nutrition?.calories) &&
   day.nutrition.calories >= premiumPlan.calories * 0.90 &&
