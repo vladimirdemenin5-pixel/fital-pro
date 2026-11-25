@@ -45,10 +45,12 @@ const receiptJson = JSON.stringify({
 });
 const receiptParams = new URLSearchParams();
 const receiptForSignature = setRobokassaReceiptParameter(receiptParams, receiptJson);
-assert.equal(receiptParams.get('Receipt'), receiptJson,
-  'Robokassa Receipt query parameter must decode to raw JSON, not a percent-encoded string');
-assert.equal(new URLSearchParams(receiptParams.toString()).get('Receipt'), receiptJson,
-  'Robokassa Receipt must be encoded exactly once in the final query string');
+assert.equal(receiptParams.get('Receipt'), encodeURIComponent(receiptJson),
+  'Robokassa Receipt value must be URL-encoded JSON before transport encoding');
+assert.equal(new URLSearchParams(receiptParams.toString()).get('Receipt'), encodeURIComponent(receiptJson),
+  'Robokassa must receive the URL-encoded Receipt value after one transport decode');
+assert.equal(decodeURIComponent(new URLSearchParams(receiptParams.toString()).get('Receipt')), receiptJson,
+  'the transported Receipt value must decode back to the exact fiscal JSON');
 assert.equal(receiptForSignature, encodeURIComponent(receiptJson),
   'Robokassa payment signature must use the URL-encoded Receipt value');
 const receiptInput = { ...paymentInput, receipt: receiptForSignature };
