@@ -68,6 +68,10 @@ const htmlSource = await readFile(new URL('../public/index.html', import.meta.ur
 const productionWorkflow = await readFile(new URL('../.github/workflows/main.yml', import.meta.url), 'utf8');
 const pullRequestWorkflow = await readFile(new URL('../.github/workflows/pull-request-checks.yml', import.meta.url), 'utf8');
 const liveIntegrationSource = await readFile(new URL('../scripts/live-ai-plan-validation.mjs', import.meta.url), 'utf8');
+assert.ok(liveIntegrationSource.includes("const includesTraining = item.key !== 'Питание'") &&
+  liveIntegrationSource.includes("const expectedTrainingDays = item.key === 'Питание' ? 0") &&
+  liveIntegrationSource.includes('const expectedTrainingDay = includesTraining &&'),
+  'the 7-day nutrition tariff must not be validated against the PRO workout schedule');
 assert.ok(pullRequestWorkflow.includes('--name fital-pro-redesign-groq-ready') &&
   liveIntegrationSource.includes("hostname.startsWith('fital-pro-redesign-groq-ready-red-waterfall-2af8.')"),
   'the full Preview integration script must accept the exact Worker Preview name published by the PR workflow');
