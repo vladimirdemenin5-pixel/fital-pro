@@ -664,6 +664,22 @@ assert.equal(premiumPlan.menuDays, 30);
 assert.equal(premiumPlan.durationDays, 30);
 assert.equal(premiumPlan.week[0].day, 'День 1');
 assert.equal(premiumPlan.week[29].day, 'День 30');
+assert.ok(premiumPlan.week.every(day =>
+  Object.keys(day.meals || {}).length === 4 &&
+  Object.values(day.meals).every(meal =>
+    meal.title && meal.recipe.length >= 15 &&
+    Array.isArray(meal.ingredients) && meal.ingredients.length >= 2
+  ) &&
+  Number.isFinite(day.nutrition?.calories) &&
+  day.nutrition.calories >= premiumPlan.calories * 0.90 &&
+  day.nutrition.calories <= premiumPlan.calories * 1.10 &&
+  ['protein', 'fat', 'carbs'].every(key =>
+    Number.isFinite(day.nutrition[key]) && day.nutrition[key] >= 0
+  )
+), 'all 30 Premium days must independently contain four complete meals and pass daily calorie and finite macro validation');
+assert.deepEqual(premiumPlan.week.map(day => day.day),
+  Array.from({ length: 30 }, (_, index) => 'День ' + (index + 1)),
+  'Premium must not skip or duplicate any day across its ten three-day generation blocks');
 const premiumTrainingCounts = Array.from({ length: 5 }, (_, index) =>
   premiumPlan.week.slice(index * 7, Math.min((index + 1) * 7, 30)).filter(day => day.trainingDay).length
 );
