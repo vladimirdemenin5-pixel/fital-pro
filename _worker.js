@@ -608,7 +608,7 @@ function normalizeAndValidatePlanWeek(parsed, profile, planKey, menuDays, target
           ? 'Восстановление: спокойная ходьба 20–30 минут и лёгкая растяжка без силовой нагрузки.'
           : 'Лёгкая общая активность: спокойная ходьба и восстановление без силовой тренировки.')
     };
-    if (MEAL_KEYS.some(key => !day[key] || !day[key + 'Ingredients'] || day[key + 'Recipe'].length < 15)) return null;
+    if (MEAL_KEYS.some(key => !day[key] || !day[key + 'Ingredients'] || day[key + 'Ingredients'].length < 2 || day[key + 'Ingredients'].length > 6 || day[key + 'Recipe'].length < 15)) return null;
     if (MEAL_KEYS.some(key => day[key + 'Ingredients'].some(item => !foodAllowedByPreferences(item.foodId, profile)))) return null;
     if (MEAL_KEYS.some(key => !mealTextAllowedByPreferences(day[key], profile) || !mealTextAllowedByPreferences(day[key + 'Recipe'], profile))) return null;
     if (!day.workout || (includesTraining && day.trainingDay && !hasWorkoutPrescription(day.workout))) return null;
