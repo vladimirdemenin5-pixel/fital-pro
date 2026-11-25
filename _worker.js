@@ -37,6 +37,13 @@ const plain = (value, status = 200) => new Response(value, {
 const clean = (value, max = 500) => String(value ?? '').trim().slice(0, max);
 const md5 = (value) => createHash('md5').update(String(value), 'utf8').digest('hex').toUpperCase();
 
+function setRobokassaReceiptParameter(params, receiptJson) {
+  // URLSearchParams performs the single transport encoding required by Robokassa.
+  // The signature uses the separately URL-encoded JSON value.
+  params.set('Receipt', receiptJson);
+  return encodeURIComponent(receiptJson);
+}
+
 function buildRobokassaPaymentSignature({ merchant, outSum, invId, receipt = '', successUrl2, failUrl2, password1, clientRef }) {
   // Robokassa signs URL-encoded Receipt before the optional StepByStep and ResultUrl2 slots.
   const base = [
@@ -1402,8 +1409,7 @@ async function checkout(request, env, forceTestMode = false) {
     }]
   };
   const receiptJson = JSON.stringify(receipt);
-  const receiptForSignature = encodeURIComponent(receiptJson);
-  params.set('Receipt', receiptForSignature);
+  const receiptForSignature = setRobokassaReceiptParameter(params, receiptJson);
   params.set('Culture', 'ru');
   params.set('Encoding', 'utf-8');
   const returnBase = new URL(testMode ? '/robokassa-test.html' : '/', request.url);
@@ -2396,4 +2402,4 @@ export default {
   }
 };
 
-export { buildRobokassaPaymentSignature, robokassaResultSignature, verifyRobokassaResultSignature, robokassaWebhook, paymentStatus, testCheckout, aiPlanDiagnostic, aiDataFlowDiagnostic, generateAiPlan, generateCatalogFallbackPlan, buildLocalPlanChatReply, buildLocalPremiumDiaryReview, runAiTextWithFallback, runAiInferenceWithTimeout, runGroqInferenceWithTimeout, FOOD_CATALOG, buildPlanResponseSchema, diagnosePlanWeekFailure, rebalanceDayNutrition, foodAllowedByPreferences, foodRole, foodCanReplaceFood, foodFitsMeal };
+export { setRobokassaReceiptParameter, buildRobokassaPaymentSignature, robokassaResultSignature, verifyRobokassaResultSignature, robokassaWebhook, paymentStatus, testCheckout, aiPlanDiagnostic, aiDataFlowDiagnostic, generateAiPlan, generateCatalogFallbackPlan, buildLocalPlanChatReply, buildLocalPremiumDiaryReview, runAiTextWithFallback, runAiInferenceWithTimeout, runGroqInferenceWithTimeout, FOOD_CATALOG, buildPlanResponseSchema, diagnosePlanWeekFailure, rebalanceDayNutrition, foodAllowedByPreferences, foodRole, foodCanReplaceFood, foodFitsMeal };
