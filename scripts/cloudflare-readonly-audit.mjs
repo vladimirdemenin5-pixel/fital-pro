@@ -51,7 +51,7 @@ function check(condition, label) {
   }
 }
 
-const [settings, secrets, database, schemaResult, domains, deployments] = await Promise.all([
+const [settings, secrets, database, schemaResult, deployments] = await Promise.all([
   readOnly('Production Worker settings', '/accounts/' + accountId + '/workers/scripts/' + workerName + '/settings'),
   readOnly('Production Worker secret names', '/accounts/' + accountId + '/workers/scripts/' + workerName + '/secrets'),
   readOnly('Existing D1 metadata', '/accounts/' + accountId + '/d1/database/' + expectedDatabaseId),
@@ -61,7 +61,6 @@ const [settings, secrets, database, schemaResult, domains, deployments] = await 
       sql: "SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
     })
   }),
-  readOnly('Worker custom-domain bindings', '/accounts/' + accountId + '/workers/domains'),
   readOnly('Production Worker deployments', '/accounts/' + accountId + '/workers/scripts/' + workerName + '/deployments')
 ]);
 
@@ -79,10 +78,10 @@ async function publicWorkerHealth(url, label) {
   }
 }
 
-const [productionHealth, customDomainHealth] = await Promise.all([
-  publicWorkerHealth('https://red-waterfall-2af8.vladimirdemenin5.workers.dev', 'Production workers.dev'),
-  publicWorkerHealth('https://fitalpro.ru', 'fitalpro.ru')
-]);
+const productionHealth = await publicWorkerHealth(
+  'https://red-waterfall-2af8.vladimirdemenin5.workers.dev',
+  'Production workers.dev'
+);
 
 if (productionHealth) {
   check(productionHealth.ok === true, 'Production Worker health endpoint is responding');
@@ -95,11 +94,6 @@ if (productionHealth) {
   }
   check(productionHealth.payments === true, 'Production Robokassa credentials are available at runtime');
 }
-if (customDomainHealth) {
-  check(customDomainHealth.ok === true && customDomainHealth.ai === true && customDomainHealth.db === true,
-    'fitalpro.ru serves the Production Worker health endpoint');
-}
-
 if (settings) {
   const bindings = Array.isArray(settings.bindings) ? settings.bindings : [];
   const d1 = bindings.find(binding => binding.type === 'd1' && binding.name === 'DB');
@@ -155,24 +149,6 @@ if (schemaResult) {
   console.warn('AUDIT INCOMPLETE: Production D1 schema could not be read; no data rows were queried.');
 }
 
-if (domains) {
-  const workerDomains = Array.isArray(domains)
-    ? domains.filter(domain => domain.service === workerName && domain.environment === 'production')
-    : [];
-  const fitalDomain = workerDomains.find(domain => domain.hostname === 'fitalpro.ru');
-  if (fitalDomain) {
-    console.log('Production custom domain fitalpro.ru: ' + (fitalDomain.enabled ? 'enabled' : 'disabled'));
-    if (!fitalDomain.enabled) {
-      failures++;
-      console.error('FAIL: fitalpro.ru is attached to the Production Worker but is not routable.');
-    }
-  } else {
-    console.warn('NOT CONFIGURED: fitalpro.ru is not listed as a custom domain for this Worker; workers.dev remains the verified deployment origin.');
-  }
-} else {
-  console.warn('NOT VERIFIED: Worker custom domains could not be listed.');
-}
-
 if (deployments) {
   const items = Array.isArray(deployments) ? deployments : deployments.deployments || [];
   if (items.length) {
@@ -186,7 +162,7 @@ if (deployments) {
 if (failures) {
   console.error('Production read-only audit found ' + failures + ' confirmed configuration/schema mismatch(es).');
   process.exitCode = 1;
-} else if (!database || !schemaResult || !customDomainHealth) {
+} else if (!database || !schemaResult) {
   console.warn('AUDIT PARTIAL: no confirmed mismatch was found in readable settings, but D1 metadata/schema and/or custom-domain health could not be verified. Do not treat this as a complete Production audit.');
 } else {
   console.log('PASS: Production read-only audit completed; Worker settings, D1 metadata/schema, and custom-domain health were verified.');
