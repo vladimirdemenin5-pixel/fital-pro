@@ -113,7 +113,7 @@ assert.ok(worker.includes("const includesTraining = planKey !== 'Питание'
 assert.ok(worker.includes('plan: planKey,'));
 assert.ok(worker.includes('planLabel: PLANS[planKey].label,'));
 assert.ok(worker.includes("INSERT INTO pending_orders (client_ref,plan,amount,customer_contact,profile_json,plan_json"));
-assert.ok(worker.includes("await saveMemberPlan(env, accessToken, profile, plan)"));
+assert.ok(worker.includes('async function saveMemberPlan(env, accessToken, profile, plan)'), 'profile updates must retain the shared atomic profile/plan persistence helper');
 assert.ok(worker.includes("SELECT plan_json FROM weekly_plans WHERE access_token=?"));
 
 assert.ok(worker.includes('function isScheduledTrainingDay(absoluteDay, weeklyTarget)'), 'training cadence must be calculated consistently across all plan chunks');
