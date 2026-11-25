@@ -1,9 +1,9 @@
-name: Fital Pro preview AI generation (14 and 30 days)
+name: Fital Pro preview AI generation (7 and 14 days)
 
 on:
   pull_request:
     branches: [main]
-    types: [opened, reopened, edited]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: read
@@ -16,14 +16,9 @@ concurrency:
 jobs:
   preview-ai-generation:
     if: >-
-      github.event.pull_request.number == 47 &&
+      github.event.pull_request.number == 53 &&
       github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.head.ref == 'fix/ai-plan-generation-three-day-chunks' &&
-      (
-        github.event.action == 'opened' ||
-        github.event.action == 'reopened' ||
-        (github.event.action == 'edited' && contains(github.event.pull_request.title, '[RUN AI PREVIEW]'))
-      )
+      github.event.pull_request.head.ref == 'design/tilda-inspired-bold-redesign'
     runs-on: ubuntu-latest
     timeout-minutes: 55
     env:
@@ -61,7 +56,7 @@ jobs:
             console.log("Existing external AI provider credentials (presence only): " + JSON.stringify(availability));
           '
 
-      - name: Generate real 14-day and 30-day plans in isolated Cloudflare remote preview
+      - name: Generate real 7-day and 14-day plans in isolated Cloudflare remote preview
         run: |
           set -euo pipefail
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
