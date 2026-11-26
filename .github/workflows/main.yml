@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.event_name != 'workflow_dispatch' || inputs.run_live_ai != true
+    if: github.ref == 'refs/heads/main' && (github.event_name != 'workflow_dispatch' || inputs.run_live_ai != true)
     runs-on: ubuntu-latest
     timeout-minutes: 25
     name: Deploy Fital Pro
@@ -96,7 +96,7 @@ jobs:
           printf '%s' "$page" | node --input-type=module -e 'let s=""; for await (const c of process.stdin) s+=c; if (!s.includes("<html") || !s.includes("Fital")) throw new Error("Production site HTML/assets did not load"); console.log("PASS: public Fital Pro homepage is served by the deployed Worker")'
 
   live-ai-plans:
-    if: github.event_name == 'workflow_dispatch' && inputs.run_live_ai == true
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.run_live_ai == true
     name: Live AI plan generation (7, 14, 30 days)
     runs-on: ubuntu-latest
     timeout-minutes: 90
