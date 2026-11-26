@@ -136,7 +136,7 @@ assert.ok(productionWorkflow.includes('FITALPRO_AI_TARGET: production') &&
   !productionWorkflow.includes('node scripts/live-ai-plans.mjs'),
   'the optional production AI check must target the existing production Worker and use the no-D1-write AI diagnostic');
 assert.ok(Object.entries(FOOD_CATALOG).length >= 30, 'food reference catalog must remain populated');
-assert.ok(productionWorkflow.includes("if: github.event_name == 'workflow_dispatch' && inputs.run_live_ai == true"),
+assert.ok(productionWorkflow.includes("if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.run_live_ai == true"),
   'live AI generation must require an explicit manual workflow dispatch so ordinary production deployments do not consume Workers AI quota');
 assert.ok(productionWorkflow.includes('run_live_ai:') && productionWorkflow.includes('type: boolean') && productionWorkflow.includes('default: false'),
   'manual live AI checks must default to off');
