@@ -86,10 +86,10 @@ assert.ok(productionWorkflow.includes(
   "concurrency:\n  group: fital-pro-production\n  cancel-in-progress: false\n  queue: max"
 ), 'Production workflow runs must share a non-cancelling lock and retain queued runs instead of replacing them');
 assert.ok(productionWorkflow.includes(
-  "  deploy:\n    if: github.event_name != 'workflow_dispatch' || inputs.run_live_ai != true"
+  "  deploy:\n    if: github.ref == 'refs/heads/main' && (github.event_name != 'workflow_dispatch' || inputs.run_live_ai != true)"
 ), 'a manual live-AI validation dispatch must skip Production deployment');
 assert.ok(productionWorkflow.includes(
-  "  live-ai-plans:\n    if: github.event_name == 'workflow_dispatch' && inputs.run_live_ai == true"
+  "  live-ai-plans:\n    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.run_live_ai == true"
 ), 'real AI validation must run only on an explicit manual opt-in');
 assert.ok(!productionWorkflow.includes('group: fital-pro-live-ai-plans') &&
   !productionWorkflow.includes('cancel-in-progress: true'),
