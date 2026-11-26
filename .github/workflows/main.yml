@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       run_live_ai:
-        description: 'Run real AI plan generation after deployment (uses the configured AI provider quota)'
+        description: 'Run real AI plan generation against the currently published Production Worker (uses the configured AI provider quota)'
         required: false
         type: boolean
         default: false
@@ -14,12 +14,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: fital-pro-production
+  cancel-in-progress: false
 
 jobs:
   deploy:
-    concurrency:
-      group: fital-pro-production
-      cancel-in-progress: true
+    if: github.event_name != 'workflow_dispatch' || inputs.run_live_ai != true
     runs-on: ubuntu-latest
     timeout-minutes: 25
     name: Deploy Fital Pro
@@ -96,9 +97,6 @@ jobs:
   live-ai-plans:
     if: github.event_name == 'workflow_dispatch' && inputs.run_live_ai == true
     name: Live AI plan generation (7, 14, 30 days)
-    concurrency:
-      group: fital-pro-live-ai-plans
-      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
