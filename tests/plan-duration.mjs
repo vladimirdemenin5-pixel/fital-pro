@@ -82,12 +82,15 @@ assert.ok(htmlSource.includes('Если ИИ временно недоступе
 const productionWorkflow = await readFile(new URL('../.github/workflows/main.yml', import.meta.url), 'utf8');
 const pullRequestWorkflow = await readFile(new URL('../.github/workflows/pull-request-checks.yml', import.meta.url), 'utf8');
 const liveIntegrationSource = await readFile(new URL('../scripts/live-ai-plan-validation.mjs', import.meta.url), 'utf8');
-assert.match(productionWorkflow, /\\nconcurrency:\\n  group: fital-pro-production\\n  cancel-in-progress: false\\n/,
-  'all runs of the Production workflow must share one non-cancelling lock');
-assert.match(productionWorkflow, /\\n  deploy:\\n    if: github\\.event_name != 'workflow_dispatch' \\|\\| inputs\\.run_live_ai != true\\n/,
-  'a manual live-AI validation dispatch must skip Production deployment');
-assert.match(productionWorkflow, /\\n  live-ai-plans:\\n    if: github\\.event_name == 'workflow_dispatch' && inputs\\.run_live_ai == true\\n/,
-  'real AI validation must run only on an explicit manual opt-in');
+assert.ok(productionWorkflow.includes(
+  "concurrency:\\n  group: fital-pro-production\\n  cancel-in-progress: false\\n  queue: max"
+), 'Production workflow runs must share a non-cancelling lock and retain queued runs instead of replacing them');
+assert.ok(productionWorkflow.includes(
+  "  deploy:\\n    if: github.event_name != 'workflow_dispatch' || inputs.run_live_ai != true"
+), 'a manual live-AI validation dispatch must skip Production deployment');
+assert.ok(productionWorkflow.includes(
+  "  live-ai-plans:\\n    if: github.event_name == 'workflow_dispatch' && inputs.run_live_ai == true"
+), 'real AI validation must run only on an explicit manual opt-in');
 assert.ok(!productionWorkflow.includes('group: fital-pro-live-ai-plans') &&
   !productionWorkflow.includes('cancel-in-progress: true'),
   'Production deploy and live AI validation must not use independent or preemptive concurrency locks');
