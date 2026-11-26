@@ -104,7 +104,9 @@ $('#intakeForm').addEventListener('submit', async function (event) {
     goal: fields.get('goal'),
     training: fields.get('training'),
     days: Number(fields.get('days')),
-    preferences: fields.get('preferences')
+    preferences: fields.get('preferences'),
+    diet: fields.get('diet') || 'classic',
+    exclusions: fields.getAll('exclusions')
   };
   try {
     const generatedCheckout = await api('/api/checkout', {
@@ -277,7 +279,11 @@ function fillProfileForm(profile) {
   if (!form || !profile) return;
   for (const [key, value] of Object.entries(profile)) {
     const field = form.elements.namedItem(key);
-    if (field && value !== null && value !== undefined) field.value = String(value);
+    if (!field || value === null || value === undefined) continue;
+    if (key === 'exclusions' && field.length !== undefined) {
+      const selected = new Set(Array.isArray(value) ? value : []);
+      Array.from(field).forEach(input => { input.checked = selected.has(input.value); });
+    } else field.value = String(value);
   }
 }
 
@@ -292,7 +298,9 @@ function profileFromFields(fields) {
     goal: fields.get('goal'),
     training: fields.get('training'),
     days: Number(fields.get('days')),
-    preferences: fields.get('preferences')
+    preferences: fields.get('preferences'),
+    diet: fields.get('diet') || 'classic',
+    exclusions: fields.getAll('exclusions')
   };
 }
 
@@ -306,12 +314,12 @@ async function loadProfileEditor() {
   }
 }
 
-function renderMeal(day, label, key) {
+function renderMeal(day, label, key, time) {
   const ingredients = Array.isArray(day[key + 'Ingredients']) ? day[key + 'Ingredients'] : [];
   const composition = ingredients.map(item =>
     escapeHtml(item.name) + ' — ' + Number(item.grams).toLocaleString('ru-RU') + ' г'
   ).join(' · ');
-  return '<p><strong>' + label + '</strong> · ' + escapeHtml(day[key]) +
+  return '<p><strong>' + label + (time ? ' · ' + escapeHtml(time) : '') + '</strong> · ' + escapeHtml(day[key]) +
     (composition ? '<br><small>Состав, вес до приготовления: ' + composition + '</small>' : '') +
     (day[key + 'Recipe'] ? '<br><small>Приготовление: ' + escapeHtml(day[key + 'Recipe']) + '</small>' : '') + '</p>';
 }
@@ -330,6 +338,7 @@ function renderFullPlan(plan, targetSelector) {
       Number(average.calories || 0).toLocaleString('ru-RU') + ' ккал · белки ' +
       Number(average.protein || 0).toLocaleString('ru-RU') + ' г' +
       (hasFullMacros ? ' · жиры ' + Number(average.fat).toLocaleString('ru-RU') + ' г · углеводы ' + Number(average.carbs).toLocaleString('ru-RU') + ' г' : ' · жиры и углеводы не рассчитаны в сохранённой старой версии') +
+      (plan.waterLiters ? ' · ориентир воды ' + Number(plan.waterLiters).toLocaleString('ru-RU') + ' л/сутки' : '') +
       '.</p>'
     : '<p class="nutrition-summary">Эта программа создана до обновления расчёта по ингредиентам. Чтобы получить проверяемые порции, калории и список покупок, пересоберите план в анкете.</p>';
   const generationNotice = plan.generationMode === 'catalog-fallback'
@@ -339,10 +348,10 @@ function renderFullPlan(plan, targetSelector) {
     const nutrition = day.nutrition || {};
     return '<article class="day-card">' +
       '<h3>' + escapeHtml(day.day) + '</h3>' +
-      renderMeal(day, 'Завтрак', 'breakfast') +
-      renderMeal(day, 'Обед', 'lunch') +
-      renderMeal(day, 'Перекус', 'snack') +
-      renderMeal(day, 'Ужин', 'dinner') +
+      renderMeal(day, 'Завтрак', 'breakfast', '08:00') +
+      renderMeal(day, 'Обед', 'lunch', '13:00') +
+      renderMeal(day, 'Перекус', 'snack', '16:30') +
+      renderMeal(day, 'Ужин', 'dinner', '19:30') +
       (day.nutrition ? '<p class="day-nutrition"><strong>Расчёт по продуктам:</strong> ' +
         Number(nutrition.calories).toLocaleString('ru-RU') + ' ккал · ' +
         Number(nutrition.protein).toLocaleString('ru-RU') + ' г белка' +

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {
+  setRobokassaReceiptParameter,
   buildRobokassaPaymentSignature,
   robokassaResultSignature,
   verifyRobokassaResultSignature
@@ -32,6 +33,44 @@ const paymentBase = [
 const expectedPaymentSignature = createHash('md5').update(paymentBase, 'utf8').digest('hex').toUpperCase();
 assert.equal(buildRobokassaPaymentSignature(paymentInput), expectedPaymentSignature,
   'payment signature must include the three empty Robokassa parameter slots in the documented order');
+const receiptJson = JSON.stringify({
+  items: [{
+    name: 'Fital Pro — Питание, 7 дней',
+    quantity: 1,
+    sum: 990,
+    payment_method: 'full_prepayment',
+    payment_object: 'service',
+    tax: 'none'
+  }]
+});
+const receiptParams = new URLSearchParams();
+const receiptForSignature = setRobokassaReceiptParameter(receiptParams, receiptJson);
+assert.equal(receiptParams.get('Receipt'), encodeURIComponent(receiptJson),
+  'Robokassa Receipt value must be URL-encoded JSON before transport encoding');
+assert.equal(new URLSearchParams(receiptParams.toString()).get('Receipt'), encodeURIComponent(receiptJson),
+  'Robokassa must receive the URL-encoded Receipt value after one transport decode');
+assert.equal(decodeURIComponent(new URLSearchParams(receiptParams.toString()).get('Receipt')), receiptJson,
+  'the transported Receipt value must decode back to the exact fiscal JSON');
+assert.equal(receiptForSignature, encodeURIComponent(receiptJson),
+  'Robokassa payment signature must use the URL-encoded Receipt value');
+const receiptInput = { ...paymentInput, receipt: receiptForSignature };
+const receiptBase = [
+  receiptInput.merchant,
+  receiptInput.outSum,
+  receiptInput.invId,
+  receiptInput.receipt,
+  '',
+  '',
+  receiptInput.successUrl2,
+  'GET',
+  receiptInput.failUrl2,
+  'GET',
+  receiptInput.password1,
+  'Shp_ref=' + receiptInput.clientRef
+].join(':');
+const expectedReceiptSignature = createHash('md5').update(receiptBase, 'utf8').digest('hex').toUpperCase();
+assert.equal(buildRobokassaPaymentSignature(receiptInput), expectedReceiptSignature,
+  'payment signature must include URL-encoded Receipt and preserve the documented modifier order');
 
 const fields = {
   OutSum: '990.00',

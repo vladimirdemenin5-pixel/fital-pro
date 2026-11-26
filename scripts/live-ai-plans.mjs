@@ -1,4 +1,42 @@
-const endpoint = process.env.FITALPRO_WORKER_URL || 'https://red-waterfall-2af8.vladimirdemenin5.workers.dev';
+import { request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
+
+if (process.env.FITALPRO_PREVIEW_D1_ISOLATED !== 'true') {
+  throw new Error('Refusing AI/payment/D1 integration diagnostics: Preview currently shares the Production D1 binding. Configure an isolated Preview D1 binding first, then explicitly set FITALPRO_PREVIEW_D1_ISOLATED=true.');
+}
+const endpoint = process.env.FITALPRO_WORKER_URL || '';
+if (!endpoint) throw new Error('FITALPRO_WORKER_URL must point to the dedicated PR Preview Worker; Production is never a diagnostic default.');
+const endpointUrl = new URL(endpoint);
+if (
+  endpointUrl.protocol !== 'https:' ||
+  !endpointUrl.hostname.startsWith('fital-pro-redesign-groq-ready-red-waterfall-2af8.') ||
+  !endpointUrl.hostname.endsWith('.workers.dev')
+) {
+  throw new Error('Refusing live diagnostics: only the PR #53 Preview Worker hostname is allowed.');
+}
+
+function postJson(url, body, headers, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const requestClient = new URL(url).protocol === 'https:' ? httpsRequest : httpRequest;
+    const request = requestClient(url, { method: 'POST', headers }, response => {
+      let text = '';
+      response.setEncoding('utf8');
+      response.on('data', chunk => { text += chunk; });
+      response.on('end', () => {
+        let data = {};
+        try { data = JSON.parse(text); } catch {}
+        const status = response.statusCode || 0;
+        resolve({ ok: status >= 200 && status < 300, status, json: async () => data });
+      });
+    });
+    request.setTimeout(timeoutMs, () => {
+      request.destroy(new Error('Cloudflare Worker diagnostic did not respond within ' + timeoutMs + ' ms.'));
+    });
+    request.on('error', reject);
+    request.write(JSON.stringify(body));
+    request.end();
+  });
+}
 const oidcRequestUrl = process.env.ACTIONS_ID_TOKEN_REQUEST_URL;
 const oidcRequestToken = process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
 if (!oidcRequestUrl || !oidcRequestToken) {
@@ -35,15 +73,15 @@ for (const item of plans) {
   let result = {};
   const authPropagationDeadline = Date.now() + 90000;
   do {
-    response = await fetch(endpoint + '/api/ai-data-flow-diagnostic', {
-      method: 'POST',
-      headers: {
+    response = await postJson(
+      endpoint + '/api/ai-data-flow-diagnostic',
+      { plan: item.key },
+      {
         'Content-Type': 'application/json',
         Authorization: 'Bearer ' + oidcToken
       },
-      body: JSON.stringify({ plan: item.key }),
-      signal: AbortSignal.timeout(Math.max(240000, item.days * 30000 + 120000))
-    });
+      40 * 60 * 1000
+    );
     result = await response.json().catch(() => ({}));
     if (response.status !== 404 || result.error !== 'Диагностический доступ не настроен или ключ неверен.' ||
         Date.now() >= authPropagationDeadline) break;
@@ -53,15 +91,26 @@ for (const item of plans) {
   if (!response.ok || result.ok !== true) {
     throw new Error(`${item.key}: live Worker flow failed (HTTP ${response.status}, stage ${result.stage || 'authorization'}): ${result.error || 'unknown error'}${result.diagnostic ? ' [' + result.diagnostic + ']' : ''}`);
   }
-  if (result.days !== item.days || result.meals !== item.days * 4 ||
+  if (result.generationMode !== 'ai') {
+    throw new Error(`${item.key}: live checkout flow returned ${result.generationMode || 'unknown'} instead of a real AI plan.`);
+  }
+  if (!Array.isArray(result.aiProviders) || result.aiProviders.length === 0 ||
+      result.days !== item.days || result.meals !== item.days * 4 ||
       result.d1Write !== true || result.cabinetPlanRead !== true ||
       result.cabinetProfileRead !== true || result.memberAccessRead !== true) {
     throw new Error(`${item.key}: AI → D1 → personal-cabinet verification returned incomplete results.`);
   }
   console.log(JSON.stringify({
     plan: item.key,
+    generationMode: result.generationMode,
+    aiProviders: result.aiProviders,
     days: result.days,
     meals: result.meals,
+    checkoutCreated: result.checkoutCreated,
+    paymentSignatureVerified: result.paymentSignatureVerified,
+    paymentWebhookVerified: result.paymentWebhookVerified,
+    paymentStatusBefore: result.paymentStatusBefore,
+    paymentStatusAfter: result.paymentStatusAfter,
     d1Write: 'passed',
     cabinetPlanRead: 'passed',
     cabinetProfileRead: 'passed',

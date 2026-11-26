@@ -22,10 +22,10 @@ for (const page of ['oferta.html', 'privacy.html', 'delivery-refund.html', 'requ
 }
 assert.ok(html.includes('href="/oferta.html"'));
 assert.ok(html.includes('href="/privacy.html"'));
-assert.ok(html.includes('Cloudflare Workers AI') && html.includes('OpenAI GPT-OSS'), 'the questionnaire must disclose the actual Cloudflare-hosted AI models before consent');
-assert.ok(read('public/privacy.html').includes('Cloudflare Workers AI') && read('public/privacy.html').includes('OpenAI GPT-OSS'), 'the privacy policy must identify the actual AI processing provider and model family');
+assert.ok(html.includes('Groq API (GPT-OSS 20B)') && html.includes('Cloudflare Workers AI') && html.includes('Qwen 3.8 из цепочки генерации планов исключён'), 'the questionnaire must disclose Groq and the current Cloudflare fallback models before consent');
+assert.ok(read('public/privacy.html').includes('Cloudflare Workers AI') && read('public/privacy.html').includes('Groq') && read('public/privacy.html').includes('GPT-OSS 20B'), 'the privacy policy must identify the configured Groq provider and Cloudflare fallback model family');
 assert.ok(read('public/privacy.html').includes('Редакция от 23 ноября 2026 года.'), 'the privacy policy revision date must match the updated provider disclosure');
-assert.ok(read('public/privacy.html').includes('Прямое обращение к QwenCloud (Alibaba) или к OpenAI API для генерации планов не выполняется.'), 'the privacy policy must distinguish Cloudflare-hosted model inference from direct external APIs');
+assert.ok(read('public/privacy.html').includes('если в существующем Worker настроен серверный секрет GROQ_API_KEY') && read('public/privacy.html').includes('Модель Qwen 3.8 в текущей цепочке генерации планов не используется.'), 'the privacy policy must disclose conditional Groq routing and the removed Qwen plan model');
 assert.match(robokassaTest, /id="age" type="number" min="18" max="90"/,
   'the Robokassa test form must match the server-side adult-only age limit');
 assert.ok(worker.includes('pd_consent_at'));
@@ -64,6 +64,12 @@ assert.ok(worker.includes("params.set('FailUrl2Method', 'GET')"), 'Robokassa fai
 assert.ok(worker.includes("successUrl.searchParams.set('ref', clientRef)"), 'successful return must carry the order reference for activation polling');
 assert.ok(worker.includes("successUrl.searchParams.set('payment', 'success')"), 'successful return must be distinguishable from a failed payment');
 assert.ok(worker.includes('buildRobokassaPaymentSignature({'), 'checkout must use the tested Robokassa payment signature helper');
+assert.ok(worker.includes('setRobokassaReceiptParameter(params, receiptJson)') &&
+  worker.includes('receipt: receiptForSignature') &&
+  worker.includes("payment_method: 'full_prepayment'") &&
+  worker.includes("payment_object: 'service'") &&
+  worker.includes("tax: 'none'"),
+  'Robokassa checkout must sign and transmit the service receipt itemization required for NPD fiscalization');
 assert.ok(!worker.includes("params.set('SuccessURL',"), 'legacy unrecognized success return parameter must not be sent');
 assert.ok(!worker.includes("params.set('FailURL',"), 'legacy unrecognized fail return parameter must not be sent');
 
@@ -74,8 +80,12 @@ assert.match(schema, /CREATE TABLE IF NOT EXISTS profiles/);
 assert.match(schema, /CREATE TABLE IF NOT EXISTS weekly_plans/);
 assert.ok(worker.includes('INSERT INTO payments'));
 assert.ok(worker.includes('ON CONFLICT(payment_id) DO NOTHING'));
-assert.ok(worker.includes('await saveMemberPlan(env, accessToken, profile, plan)'));
-assert.ok(worker.includes('await env.DB.batch([profileStatement, planStatement])'), 'profile and weekly plan must be saved atomically in D1');
+assert.ok(worker.includes('Commit payment, subscription, profile, full plan and paid status together.'));
+assert.ok(worker.includes('await env.DB.batch(['), 'payment activation must be committed as one atomic D1 batch');
+assert.ok(worker.includes('INSERT INTO profiles (access_token,profile_json,updated_at) SELECT access_token'));
+assert.ok(worker.includes('INSERT INTO weekly_plans (id,access_token,plan_json,created_at,updated_at) SELECT s.access_token'));
+assert.ok(worker.includes('EXISTS (SELECT 1 FROM profiles p JOIN subscriptions s'));
+assert.ok(worker.includes('EXISTS (SELECT 1 FROM weekly_plans w JOIN subscriptions s'));
 assert.ok(worker.includes("UPDATE pending_orders SET status='paid'"));
 assert.ok(worker.includes('INNER JOIN profiles p'));
 assert.ok(worker.includes('INNER JOIN weekly_plans w'));
@@ -88,7 +98,7 @@ assert.ok(html.includes('id="progressTool"'));
 assert.ok(html.includes('id="chatTool"'));
 assert.ok(worker.includes('trainingDay: includesTraining && isScheduledTrainingDay(startDay + index, profile.days)'), 'training-day flag must be derived from the server-owned absolute schedule, not the AI response');
 assert.ok(worker.includes("JSON.stringify({ ...profile, name: 'Клиент' })"), 'AI providers must not receive the customer name');
-assert.ok(worker.includes("max_completion_tokens: 4200"), 'Qwen/GLM/Gemma plan requests must use the documented max_completion_tokens field and the bounded 4200-token plan output limit');
+assert.ok(worker.includes("max_completion_tokens: 6200"), 'GLM/Gemma plan requests must use the documented max_completion_tokens field and the bounded 6200-token plan output limit');
 assert.ok(worker.includes("...(env.AI ? ['@cf/zai-org/glm-4.7-flash', '@cf/meta/llama-3.1-8b-instruct-fast', MODEL] : [])"),
   'the general AI chat must retain the supported Cloudflare GLM, Llama and Gemma fallback order when the binding is present');
 assert.ok(worker.includes("...(clean(env.GROQ_API_KEY, 300) ? ['groq:openai/gpt-oss-20b'] : [])"),
@@ -103,7 +113,7 @@ assert.ok(worker.includes("const includesTraining = planKey !== 'Питание'
 assert.ok(worker.includes('plan: planKey,'));
 assert.ok(worker.includes('planLabel: PLANS[planKey].label,'));
 assert.ok(worker.includes("INSERT INTO pending_orders (client_ref,plan,amount,customer_contact,profile_json,plan_json"));
-assert.ok(worker.includes("await saveMemberPlan(env, accessToken, profile, plan)"));
+assert.ok(worker.includes('async function saveMemberPlan(env, accessToken, profile, plan)'), 'profile updates must retain the shared atomic profile/plan persistence helper');
 assert.ok(worker.includes("SELECT plan_json FROM weekly_plans WHERE access_token=?"));
 
 assert.ok(worker.includes('function isScheduledTrainingDay(absoluteDay, weeklyTarget)'), 'training cadence must be calculated consistently across all plan chunks');
@@ -115,12 +125,15 @@ assert.ok(worker.includes('function extractAiText(result)'));
 assert.ok(worker.includes("result?.choices?.[0]?.message?.content"));
 assert.ok(worker.includes("messages,"));
 assert.ok(worker.includes("'@cf/zai-org/glm-4.7-flash'"));
-assert.ok(worker.includes('runPlanModel(env, prompt, profile, planKey, chunkDays, offset + 1)'));
+assert.ok(worker.includes('runPlanModel(env, prompt, profile, planKey, chunkDays, offset + 1, preferredGroqModel, providerState)'));
 assert.ok(worker.includes('normalizeAndValidatePlanWeek(parsed, profile, planKey, chunkDays, targets, offset + 1)'), 'the server must validate every chunk using its absolute start day and calculated nutrition targets');
 assert.ok(worker.includes('day.trainingDay === isScheduledTrainingDay(startDay + index, profile.days)'), 'training schedule must be checked by the server across chunk boundaries');
 assert.ok(worker.includes('function buildShoppingList(week)'), 'shopping quantities must be derived from exact ingredients in the saved plan');
-assert.ok(worker.includes('calculateDayNutrition(day)'), 'daily calories and protein must be calculated from ingredient weights');
-assert.ok(worker.includes('targets.protein * 0.8') && worker.includes('targets.protein * 1.2'), 'daily protein must stay within validated tolerance');
+assert.ok(worker.includes('calculateDayNutrition(day)'), 'daily calories, protein, fat and carbohydrates must be calculated from ingredient weights');
+assert.ok(worker.includes('values.every(value => Number.isFinite(value) && value >= 0)') &&
+  worker.includes('nutrition.calories >= targets.calories * 0.90') &&
+  worker.includes('nutrition.calories <= targets.calories * 1.10'),
+  'daily calories must stay within ±10%, while all macro values remain finite and nonnegative without strict target ranges');
 assert.ok(worker.includes('profile.age < 18'), 'adult nutrition calculations must reject minors');
 
 assert.ok(worker.includes("Не удалось пересобрать план. Сохранённая программа не изменена."));

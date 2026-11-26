@@ -6,7 +6,7 @@
 
 - Frontend: `public/` (HTML, CSS, JavaScript).
 - API и серверная логика: `_worker.js`.
-- Workers AI: binding `AI`, модель `@cf/google/gemma-4-26b-a4b-it`.
+- AI generation: Groq `openai/gpt-oss-20b` when the server-side `GROQ_API_KEY` is configured; fallback through Workers AI binding `AI` (Gemma 4, GPT-OSS 120B, GPT-OSS 20B). Qwen 3.8 is not used for plan generation.
 - D1: binding `DB`, база `fital-pro-db`.
 - Оплата: Robokassa с серверной проверкой подписи ResultURL.
 - Telegram не используется.
@@ -62,6 +62,8 @@
 
 В технических настройках магазина:
 - ResultURL: `https://ВАШ-ДОМЕН/webhooks/robokassa`, метод POST.
+- Для самозанятого подключить в кабинете Robokassa сервис «Робочеки СМЗ» и подтвердить интеграцию с приложением «Мой налог»; платёжная ссылка Fital Pro передаёт номенклатуру услуги в `Receipt`.
+- В тестовом платеже проверить, что после успешной оплаты сформирован чек НПД и он отправлен покупателю. Квитанция Robokassa сама по себе не заменяет чек НПД.
 - SuccessURL: `https://ВАШ-ДОМЕН/`.
 - FailURL: `https://ВАШ-ДОМЕН/?payment=fail`.
 - Метод подписи: MD5, если в кабинете магазина выбран MD5.

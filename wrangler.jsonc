@@ -29,7 +29,15 @@
       "ROBOKASSA_PASSWORD2"
     ]
   },
-  "previews": {},
+  "previews": {
+    "ai": {
+      "binding": "AI"
+    },
+    "vars": {
+      "FITALPRO_PREVIEW_CI": "1",
+      "ROBOKASSA_IS_TEST": "1"
+    }
+  },
   "observability": {
     "enabled": true
   },

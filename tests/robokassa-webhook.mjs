@@ -17,6 +17,7 @@ class MockD1 {
     this.profiles = new Map();
     this.plans = new Map();
     this.failNextBatch = false;
+    this.failBatchAt = null;
     this.batchCalls = 0;
     this.nextInvId = 100;
   }
@@ -104,18 +105,54 @@ class MockD1 {
       this.failNextBatch = false;
       throw new Error('simulated D1 batch failure');
     }
-    for (const statement of statements) {
+    // Apply to copies so this test double mirrors D1's all-or-nothing batch.
+    const payments = new Map(this.payments);
+    const subscriptions = new Map(this.subscriptions);
+    const profiles = new Map(this.profiles);
+    const plans = new Map(this.plans);
+    const orders = new Map([...this.orders].map(([id, row]) => [id, { ...row }]));
+    for (let index = 0; index < statements.length; index++) {
+      if (this.failBatchAt === index) {
+        this.failBatchAt = null;
+        throw new Error('simulated D1 mid-batch failure');
+      }
+      const statement = statements[index];
       const sql = statement.sql;
       const args = statement.args;
-      if (sql.startsWith('INSERT INTO profiles')) {
-        this.profiles.set(args[0], { access_token: args[0], profile_json: args[1] });
-      } else if (sql.startsWith('INSERT INTO weekly_plans')) {
-        this.plans.set(args[1], { id: args[0], access_token: args[1], plan_json: args[2] });
+      if (sql.startsWith('INSERT INTO payments')) {
+        payments.set(args[0], { id: args[0], status: args[1], plan: args[2], amount: args[3] });
+      } else if (sql.startsWith('INSERT INTO subscriptions')) {
+        const [id,payment_id,client_ref,plan,status,access_token,customer_contact,created_at,updated_at,expires_at] = args;
+        if (![...subscriptions.values()].some(row => row.payment_id === payment_id || row.client_ref === client_ref)) {
+          subscriptions.set(id, { id,payment_id,client_ref,plan,status,access_token,customer_contact,created_at,updated_at,expires_at });
+        }
+      } else if (sql.startsWith('INSERT INTO profiles')) {
+        const sub = [...subscriptions.values()].find(row => row.payment_id === args[2]);
+        if (sub) profiles.set(sub.access_token, { access_token: sub.access_token, profile_json: args[0] });
       } else if (sql.startsWith('UPDATE weekly_plans')) {
-        const row = this.plans.get(args[2]);
+        const sub = [...subscriptions.values()].find(row => row.payment_id === args[2]);
+        const row = sub && plans.get(sub.access_token);
         if (row) row.plan_json = args[0];
+      } else if (sql.startsWith('INSERT INTO weekly_plans')) {
+        const sub = [...subscriptions.values()].find(row => row.payment_id === args[3]);
+        if (sub && !plans.has(sub.access_token)) {
+          plans.set(sub.access_token, { id: sub.access_token, access_token: sub.access_token, plan_json: args[0] });
+        }
+      } else if (sql.startsWith("UPDATE pending_orders SET status='paid'")) {
+        const [updatedAt,invId,paymentId] = args;
+        const row = orders.get(Number(invId));
+        const sub = [...subscriptions.values()].find(item => item.payment_id === paymentId);
+        if (row && payments.has(paymentId) && sub && profiles.has(sub.access_token) && plans.has(sub.access_token)) {
+          row.status = 'paid';
+          row.updated_at = updatedAt;
+        }
       }
     }
+    this.payments = payments;
+    this.subscriptions = subscriptions;
+    this.profiles = profiles;
+    this.plans = plans;
+    this.orders = orders;
     return [];
   }
 }
@@ -231,8 +268,12 @@ assert.equal(env.DB.subscriptions.size, beforeSubs);
 // or release access. Retrying the same notification must finish activation.
 const retryEnv = { ...env, DB: new MockD1() };
 retryEnv.DB.orders.set(42, { ...order });
-retryEnv.DB.failNextBatch = true;
-await assert.rejects(() => robokassaWebhook(callback(), retryEnv), /simulated D1 batch failure/);
+retryEnv.DB.failBatchAt = 2;
+await assert.rejects(() => robokassaWebhook(callback(), retryEnv), /simulated D1 mid-batch failure/);
+assert.equal(retryEnv.DB.payments.size, 0, 'mid-batch failure must roll back the payment record');
+assert.equal(retryEnv.DB.subscriptions.size, 0, 'mid-batch failure must roll back the subscription');
+assert.equal(retryEnv.DB.profiles.size, 0, 'mid-batch failure must not leave a partial profile');
+assert.equal(retryEnv.DB.plans.size, 0, 'mid-batch failure must not leave a partial plan');
 assert.equal(retryEnv.DB.orders.get(42).status, 'pending');
 let retryResponse = await paymentStatus(new Request(
   'https://fitalpro.test/api/payment-status?ref=' + order.client_ref,
@@ -358,9 +399,8 @@ const flowProfile = {
   days: 3,
   preferences: 'Без ограничений'
 };
-// Regression: when Cloudflare Workers AI returns its exhausted daily
-// allocation error, the real checkout route must still build a validated
-// local plan, persist the pending order and return a Robokassa payment URL.
+// Regression: when generative AI is unavailable, checkout must refuse to
+// create an order or payment URL rather than sell a catalog fallback as AI.
 const quotaDb = new MockD1();
 const quotaEnv = {
   ...flowEnv,
@@ -385,16 +425,12 @@ const quotaCheckoutResponse = await worker.fetch(new Request('https://fitalpro.t
     offer_accepted: true
   })
 }), quotaEnv);
-assert.equal(quotaCheckoutResponse.status, 200,
-  'daily Cloudflare AI quota exhaustion must not block checkout');
+assert.equal(quotaCheckoutResponse.status, 503,
+  'daily Cloudflare AI quota exhaustion must block checkout before creating payment');
 const quotaCheckoutPayload = await quotaCheckoutResponse.json();
-assert.equal(quotaCheckoutPayload.ok, true);
-assert.equal(quotaCheckoutPayload.preview.generationMode, 'catalog-fallback');
-assert.match(quotaCheckoutPayload.confirmation_url, /^https:\/\/auth\.robokassa\.ru\//);
-assert.equal(quotaDb.orders.size, 1, 'a pending order must be saved when the AI quota is exhausted');
-const quotaOrder = [...quotaDb.orders.values()][0];
-assert.equal(quotaOrder.status, 'pending');
-assert.equal(JSON.parse(quotaOrder.plan_json).generationMode, 'catalog-fallback');
+assert.equal(quotaCheckoutPayload.ok, undefined);
+assert.match(quotaCheckoutPayload.error, /ИИ временно недоступен|ИИ.*недоступен/i);
+assert.equal(quotaDb.orders.size, 0, 'no pending order or Robokassa payment may be created without a generative AI plan');
 
 const checkoutResponse = await worker.fetch(new Request('https://fitalpro.test/api/checkout-test', {
   method: 'POST',

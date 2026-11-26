@@ -38,7 +38,8 @@
           <div><strong>Ваш личный маршрут</strong><small>План строится по вашей анкете</small></div>
         </div>
       </div>
-      <div class="hero-visual" aria-label="Пример персонального плана">
+      <div class="hero-visual" aria-label="Персональная программа Fital Pro">
+        <img class="hero-photo" src="https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1400&q=90" alt="Спортивная женщина во время тренировки в современном фитнес-зале" width="1400" height="1600" fetchpriority="high">
         <div class="visual-orbit orbit-one"></div>
         <div class="visual-orbit orbit-two"></div>
         <div class="visual-card visual-card-main">
@@ -84,16 +85,16 @@
 
       <div class="showcase-photo-grid">
         <article class="showcase-photo showcase-photo-food">
-          <img src="https://images.unsplash.com/photo-1543352632-5a4b24e4d2a6?auto=format&fit=crop&w=1100&q=82" alt="Контейнеры с готовыми сбалансированными блюдами" width="1100" height="780" loading="lazy" decoding="async">
-          <div class="showcase-photo-caption"><span>ПИТАНИЕ НА КАЖДЫЙ ДЕНЬ</span><strong>Простые продукты. Разнообразное меню.</strong><small>Фото: Ella Olsson · Unsplash</small></div>
+          <img src="https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=1200&q=90" alt="Контейнеры с готовыми сбалансированными блюдами" width="1100" height="780" loading="lazy" decoding="async">
+          <div class="showcase-photo-caption"><span>ПИТАНИЕ НА КАЖДЫЙ ДЕНЬ</span><strong>Простые продукты. Разнообразное меню.</strong><small>Редакционная фотография · Unsplash</small></div>
         </article>
         <article class="showcase-photo showcase-photo-bowl">
-          <img src="https://images.unsplash.com/photo-1762631383378-115f2d4cbe07?auto=format&fit=crop&w=900&q=82" alt="Сбалансированная тарелка с курицей, рисом, овощами и бобовыми" width="900" height="780" loading="lazy" decoding="async">
-          <div class="showcase-photo-caption"><span>ПРИМЕР ОБЕДА</span><strong>Белок, гарнир и овощи в одной тарелке.</strong><small>Фото: Joe Boshra · Unsplash</small></div>
+          <img src="https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=1000&q=90" alt="Сбалансированная тарелка с курицей, рисом, овощами и бобовыми" width="900" height="780" loading="lazy" decoding="async">
+          <div class="showcase-photo-caption"><span>ПРИМЕР ОБЕДА</span><strong>Белок, гарнир и овощи в одной тарелке.</strong><small>Редакционная фотография · Unsplash</small></div>
         </article>
         <article class="showcase-photo showcase-photo-training">
-          <img src="https://images.unsplash.com/photo-1546483875-ad9014c88eba?auto=format&fit=crop&w=900&q=82" alt="Тренировка с гантелями в спортивном зале" width="900" height="780" loading="lazy" decoding="async">
-          <div class="showcase-photo-caption"><span>ТРЕНИРОВКИ ПО ПЛАНУ</span><strong>Упражнения, подходы и повторения.</strong><small>Фото: Cathy Pham · Unsplash</small></div>
+          <img src="https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1000&q=90" alt="Тренировка с гантелями в спортивном зале" width="900" height="780" loading="lazy" decoding="async">
+          <div class="showcase-photo-caption"><span>ТРЕНИРОВКИ ПО ПЛАНУ</span><strong>Упражнения, подходы и повторения.</strong><small>Редакционная фотография · Unsplash</small></div>
         </article>
       </div>
 
@@ -183,7 +184,7 @@
       <div class="form-intro">
         <div class="eyebrow"><span class="eyebrow-dot"></span> ПЕРСОНАЛЬНЫЙ ПОДБОР</div>
         <h2>Начнём<br><em>с вашей цели.</em></h2>
-        <p>Заполните анкету. Fital Pro подготовит персональную программу по вашим параметрам. При доступности генеративной модели используется ИИ; иначе план рассчитывается сервером по справочнику продуктов. До оплаты вы увидите пример первого дня.</p>
+        <p>Заполните анкету. Fital Pro подготовит персональную программу по вашим параметрам с помощью генеративного ИИ. До оплаты вы увидите пример первого дня. Если ИИ временно недоступен или не может сформировать полный проверенный план, заказ и оплата не создаются — попробуйте позже.</p>
         <div class="form-assurance"><span>✓</span> Данные анкеты не публикуются</div>
         <div class="form-assurance"><span>✓</span> План формируется индивидуально</div>
         <div class="form-assurance"><span>✓</span> Оплата — только после создания плана</div>
@@ -199,14 +200,16 @@
             <label class="field">Возраст<input name="age" type="number" min="18" max="90" value="30" required></label>
             <label class="field">Рост, см<input name="height" type="number" min="120" max="230" value="170" required></label>
             <label class="field">Вес, кг<input name="weight" type="number" min="35" max="250" step="0.1" value="70" required></label>
-            <label class="field">Активность<select name="activity" required><option value="low">Низкая</option><option value="medium" selected>Средняя</option><option value="high">Высокая</option></select></label>
+            <label class="field">Активность<select name="activity" required><option value="minimal">Минимальная</option><option value="light">Лёгкая</option><option value="medium" selected>Средняя</option><option value="high">Высокая</option><option value="athlete">Спортивная</option></select></label>
             <label class="field">Цель<select name="goal" required><option value="loss">Снижение веса</option><option value="maintenance" selected>Поддержание формы</option><option value="gain">Набор массы</option></select></label>
             <label class="field" data-training-field>Где тренируетесь<select name="training" required><option value="home">Дома</option><option value="gym">В зале</option><option value="mixed" selected>Дома и в зале</option></select></label>
             <label class="field" data-training-field>Тренировок в неделю<select name="days" required><option value="2">2 дня</option><option value="3" selected>3 дня</option><option value="4">4 дня</option><option value="5">5 дней</option><option value="6">6 дней</option><option value="7">7 дней</option></select></label>
+            <label class="field">Тип питания<select name="diet" required><option value="classic">Классическое</option><option value="vegetarian">Вегетарианское</option><option value="pescatarian">Пескетарианское</option><option value="gluten_free">Без глютена</option><option value="lactose_free">Без лактозы</option></select></label>
+            <fieldset class="field field-wide dietary-exclusions"><legend>Исключить продукты</legend><label class="check-field"><input type="checkbox" name="exclusions" value="nuts"> Орехи</label><label class="check-field"><input type="checkbox" name="exclusions" value="eggs"> Яйца</label><label class="check-field"><input type="checkbox" name="exclusions" value="soy"> Сою</label><label class="check-field"><input type="checkbox" name="exclusions" value="honey"> Мёд</label></fieldset>
             <label class="field field-wide">Пищевые предпочтения и ограничения<textarea name="preferences" rows="3" maxlength="700" placeholder="Например: не употребляю рыбу, предпочитаю простые блюда. Не указывайте диагнозы и сведения о здоровье."></textarea></label>
           </div>
           <p class="form-consent">Указывайте только сведения, необходимые для составления программы. Не вводите диагнозы, результаты обследований и медицинские документы. Сервис не заменяет медицинскую консультацию.</p>
-          <p class="form-consent">Для подготовки плана используется Cloudflare Workers AI (модели Qwen и OpenAI GPT-OSS в инфраструктуре Cloudflare). Резервный генеративный провайдер Groq может использоваться только при отдельной настройке серверного ключа; сейчас этот провайдер не активирован. Если резервный провайдер будет включён, необходимые параметры анкеты и текст вопроса будут передаваться ему для обработки. Перед отправкой имя клиента заменяется на нейтральное обозначение; контактные и платёжные данные в запрос модели не передаются. При недоступности генеративных моделей план рассчитывается по серверному справочнику продуктов и формулам Fital Pro. Состав передаваемых данных и обработка описаны в <a href="/privacy.html" target="_blank" rel="noopener">Политике обработки персональных данных</a>.</p>
+          <p class="form-consent">Для подготовки персонального плана Fital Pro использует Groq API (GPT-OSS 20B), если в существующем Worker настроен серверный ключ GROQ_API_KEY. При отсутствии ключа или недоступности Groq используются резервные модели Cloudflare Workers AI: Gemma 4 и GPT-OSS. Qwen 3.8 из цепочки генерации планов исключён. Необходимые параметры анкеты передаются выбранному генеративному провайдеру; имя клиента заменяется нейтральным обозначением, контактные и платёжные данные в запрос модели не передаются. Если все генеративные модели недоступны или не формируют полный проверенный план, заказ и оплата не создаются. Состав передаваемых данных и обработка описаны в <a href="/privacy.html" target="_blank" rel="noopener">Политике обработки персональных данных</a>.</p>
           <label class="form-consent form-consent-check"><input name="pd_consent" type="checkbox" required> <span>Согласен(а) на обработку персональных данных по <a href="/privacy.html" target="_blank" rel="noopener">Политике обработки персональных данных</a>.</span></label>
           <label class="form-consent form-consent-check"><input name="offer_accepted" type="checkbox" required> <span>Принимаю условия <a href="/oferta.html" target="_blank" rel="noopener">публичной оферты</a> и <a href="/delivery-refund.html" target="_blank" rel="noopener">условия оказания услуг и возврата</a>.</span></label>
           <button class="button button-primary button-full" id="generateButton" type="submit">Создать мой персональный план <span>↗</span></button>
@@ -253,10 +256,12 @@
             <label class="field">Возраст<input name="age" type="number" min="18" max="90" required></label>
             <label class="field">Рост, см<input name="height" type="number" min="120" max="230" required></label>
             <label class="field">Вес, кг<input name="weight" type="number" min="35" max="250" step="0.1" required></label>
-            <label class="field">Активность<select name="activity" required><option value="low">Низкая</option><option value="medium">Средняя</option><option value="high">Высокая</option></select></label>
+            <label class="field">Активность<select name="activity" required><option value="minimal">Минимальная</option><option value="light">Лёгкая</option><option value="medium" selected>Средняя</option><option value="high">Высокая</option><option value="athlete">Спортивная</option></select></label>
             <label class="field">Цель<select name="goal" required><option value="loss">Снижение веса</option><option value="maintenance">Поддержание формы</option><option value="gain">Набор массы</option></select></label>
             <label class="field" data-training-field>Где тренируетесь<select name="training" required><option value="home">Дома</option><option value="gym">В зале</option><option value="mixed">Дома и в зале</option></select></label>
             <label class="field" data-training-field>Тренировок в неделю<select name="days" required><option value="2">2 дня</option><option value="3">3 дня</option><option value="4">4 дня</option><option value="5">5 дней</option><option value="6">6 дней</option><option value="7">7 дней</option></select></label>
+            <label class="field">Тип питания<select name="diet" required><option value="classic">Классическое</option><option value="vegetarian">Вегетарианское</option><option value="pescatarian">Пескетарианское</option><option value="gluten_free">Без глютена</option><option value="lactose_free">Без лактозы</option></select></label>
+            <fieldset class="field field-wide dietary-exclusions"><legend>Исключить продукты</legend><label class="check-field"><input type="checkbox" name="exclusions" value="nuts"> Орехи</label><label class="check-field"><input type="checkbox" name="exclusions" value="eggs"> Яйца</label><label class="check-field"><input type="checkbox" name="exclusions" value="soy"> Сою</label><label class="check-field"><input type="checkbox" name="exclusions" value="honey"> Мёд</label></fieldset>
             <label class="field field-wide">Пищевые предпочтения и ограничения<textarea name="preferences" rows="3" maxlength="700" placeholder="Укажите продукты, которые не употребляете, и пищевые предпочтения"></textarea></label>
           </div>
           <button class="button button-primary button-full" id="saveProfileButton" type="submit">Сохранить анкету и пересобрать план</button>
