@@ -1418,18 +1418,24 @@ async function checkout(request, env, forceTestMode = false) {
   const receiptForSignature = setRobokassaReceiptParameter(params, receiptJson);
   params.set('Culture', 'ru');
   params.set('Encoding', 'utf-8');
-  const returnBase = new URL(testMode ? '/robokassa-test.html' : '/', request.url);
-  const successUrl = new URL(returnBase);
-  successUrl.searchParams.set('payment', 'success');
-  successUrl.searchParams.set('ref', clientRef);
-  const failUrl = new URL(returnBase);
-  failUrl.searchParams.set('payment', 'fail');
-  const successUrl2 = encodeURIComponent(successUrl.toString());
-  const failUrl2 = encodeURIComponent(failUrl.toString());
-  params.set('SuccessUrl2', successUrl.toString());
-  params.set('SuccessUrl2Method', 'GET');
-  params.set('FailUrl2', failUrl.toString());
-  params.set('FailUrl2Method', 'GET');
+  // Keep the test request minimal while preserving Receipt for fiscal-data inspection.
+  // Production continues using the configured secondary success/fail redirects.
+  let successUrl2;
+  let failUrl2;
+  if (!forceTestMode) {
+    const returnBase = new URL('/', request.url);
+    const successUrl = new URL(returnBase);
+    successUrl.searchParams.set('payment', 'success');
+    successUrl.searchParams.set('ref', clientRef);
+    const failUrl = new URL(returnBase);
+    failUrl.searchParams.set('payment', 'fail');
+    successUrl2 = encodeURIComponent(successUrl.toString());
+    failUrl2 = encodeURIComponent(failUrl.toString());
+    params.set('SuccessUrl2', successUrl.toString());
+    params.set('SuccessUrl2Method', 'GET');
+    params.set('FailUrl2', failUrl.toString());
+    params.set('FailUrl2Method', 'GET');
+  }
   const signature = buildRobokassaPaymentSignature({
     merchant,
     outSum: product.amount,
