@@ -47,10 +47,14 @@ function setRobokassaReceiptParameter(params, receiptJson) {
 }
 
 function buildRobokassaPaymentSignature({ merchant, outSum, invId, receipt = '', successUrl2, failUrl2, password1, clientRef }) {
-  // Robokassa signs URL-encoded Receipt before the optional StepByStep and ResultUrl2 slots.
+  // Include only modifiers actually sent to Robokassa, in its documented order.
+  // Empty StepByStep/ResultUrl2 slots must not add extra separators to SignatureValue.
+  const modifiers = [];
+  if (receipt) modifiers.push(receipt);
+  if (successUrl2) modifiers.push(successUrl2, 'GET');
+  if (failUrl2) modifiers.push(failUrl2, 'GET');
   const base = [
-    merchant, outSum, invId, receipt, '', '',
-    successUrl2, 'GET', failUrl2, 'GET', password1, 'Shp_ref=' + clientRef
+    merchant, outSum, invId, ...modifiers, password1, 'Shp_ref=' + clientRef
   ].join(':');
   return md5(base);
 }
