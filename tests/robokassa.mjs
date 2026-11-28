@@ -3,33 +3,19 @@ import { createHash } from 'node:crypto';
 import {
   setRobokassaReceiptParameter,
   buildRobokassaPaymentSignature,
+  setRobokassaRedirectParameters,
   robokassaResultSignature,
   verifyRobokassaResultSignature
 } from '../_worker.js';
 
-const paymentInput = {
-  merchant: 'fitalpro-test',
+const md5 = value => createHash('md5').update(value, 'utf8').digest('hex').toUpperCase();
+const commonInput = {
+  merchant: 'fitalpro',
   outSum: '990.00',
   invId: 42,
-  successUrl2: 'https%3A%2F%2Fexample.test%2F%3Fpayment%3Dsuccess',
-  failUrl2: 'https%3A%2F%2Fexample.test%2F%3Fpayment%3Dfail',
-  password1: 'test-password-1',
+  password1: 'fixture-test-password-1',
   clientRef: 'test-order-ref'
 };
-const paymentBase = [
-  paymentInput.merchant,
-  paymentInput.outSum,
-  paymentInput.invId,
-  paymentInput.successUrl2,
-  'GET',
-  paymentInput.failUrl2,
-  'GET',
-  paymentInput.password1,
-  'Shp_ref=' + paymentInput.clientRef
-].join(':');
-const expectedPaymentSignature = createHash('md5').update(paymentBase, 'utf8').digest('hex').toUpperCase();
-assert.equal(buildRobokassaPaymentSignature(paymentInput), expectedPaymentSignature,
-  'payment signature must include the three empty Robokassa parameter slots in the documented order');
 const receiptJson = JSON.stringify({
   items: [{
     name: 'Fital Pro — Питание, 7 дней',
@@ -43,30 +29,76 @@ const receiptJson = JSON.stringify({
 const receiptParams = new URLSearchParams();
 const receiptForSignature = setRobokassaReceiptParameter(receiptParams, receiptJson);
 assert.equal(receiptParams.get('Receipt'), encodeURIComponent(receiptJson),
-  'Robokassa Receipt value must be URL-encoded JSON before transport encoding');
+  'Robokassa Receipt parameter must contain URL-encoded JSON');
 assert.equal(new URLSearchParams(receiptParams.toString()).get('Receipt'), encodeURIComponent(receiptJson),
-  'Robokassa must receive the URL-encoded Receipt value after one transport decode');
+  'transport decoding must preserve the URL-encoded Receipt value');
 assert.equal(decodeURIComponent(new URLSearchParams(receiptParams.toString()).get('Receipt')), receiptJson,
-  'the transported Receipt value must decode back to the exact fiscal JSON');
-assert.equal(receiptForSignature, encodeURIComponent(receiptJson),
-  'Robokassa payment signature must use the URL-encoded Receipt value');
-const receiptInput = { ...paymentInput, receipt: receiptForSignature };
-const receiptBase = [
-  receiptInput.merchant,
-  receiptInput.outSum,
-  receiptInput.invId,
-  receiptInput.receipt,
-  receiptInput.successUrl2,
-  'GET',
-  receiptInput.failUrl2,
-  'GET',
-  receiptInput.password1,
-  'Shp_ref=' + receiptInput.clientRef
-].join(':');
-const expectedReceiptSignature = createHash('md5').update(receiptBase, 'utf8').digest('hex').toUpperCase();
-assert.equal(buildRobokassaPaymentSignature(receiptInput), expectedReceiptSignature,
-  'payment signature must include URL-encoded Receipt and preserve the documented modifier order');
+  'the transported Receipt value must decode to the exact fiscal JSON');
 
+// TEST CHECKOUT: only Receipt is a modifier; neither secondary redirect URL nor method is sent or signed.
+const testParams = new URLSearchParams();
+const testRedirects = setRobokassaRedirectParameters(testParams, {
+  forceTestMode: true,
+  requestUrl: 'https://fital-pro.example/checkout',
+  clientRef: commonInput.clientRef
+});
+assert.deepEqual(testRedirects, { successUrl2: undefined, failUrl2: undefined });
+assert.deepEqual([...testParams.keys()], [],
+  'test checkout must not send SuccessUrl2/FailUrl2 or their methods');
+const testInput = { ...commonInput, receipt: receiptForSignature };
+const expectedTestBase = [
+  commonInput.merchant,
+  commonInput.outSum,
+  String(commonInput.invId),
+  receiptForSignature,
+  commonInput.password1,
+  'Shp_ref=' + commonInput.clientRef
+].join(':');
+const expectedTestSignature = md5(expectedTestBase);
+assert.equal(buildRobokassaPaymentSignature(testInput), expectedTestSignature,
+  'test SignatureValue must be MD5 of MerchantLogin:OutSum:InvId:Receipt:test Password #1:Shp_ref');
+
+// PRODUCTION REGRESSION: preserve both secondary redirects, GET methods and their exact signature order.
+const productionParams = new URLSearchParams();
+const productionRedirects = setRobokassaRedirectParameters(productionParams, {
+  forceTestMode: false,
+  requestUrl: 'https://fital-pro.example/checkout',
+  clientRef: commonInput.clientRef
+});
+const expectedSuccessUrl = 'https://fital-pro.example/?payment=success&ref=test-order-ref';
+const expectedFailUrl = 'https://fital-pro.example/?payment=fail';
+assert.deepEqual(productionRedirects, {
+  successUrl2: encodeURIComponent(expectedSuccessUrl),
+  failUrl2: encodeURIComponent(expectedFailUrl)
+});
+assert.deepEqual([...productionParams.entries()], [
+  ['SuccessUrl2', expectedSuccessUrl],
+  ['SuccessUrl2Method', 'GET'],
+  ['FailUrl2', expectedFailUrl],
+  ['FailUrl2Method', 'GET']
+], 'Production must retain the exact existing secondary redirect parameters and methods');
+const productionInput = {
+  ...commonInput,
+  receipt: receiptForSignature,
+  successUrl2: productionRedirects.successUrl2,
+  failUrl2: productionRedirects.failUrl2
+};
+const expectedProductionBase = [
+  commonInput.merchant,
+  commonInput.outSum,
+  String(commonInput.invId),
+  receiptForSignature,
+  productionRedirects.successUrl2,
+  'GET',
+  productionRedirects.failUrl2,
+  'GET',
+  commonInput.password1,
+  'Shp_ref=' + commonInput.clientRef
+].join(':');
+assert.equal(buildRobokassaPaymentSignature(productionInput), md5(expectedProductionBase),
+  'Production SignatureValue must retain the existing URL modifiers in documented order');
+
+// ResultURL regression coverage.
 const fields = {
   OutSum: '990.00',
   InvId: '42',
@@ -74,17 +106,17 @@ const fields = {
   Shp_z: 'last',
   Shp_a: 'first'
 };
-const expectedResultBase = '990.00:42:test-password-2:Shp_a=first:Shp_ref=test-order-ref:Shp_z=last';
-const expectedResultSignature = createHash('md5').update(expectedResultBase, 'utf8').digest('hex').toUpperCase();
-assert.equal(robokassaResultSignature(fields.OutSum, fields.InvId, 'test-password-2', fields), expectedResultSignature,
+const expectedResultBase = '990.00:42:fixture-test-password-2:Shp_a=first:Shp_ref=test-order-ref:Shp_z=last';
+const expectedResultSignature = md5(expectedResultBase);
+assert.equal(robokassaResultSignature(fields.OutSum, fields.InvId, 'fixture-test-password-2', fields), expectedResultSignature,
   'ResultURL signature must sort all Shp parameters by name');
-assert.equal(verifyRobokassaResultSignature(fields.OutSum, fields.InvId, 'test-password-2', fields, expectedResultSignature), true,
+assert.equal(verifyRobokassaResultSignature(fields.OutSum, fields.InvId, 'fixture-test-password-2', fields, expectedResultSignature), true,
   'valid ResultURL signature must be accepted');
 assert.equal(verifyRobokassaResultSignature(fields.OutSum, fields.InvId, 'wrong-password', fields, expectedResultSignature), false,
   'wrong Password #2 must be rejected');
-assert.equal(verifyRobokassaResultSignature('990.01', fields.InvId, 'test-password-2', fields, expectedResultSignature), false,
+assert.equal(verifyRobokassaResultSignature('990.01', fields.InvId, 'fixture-test-password-2', fields, expectedResultSignature), false,
   'tampered payment amount must be rejected');
-assert.equal(verifyRobokassaResultSignature(fields.OutSum, fields.InvId, 'test-password-2', { ...fields, Shp_ref: 'other-order' }, expectedResultSignature), false,
+assert.equal(verifyRobokassaResultSignature(fields.OutSum, fields.InvId, 'fixture-test-password-2', { ...fields, Shp_ref: 'other-order' }, expectedResultSignature), false,
   'tampered order reference must be rejected');
 
-console.log('PASS: Robokassa payment and ResultURL signature regression tests');
+console.log('PASS: Robokassa test/Production payment signatures and ResultURL regression tests');
