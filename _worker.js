@@ -2452,6 +2452,20 @@ export default {
           ((mutatingMethod && !previewDiagnosticPath && !previewTestPath) || url.pathname === '/webhooks/robokassa')) {
         return json({ error: 'Временный Preview: публичные записи, заказы и платёжные уведомления отключены.' }, 503);
       }
+      // Robokassa's ResultURL is configured at the shop level. The existing
+      // cabinet points to the Worker root, so recognize signed callback fields
+      // there while leaving ordinary site visits and redirect URLs untouched.
+      if (url.pathname === '/' && (request.method === 'GET' || request.method === 'POST')) {
+        let callbackFields = {};
+        if (request.method === 'GET') {
+          callbackFields = Object.fromEntries(url.searchParams.entries());
+        } else if ((request.headers.get('content-type') || '').toLowerCase().includes('application/x-www-form-urlencoded')) {
+          callbackFields = await parsePaymentFields(request.clone());
+        }
+        if (getField(callbackFields, 'OutSum') && getField(callbackFields, 'InvId') && getField(callbackFields, 'SignatureValue')) {
+          return await robokassaWebhook(request, env);
+        }
+      }
       if (url.pathname === '/health' && request.method === 'GET') {
         const dbReady = await d1SchemaIsReady(env.DB);
         return json({
