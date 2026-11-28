@@ -3,7 +3,8 @@ import {
   robokassaWebhook,
   paymentStatus,
   robokassaResultSignature,
-  testCheckout
+  testCheckout,
+  testCompletePayment
 } from '../_worker.js';
 import worker from '../_worker.js';
 
@@ -324,6 +325,33 @@ const deniedTestCheckout = await testCheckout(new Request('https://fitalpro.test
 }), { ROBOKASSA_TEST_ACCESS_KEY: 'expected-key' });
 assert.equal(deniedTestCheckout.status, 404);
 
+const deniedTestCompletion = await testCompletePayment(new Request('https://fitalpro.test/api/checkout-test/complete', {
+  method: 'POST',
+  headers: {
+    'X-Fital-Test-Key': 'wrong-key',
+    Origin: 'https://fitalpro.test',
+    'content-type': 'application/json'
+  },
+  body: JSON.stringify({ client_ref: order.client_ref })
+}), { ROBOKASSA_TEST_ACCESS_KEY: 'expected-key' });
+assert.equal(deniedTestCompletion.status, 404, 'test callback simulation must require the private access key');
+
+// The test-only simulator must never complete a real Production order.
+const liveOrderDb = new MockD1();
+liveOrderDb.orders.set(42, { ...order, is_test: 0 });
+const liveOrderCompletion = await testCompletePayment(new Request('https://fitalpro.test/api/checkout-test/complete', {
+  method: 'POST',
+  headers: {
+    'X-Fital-Test-Key': 'expected-key',
+    Origin: 'https://fitalpro.test',
+    Cookie: 'fitalpro_checkout_' + order.client_ref + '=' + order.client_ref,
+    'content-type': 'application/json'
+  },
+  body: JSON.stringify({ client_ref: order.client_ref })
+}), { DB: liveOrderDb, ROBOKASSA_TEST_ACCESS_KEY: 'expected-key', ROBOKASSA_TEST_PASSWORD2: password2 });
+assert.equal(liveOrderCompletion.status, 404);
+assert.equal(liveOrderDb.payments.size, 0);
+
 // Production orders continue to use Password #2 even while test credentials
 // are present and the global Worker mode remains production (0).
 const livePassword2 = 'live-password-2';
@@ -462,21 +490,32 @@ assert.ok(invId && clientRef, 'checkout must retain the order ID and private cli
 const lockedPlanResponse = await worker.fetch(new Request('https://fitalpro.test/api/plan'), flowEnv);
 assert.equal(lockedPlanResponse.status, 403, 'full plan must remain locked before the payment notification');
 
-const flowFields = {
-  OutSum: checkoutPayload.amount,
-  InvId: invId,
-  Shp_ref: clientRef
-};
-flowFields.SignatureValue = robokassaResultSignature(
-  flowFields.OutSum, flowFields.InvId, flowEnv.ROBOKASSA_TEST_PASSWORD2, flowFields
-);
-const flowWebhook = await worker.fetch(new Request('https://fitalpro.test/webhooks/robokassa', {
+const flowCompleteResponse = await worker.fetch(new Request('https://fitalpro.test/api/checkout-test/complete', {
   method: 'POST',
-  headers: { 'content-type': 'application/x-www-form-urlencoded' },
-  body: new URLSearchParams(flowFields)
+  headers: {
+    'content-type': 'application/json',
+    'X-Fital-Test-Key': flowEnv.ROBOKASSA_TEST_ACCESS_KEY,
+    Origin: 'https://fitalpro.test',
+    Cookie: checkoutCookie
+  },
+  body: JSON.stringify({ client_ref: clientRef })
 }), flowEnv);
-assert.equal(flowWebhook.status, 200, 'a valid signed payment notification must activate the order');
-assert.equal(await flowWebhook.text(), 'OK' + invId);
+assert.equal(flowCompleteResponse.status, 200, 'the protected test-only callback simulation must activate the test order');
+const flowCompletePayload = await flowCompleteResponse.json();
+assert.equal(flowCompletePayload.simulated, true, 'the response must clearly identify the callback as simulated');
+assert.equal(flowDb.orders.get(Number(invId)).status, 'paid');
+assert.equal(flowDb.payments.has('robokassa-test-' + invId), true);
+const repeatedFlowComplete = await worker.fetch(new Request('https://fitalpro.test/api/checkout-test/complete', {
+  method: 'POST',
+  headers: {
+    'content-type': 'application/json',
+    'X-Fital-Test-Key': flowEnv.ROBOKASSA_TEST_ACCESS_KEY,
+    Origin: 'https://fitalpro.test',
+    Cookie: checkoutCookie
+  },
+  body: JSON.stringify({ client_ref: clientRef })
+}), flowEnv);
+assert.equal(repeatedFlowComplete.status, 409, 'a test order must not be completed twice');
 
 const flowStatusResponse = await worker.fetch(new Request(
   'https://fitalpro.test/api/payment-status?ref=' + encodeURIComponent(clientRef),
