@@ -353,7 +353,7 @@ const foreignOriginCompletion = await testCompletePayment(new Request('https://f
   headers: {
     'X-Fital-Test-Key': 'expected-key',
     Origin: 'https://attacker.example',
-    Cookie: 'fitalpro_checkout_' + liveOrderClientRef + '=' + liveOrderClientRef,
+    Cookie: 'fitalpro_checkout_' + order.client_ref + '=' + order.client_ref,
     'content-type': 'application/json'
   },
   body: JSON.stringify({ client_ref: order.client_ref })
@@ -369,7 +369,7 @@ const liveOrderCompletion = await testCompletePayment(new Request('https://fital
   headers: {
     'X-Fital-Test-Key': 'expected-key',
     Origin: 'https://fitalpro.test',
-    Cookie: 'fitalpro_checkout_' + order.client_ref + '=' + order.client_ref,
+    Cookie: 'fitalpro_checkout_' + liveOrderClientRef + '=' + liveOrderClientRef,
     'content-type': 'application/json'
   },
   body: JSON.stringify({ client_ref: liveOrderClientRef })
