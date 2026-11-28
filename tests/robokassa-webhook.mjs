@@ -336,6 +336,29 @@ const deniedTestCompletion = await testCompletePayment(new Request('https://fita
 }), { ROBOKASSA_TEST_ACCESS_KEY: 'expected-key' });
 assert.equal(deniedTestCompletion.status, 404, 'test callback simulation must require the private access key');
 
+const missingSessionCompletion = await testCompletePayment(new Request('https://fitalpro.test/api/checkout-test/complete', {
+  method: 'POST',
+  headers: {
+    'X-Fital-Test-Key': 'expected-key',
+    Origin: 'https://fitalpro.test',
+    'content-type': 'application/json'
+  },
+  body: JSON.stringify({ client_ref: order.client_ref })
+}), { DB: env.DB, ROBOKASSA_TEST_ACCESS_KEY: 'expected-key', ROBOKASSA_TEST_PASSWORD2: password2 });
+assert.equal(missingSessionCompletion.status, 403, 'test callback simulation must require the order-specific session cookie');
+
+const foreignOriginCompletion = await testCompletePayment(new Request('https://fitalpro.test/api/checkout-test/complete', {
+  method: 'POST',
+  headers: {
+    'X-Fital-Test-Key': 'expected-key',
+    Origin: 'https://attacker.example',
+    Cookie: 'fitalpro_checkout_' + order.client_ref + '=' + order.client_ref,
+    'content-type': 'application/json'
+  },
+  body: JSON.stringify({ client_ref: order.client_ref })
+}), { DB: env.DB, ROBOKASSA_TEST_ACCESS_KEY: 'expected-key', ROBOKASSA_TEST_PASSWORD2: password2 });
+assert.equal(foreignOriginCompletion.status, 403, 'test callback simulation must reject cross-origin requests');
+
 // The test-only simulator must never complete a real Production order.
 const liveOrderDb = new MockD1();
 liveOrderDb.orders.set(42, { ...order, is_test: 0 });
