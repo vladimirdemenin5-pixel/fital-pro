@@ -60,14 +60,16 @@ function buildRobokassaPaymentSignature({ merchant, outSum, invId, receipt = '',
 }
 
 function setRobokassaRedirectParameters(params, { forceTestMode, requestUrl, clientRef }) {
-  // The isolated test checkout omits secondary redirects; Production keeps them.
-  if (forceTestMode) return { successUrl2: undefined, failUrl2: undefined };
-  const returnBase = new URL('/', requestUrl);
+  // Test orders return to the private test page; Production keeps the public home-page return.
+  const returnBase = new URL(forceTestMode ? '/robokassa-test.html' : '/', requestUrl);
   const successUrl = new URL(returnBase);
   successUrl.searchParams.set('payment', 'success');
   successUrl.searchParams.set('ref', clientRef);
   const failUrl = new URL(returnBase);
   failUrl.searchParams.set('payment', 'fail');
+  if (!forceTestMode) {
+    // Preserve the existing public Production return URL.
+  }
   const successUrl2 = encodeURIComponent(successUrl.toString());
   const failUrl2 = encodeURIComponent(failUrl.toString());
   params.set('SuccessUrl2', successUrl.toString());
@@ -1577,6 +1579,78 @@ async function testCheckout(request, env) {
   return checkout(request, env, true);
 }
 
+async function testCompletePayment(request, env) {
+  const expectedKey = clean(env.ROBOKASSA_TEST_ACCESS_KEY, 256);
+  const suppliedKey = clean(request.headers.get('X-Fital-Test-Key'), 256);
+  if (!expectedKey || !suppliedKey || !sameHash(md5(expectedKey), md5(suppliedKey))) {
+    return json({ error: 'Тестовый доступ не настроен или ключ неверен.' }, 404);
+  }
+  if (!env.DB) return json({ error: 'База данных не подключена.' }, 503);
+  if (request.headers.get('Origin') !== new URL(request.url).origin) {
+    return json({ error: 'Недопустимый источник тестового запроса.' }, 403);
+  }
+  if (!(await rateLimit(request, env, 'checkout-test-complete', 5, 3600000))) {
+    return json({ error: 'Слишком много попыток. Попробуйте позже.' }, 429);
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: 'Некорректный запрос тестового подтверждения.' }, 400);
+  }
+  const clientRef = clean(body?.client_ref, 80);
+  if (!/^[a-f0-9]{32}$/i.test(clientRef)) {
+    return json({ error: 'Не найден тестовый заказ.' }, 404);
+  }
+
+  await ensurePendingOrdersSchema(env);
+  const checkoutCookieName = 'fitalpro_checkout_' + clientRef;
+  const checkoutCookie = (request.headers.get('Cookie') || '').split(';')
+    .map(item => item.trim())
+    .find(item => item.startsWith(checkoutCookieName + '='))
+    ?.slice(checkoutCookieName.length + 1) || '';
+  if (checkoutCookie !== clientRef) {
+    return json({ error: 'Тестовый заказ не принадлежит этой сессии.' }, 403);
+  }
+
+  const order = await env.DB.prepare(
+    'SELECT * FROM pending_orders WHERE client_ref=?'
+  ).bind(clientRef).first();
+  if (!order || Number(order.is_test) !== 1) {
+    return json({ error: 'Разрешены только тестовые заказы.' }, 404);
+  }
+  if (order.status !== 'pending') {
+    return json({ error: 'Тестовый заказ уже обработан или больше не ожидает подтверждения.' }, 409);
+  }
+
+  const password2 = robokassaPassword(env, 2, true);
+  if (!password2) return json({ error: 'Тестовый пароль Robokassa №2 не настроен.' }, 503);
+
+  // Deliberately simulate a signed ResultURL callback. This verifies the real
+  // webhook/D1/access path, but it is NOT a payment confirmation from Robokassa.
+  const callbackFields = {
+    OutSum: String(order.amount),
+    InvId: String(order.inv_id),
+    Shp_ref: order.client_ref
+  };
+  callbackFields.SignatureValue = robokassaResultSignature(
+    callbackFields.OutSum, callbackFields.InvId, password2, callbackFields
+  );
+  const callback = new Request(new URL('/webhooks/robokassa', request.url), {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(callbackFields).toString()
+  });
+  const result = await robokassaWebhook(callback, env);
+  const resultText = await result.text();
+  if (result.status !== 200 || resultText !== 'OK' + order.inv_id) {
+    console.error('Fital Pro test callback simulation failed:', result.status, resultText);
+    return json({ error: 'Не удалось завершить серверную проверку тестового заказа.' }, 502);
+  }
+  return json({ ok: true, simulated: true, message: 'Имитированное тестовое уведомление обработано; доступ проверяется отдельно.' });
+}
+
 async function robokassaWebhook(request, env) {
   if (!env.DB) return plain('Service unavailable', 503);
   await ensurePendingOrdersSchema(env);
@@ -2401,6 +2475,7 @@ export default {
       if (url.pathname === '/api/ai-diagnostic' && request.method === 'POST') return await aiPlanDiagnostic(request, env);
       if (url.pathname === '/api/ai-data-flow-diagnostic' && request.method === 'POST') return await aiDataFlowDiagnostic(request, env);
       if (url.pathname === '/api/checkout-test' && request.method === 'POST') return await testCheckout(request, env);
+      if (url.pathname === '/api/checkout-test/complete' && request.method === 'POST') return await testCompletePayment(request, env);
       if (url.pathname === '/api/checkout' && request.method === 'POST') return await checkout(request, env);
       if (url.pathname === '/webhooks/robokassa' && (request.method === 'POST' || request.method === 'GET')) {
         return await robokassaWebhook(request, env);
@@ -2422,4 +2497,4 @@ export default {
   }
 };
 
-export { setRobokassaReceiptParameter, buildRobokassaPaymentSignature, setRobokassaRedirectParameters, robokassaResultSignature, verifyRobokassaResultSignature, robokassaWebhook, paymentStatus, testCheckout, aiPlanDiagnostic, aiDataFlowDiagnostic, generateAiPlan, generateCatalogFallbackPlan, buildLocalPlanChatReply, buildLocalPremiumDiaryReview, runAiTextWithFallback, runAiInferenceWithTimeout, runGroqInferenceWithTimeout, FOOD_CATALOG, buildPlanResponseSchema, diagnosePlanWeekFailure, rebalanceDayNutrition, foodAllowedByPreferences, foodRole, foodCanReplaceFood, foodFitsMeal };
+export { setRobokassaReceiptParameter, buildRobokassaPaymentSignature, setRobokassaRedirectParameters, robokassaResultSignature, verifyRobokassaResultSignature, robokassaWebhook, paymentStatus, testCheckout, testCompletePayment, aiPlanDiagnostic, aiDataFlowDiagnostic, generateAiPlan, generateCatalogFallbackPlan, buildLocalPlanChatReply, buildLocalPremiumDiaryReview, runAiTextWithFallback, runAiInferenceWithTimeout, runGroqInferenceWithTimeout, FOOD_CATALOG, buildPlanResponseSchema, diagnosePlanWeekFailure, rebalanceDayNutrition, foodAllowedByPreferences, foodRole, foodCanReplaceFood, foodFitsMeal };
