@@ -3,7 +3,8 @@ import {
   robokassaWebhook,
   paymentStatus,
   robokassaResultSignature,
-  testCheckout
+  testCheckout,
+  completeTestCheckout
 } from '../_worker.js';
 import worker from '../_worker.js';
 
@@ -324,6 +325,13 @@ const deniedTestCheckout = await testCheckout(new Request('https://fitalpro.test
 }), { ROBOKASSA_TEST_ACCESS_KEY: 'expected-key' });
 assert.equal(deniedTestCheckout.status, 404);
 
+const deniedTestCompletion = await completeTestCheckout(new Request('https://fitalpro.test/api/checkout-test/complete', {
+  method: 'POST',
+  headers: { 'X-Fital-Test-Key': 'wrong-key', 'content-type': 'application/json' },
+  body: JSON.stringify({ client_ref: 'a'.repeat(32) })
+}), { ROBOKASSA_TEST_ACCESS_KEY: 'expected-key' });
+assert.equal(deniedTestCompletion.status, 404, 'test completion must reject an invalid access key');
+
 // Production orders continue to use Password #2 even while test credentials
 // are present and the global Worker mode remains production (0).
 const livePassword2 = 'live-password-2';
@@ -462,21 +470,19 @@ assert.ok(invId && clientRef, 'checkout must retain the order ID and private cli
 const lockedPlanResponse = await worker.fetch(new Request('https://fitalpro.test/api/plan'), flowEnv);
 assert.equal(lockedPlanResponse.status, 403, 'full plan must remain locked before the payment notification');
 
-const flowFields = {
-  OutSum: checkoutPayload.amount,
-  InvId: invId,
-  Shp_ref: clientRef
-};
-flowFields.SignatureValue = robokassaResultSignature(
-  flowFields.OutSum, flowFields.InvId, flowEnv.ROBOKASSA_TEST_PASSWORD2, flowFields
-);
-const flowWebhook = await worker.fetch(new Request('https://fitalpro.test/webhooks/robokassa', {
+const completionResponse = await worker.fetch(new Request('https://fitalpro.test/api/checkout-test/complete', {
   method: 'POST',
-  headers: { 'content-type': 'application/x-www-form-urlencoded' },
-  body: new URLSearchParams(flowFields)
+  headers: {
+    'content-type': 'application/json',
+    'X-Fital-Test-Key': flowEnv.ROBOKASSA_TEST_ACCESS_KEY
+  },
+  body: JSON.stringify({ client_ref: clientRef })
 }), flowEnv);
-assert.equal(flowWebhook.status, 200, 'a valid signed payment notification must activate the order');
-assert.equal(await flowWebhook.text(), 'OK' + invId);
+assert.equal(completionResponse.status, 200, 'protected internal completion must accept a valid test order');
+const completionPayload = await completionResponse.json();
+assert.equal(completionPayload.ok, true);
+assert.equal(completionPayload.simulated, true, 'the response must clearly identify an internal simulation');
+assert.equal(completionPayload.inv_id, Number(invId));
 
 const flowStatusResponse = await worker.fetch(new Request(
   'https://fitalpro.test/api/payment-status?ref=' + encodeURIComponent(clientRef),
@@ -505,5 +511,27 @@ assert.equal(savedPlan.plan.week.length, 7);
 assert.equal(savedPlan.plan.week[0].day, 'День 1');
 assert.equal(savedProfile.profile.name, flowProfile.name);
 
-console.log('PASS: full test checkout -> signed payment -> active access -> personal cabinet flow');
+// The internal completion route must never complete an order created in live mode.
+const liveCompletionDb = new MockD1();
+const liveClientRef = 'b'.repeat(32);
+liveCompletionDb.orders.set(88, { ...order, inv_id: 88, client_ref: liveClientRef, is_test: 0, status: 'pending' });
+const liveCompletionEnv = {
+  DB: liveCompletionDb,
+  ROBOKASSA_IS_TEST: '0',
+  ROBOKASSA_TEST_ACCESS_KEY: flowEnv.ROBOKASSA_TEST_ACCESS_KEY,
+  ROBOKASSA_TEST_PASSWORD2: flowEnv.ROBOKASSA_TEST_PASSWORD2
+};
+const liveCompletion = await worker.fetch(new Request('https://fitalpro.test/api/checkout-test/complete', {
+  method: 'POST',
+  headers: {
+    'content-type': 'application/json',
+    'X-Fital-Test-Key': liveCompletionEnv.ROBOKASSA_TEST_ACCESS_KEY
+  },
+  body: JSON.stringify({ client_ref: liveClientRef })
+}), liveCompletionEnv);
+assert.equal(liveCompletion.status, 404, 'test completion must reject a production order');
+assert.equal(liveCompletionDb.orders.get(88).status, 'pending');
+assert.equal(liveCompletionDb.payments.size, 0, 'test route must not create a payment for production orders');
+
+console.log('PASS: full test checkout -> signed test notification -> active access -> personal cabinet flow');
 
