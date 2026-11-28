@@ -470,19 +470,35 @@ assert.ok(invId && clientRef, 'checkout must retain the order ID and private cli
 const lockedPlanResponse = await worker.fetch(new Request('https://fitalpro.test/api/plan'), flowEnv);
 assert.equal(lockedPlanResponse.status, 403, 'full plan must remain locked before the payment notification');
 
-const completionResponse = await worker.fetch(new Request('https://fitalpro.test/api/checkout-test/complete', {
+// The shop's configured ResultURL is the Worker root. This signed callback
+// must be what changes the newly-created pending order into an active subscription.
+assert.equal(flowDb.orders.get(Number(invId)).status, 'pending',
+  'the order must still be pending immediately before the ResultURL callback');
+const rootCallbackFields = {
+  OutSum: String(flowDb.orders.get(Number(invId)).amount),
+  InvId: String(invId),
+  Shp_ref: clientRef
+};
+rootCallbackFields.SignatureValue = robokassaResultSignature(
+  rootCallbackFields.OutSum,
+  rootCallbackFields.InvId,
+  flowEnv.ROBOKASSA_TEST_PASSWORD2,
+  rootCallbackFields
+);
+const rootCallbackResponse = await worker.fetch(new Request('https://fitalpro.test/', {
   method: 'POST',
-  headers: {
-    'content-type': 'application/json',
-    'X-Fital-Test-Key': flowEnv.ROBOKASSA_TEST_ACCESS_KEY
-  },
-  body: JSON.stringify({ client_ref: clientRef })
+  headers: { 'content-type': 'application/x-www-form-urlencoded' },
+  body: new URLSearchParams(rootCallbackFields)
 }), flowEnv);
-assert.equal(completionResponse.status, 200, 'protected internal completion must accept a valid test order');
-const completionPayload = await completionResponse.json();
-assert.equal(completionPayload.ok, true);
-assert.equal(completionPayload.simulated, true, 'the response must clearly identify an internal simulation');
-assert.equal(completionPayload.inv_id, Number(invId));
+assert.equal(rootCallbackResponse.status, 200);
+assert.equal(await rootCallbackResponse.text(), 'OK' + invId,
+  'configured root ResultURL must acknowledge the signed callback');
+assert.equal(flowDb.orders.get(Number(invId)).status, 'paid',
+  'the root ResultURL callback must mark the pending order as paid');
+assert.equal(flowDb.payments.size, 1);
+assert.equal(flowDb.subscriptions.size, 1);
+assert.equal(flowDb.profiles.size, 1);
+assert.equal(flowDb.plans.size, 1);
 
 const flowStatusResponse = await worker.fetch(new Request(
   'https://fitalpro.test/api/payment-status?ref=' + encodeURIComponent(clientRef),
@@ -511,6 +527,38 @@ assert.equal(savedPlan.plan.week.length, 7);
 assert.equal(savedPlan.plan.week[0].day, 'День 1');
 assert.equal(savedProfile.profile.name, flowProfile.name);
 
+// Keep the protected card-free helper covered separately; it must not be
+// confused with the ResultURL callback path tested above.
+const simulationDb = new MockD1();
+const simulationRef = 'c'.repeat(32);
+simulationDb.orders.set(501, {
+  ...order,
+  inv_id: 501,
+  client_ref: simulationRef,
+  status: 'pending',
+  is_test: 1
+});
+const simulationEnv = {
+  DB: simulationDb,
+  ROBOKASSA_IS_TEST: '0',
+  ROBOKASSA_TEST_ACCESS_KEY: flowEnv.ROBOKASSA_TEST_ACCESS_KEY,
+  ROBOKASSA_TEST_PASSWORD2: flowEnv.ROBOKASSA_TEST_PASSWORD2
+};
+const completionResponse = await worker.fetch(new Request('https://fitalpro.test/api/checkout-test/complete', {
+  method: 'POST',
+  headers: {
+    'content-type': 'application/json',
+    'X-Fital-Test-Key': simulationEnv.ROBOKASSA_TEST_ACCESS_KEY
+  },
+  body: JSON.stringify({ client_ref: simulationRef })
+}), simulationEnv);
+assert.equal(completionResponse.status, 200);
+const completionPayload = await completionResponse.json();
+assert.equal(completionPayload.ok, true);
+assert.equal(completionPayload.simulated, true);
+assert.equal(completionPayload.inv_id, 501);
+assert.equal(simulationDb.orders.get(501).status, 'paid');
+
 // The internal completion route must never complete an order created in live mode.
 const liveCompletionDb = new MockD1();
 const liveClientRef = 'b'.repeat(32);
@@ -532,28 +580,6 @@ const liveCompletion = await worker.fetch(new Request('https://fitalpro.test/api
 assert.equal(liveCompletion.status, 404, 'test completion must reject a production order');
 assert.equal(liveCompletionDb.orders.get(88).status, 'pending');
 assert.equal(liveCompletionDb.payments.size, 0, 'test route must not create a payment for production orders');
-
-// The shop's currently configured ResultURL is the Worker root. Verify that
-// a real-form callback posted there reaches the same signature/access handler.
-const rootCallbackFields = {
-  OutSum: String(flowDb.orders.get(Number(invId)).amount),
-  InvId: String(invId),
-  Shp_ref: clientRef
-};
-rootCallbackFields.SignatureValue = robokassaResultSignature(
-  rootCallbackFields.OutSum,
-  rootCallbackFields.InvId,
-  flowEnv.ROBOKASSA_TEST_PASSWORD2,
-  rootCallbackFields
-);
-const rootCallbackResponse = await worker.fetch(new Request('https://fitalpro.test/', {
-  method: 'POST',
-  headers: { 'content-type': 'application/x-www-form-urlencoded' },
-  body: new URLSearchParams(rootCallbackFields)
-}), flowEnv);
-assert.equal(rootCallbackResponse.status, 200);
-assert.equal(await rootCallbackResponse.text(), 'OK' + invId,
-  'configured root ResultURL must return Robokassa acknowledgement');
 
 console.log('PASS: full test checkout -> signed test notification -> active access -> personal cabinet flow');
 
