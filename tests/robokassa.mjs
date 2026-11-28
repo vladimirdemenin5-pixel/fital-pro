@@ -35,22 +35,40 @@ assert.equal(new URLSearchParams(receiptParams.toString()).get('Receipt'), encod
 assert.equal(decodeURIComponent(new URLSearchParams(receiptParams.toString()).get('Receipt')), receiptJson,
   'the transported Receipt value must decode to the exact fiscal JSON');
 
-// TEST CHECKOUT: only Receipt is a modifier; neither secondary redirect URL nor method is sent or signed.
+// TEST CHECKOUT: send isolated success/fail returns to the test page and sign every sent modifier.
 const testParams = new URLSearchParams();
 const testRedirects = setRobokassaRedirectParameters(testParams, {
   forceTestMode: true,
   requestUrl: 'https://fital-pro.example/checkout',
   clientRef: commonInput.clientRef
 });
-assert.deepEqual(testRedirects, { successUrl2: undefined, failUrl2: undefined });
-assert.deepEqual([...testParams.keys()], [],
-  'test checkout must not send SuccessUrl2/FailUrl2 or their methods');
-const testInput = { ...commonInput, receipt: receiptForSignature };
+const expectedTestSuccessUrl = 'https://fital-pro.example/robokassa-test.html?payment=success&ref=test-order-ref';
+const expectedTestFailUrl = 'https://fital-pro.example/robokassa-test.html?payment=fail';
+assert.deepEqual(testRedirects, {
+  successUrl2: encodeURIComponent(expectedTestSuccessUrl),
+  failUrl2: encodeURIComponent(expectedTestFailUrl)
+});
+assert.deepEqual([...testParams.entries()], [
+  ['SuccessUrl2', expectedTestSuccessUrl],
+  ['SuccessUrl2Method', 'GET'],
+  ['FailUrl2', expectedTestFailUrl],
+  ['FailUrl2Method', 'GET']
+], 'test checkout must return to the isolated test page');
+const testInput = {
+  ...commonInput,
+  receipt: receiptForSignature,
+  successUrl2: testRedirects.successUrl2,
+  failUrl2: testRedirects.failUrl2
+};
 const expectedTestBase = [
   commonInput.merchant,
   commonInput.outSum,
   String(commonInput.invId),
   receiptForSignature,
+  testRedirects.successUrl2,
+  'GET',
+  testRedirects.failUrl2,
+  'GET',
   commonInput.password1,
   'Shp_ref=' + commonInput.clientRef
 ].join(':');

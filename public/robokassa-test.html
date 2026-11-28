@@ -56,6 +56,12 @@
       <input id="preferences" maxlength="700" placeholder="Нет">
       <button id="submit" type="submit">Перейти к тестовой оплате</button>
     </form>
+    <section id="testActions" hidden>
+      <p>Тестовый заказ создан. Выберите, что проверить:</p>
+      <button id="simulateCompletion" type="button">Проверить выдачу доступа без банковской карты</button>
+      <button id="openRobokassa" type="button">Открыть страницу Robokassa</button>
+      <p class="note">Первая кнопка имитирует подписанное уведомление ResultURL внутри тестового Worker и проверяет D1 и выдачу доступа. Это НЕ подтверждение оплаты от Robokassa. Вторая открывает настоящую тестовую страницу Robokassa.</p>
+    </section>
     <div id="message" role="status" aria-live="polite">Тестовая страница не отображается в основном меню сайта.</div>
     <p class="note">Не вводите здесь рабочие пароли Robokassa. Ключ тестирования не сохраняется в браузере и не передаётся в адресной строке.</p>
   </main>
@@ -63,20 +69,30 @@
     const form = document.getElementById('testForm');
     const button = document.getElementById('submit');
     const message = document.getElementById('message');
+    const actions = document.getElementById('testActions');
+    const simulateButton = document.getElementById('simulateCompletion');
+    const paymentButton = document.getElementById('openRobokassa');
     const params = new URLSearchParams(location.search);
+    let activeOrderRef = '';
+    let activeConfirmationUrl = '';
     const say = value => { message.textContent = value; };
     const value = id => document.getElementById(id).value;
     const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-    async function checkPayment(ref) {
+    async function checkPayment(ref, simulated = false) {
       form.hidden = true;
-      say('Возврат из Robokassa получен. Проверяю серверное подтверждение и создание доступа…');
+      actions.hidden = true;
+      say(simulated
+        ? 'Проверяю результат имитации уведомления и сохранение доступа в D1…'
+        : 'Проверяю серверное подтверждение Robokassa и создание доступа…');
       for (let i = 0; i < 24; i++) {
         try {
           const response = await fetch('/api/payment-status?ref=' + encodeURIComponent(ref), { credentials: 'same-origin', cache: 'no-store' });
           const data = await response.json();
           if (data.status === 'active' && data.access_token) {
-            say('УСПЕШНО: тестовая оплата подтверждена сервером. Подписка и доступ созданы, профиль и персональный план сохранены в D1. Токен не выводится на эту страницу.');
+            say(simulated
+              ? 'УСПЕШНО: подписанное тестовое уведомление обработано Worker. Запись оплаты, активная подписка, профиль и персональный план сохранены в D1. Это серверный тест, не платёж Robokassa.'
+              : 'УСПЕШНО: Robokassa подтвердила тестовую оплату. Подписка, профиль и персональный план сохранены в D1. Токен не выводится на эту страницу.');
             return;
           }
           if (data.status === 'processing') say('Платёж подтверждён. Завершается сохранение профиля и плана…');
@@ -116,13 +132,45 @@
           body: JSON.stringify({ plan: value('plan'), contact: value('contact'), profile, pd_consent: true, offer_accepted: true })
         });
         const data = await response.json();
-        if (!response.ok || !data.confirmation_url) throw new Error(data.error || 'Не удалось создать тестовый заказ.');
-        say('Заказ готов. Перенаправляю в Robokassa…');
-        location.assign(data.confirmation_url);
+        if (!response.ok || !data.confirmation_url || !data.client_ref) throw new Error(data.error || 'Не удалось создать тестовый заказ.');
+        activeOrderRef = data.client_ref;
+        activeConfirmationUrl = data.confirmation_url;
+        form.hidden = true;
+        actions.hidden = false;
+        say('Тестовый заказ создан. Можно проверить серверную активацию без карты или открыть тестовую страницу Robokassa.');
       } catch (error) {
         say(error.message || 'Ошибка тестирования. Проверьте тестовые настройки.');
         button.disabled = false;
       }
+    });
+
+    simulateButton.addEventListener('click', async () => {
+      if (!activeOrderRef) return;
+      simulateButton.disabled = true;
+      paymentButton.disabled = true;
+      say('Отправляю защищённый тестовый запрос. Worker имитирует подписанный ResultURL и проходит тот же обработчик, что и уведомление Robokassa…');
+      try {
+        const response = await fetch('/api/checkout-test/complete', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'content-type': 'application/json',
+            'X-Fital-Test-Key': value('testKey')
+          },
+          body: JSON.stringify({ client_ref: activeOrderRef })
+        });
+        const data = await response.json();
+        if (!response.ok || data.simulated !== true) throw new Error(data.error || 'Тестовая активация не завершена.');
+        await checkPayment(activeOrderRef, true);
+      } catch (error) {
+        say(error.message || 'Не удалось завершить серверную тестовую проверку.');
+        simulateButton.disabled = false;
+        paymentButton.disabled = false;
+      }
+    });
+
+    paymentButton.addEventListener('click', () => {
+      if (activeConfirmationUrl) location.assign(activeConfirmationUrl);
     });
   </script>
 </body>
