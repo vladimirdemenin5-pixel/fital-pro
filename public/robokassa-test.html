@@ -193,10 +193,10 @@
         const origin = result.verification === 'existing-robokassa-resulturl'
           ? 'Уведомление Robokassa уже было обработано ранее.'
           : 'Worker самостоятельно сформировал и обработал синтетическое тестовое уведомление ResultURL.';
-        say('ПРОВЕРКА СЕРВИСА ПРОЙДЕНА.\\n' +
-          origin + '\\n' +
+        say('ПРОВЕРКА СЕРВИСА ПРОЙДЕНА.\n' +
+          origin + '\n' +
           'Проверено: тестовая подпись Пароля №2, D1, активная подписка, сохранённая анкета, персональный план (' +
-          savedPlan.plan.week.length + ' дней) и доступ к API кабинета.\\n' +
+          savedPlan.plan.week.length + ' дней) и доступ к API кабинета.\n' +
           'Важно: при синтетическом сценарии Robokassa не проводит платёж, и реальный callback от Robokassa этим тестом не проверяется.');
         form.hidden = true;
       } catch (error) {
