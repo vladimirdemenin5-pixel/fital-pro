@@ -490,6 +490,26 @@ assert.equal(unboundSimulation.status, 404,
   'the simulation must require the order-specific checkout cookie');
 assert.equal(flowDb.orders.get(Number(invId)).status, 'pending');
 
+const productionGuardDb = new MockD1();
+productionGuardDb.orders.set(Number(invId), {
+  ...flowDb.orders.get(Number(invId)),
+  is_test: 0,
+  status: 'pending'
+});
+const productionGuardResponse = await worker.fetch(new Request('https://fital-pro.test/api/checkout-test/simulate-success', {
+  method: 'POST',
+  headers: {
+    'content-type': 'application/json',
+    'X-Fital-Test-Key': flowEnv.ROBOKASSA_TEST_ACCESS_KEY,
+    Cookie: checkoutCookie
+  },
+  body: JSON.stringify({ client_ref: clientRef })
+}), { ...flowEnv, DB: productionGuardDb });
+assert.equal(productionGuardResponse.status, 404,
+  'the test simulation must refuse an order not explicitly marked as test');
+assert.equal(productionGuardDb.payments.size, 0,
+  'the test simulation must never mark a Production order as paid');
+
 const simulationResponse = await worker.fetch(new Request('https://fital-pro.test/api/checkout-test/simulate-success', {
   method: 'POST',
   headers: {
