@@ -15,6 +15,11 @@
     input, select { width: 100%; padding: 12px; border: 1px solid #526477; border-radius: 9px; background: #101a26; color: white; font: inherit; }
     button { width: 100%; margin-top: 20px; padding: 14px; border: 0; border-radius: 10px; background: #e7a8d1; color: #201323; font: inherit; font-weight: 700; cursor: pointer; }
     button:disabled { opacity: .6; cursor: wait; }
+    #testActions { margin-top: 18px; padding: 14px; border: 1px solid #526477; border-radius: 12px; }
+    #testActions[hidden] { display: none; }
+    #testActions p { margin: 0 0 10px; }
+    #openRobokassa { background: #d7e5f5; color: #152235; }
+    #simulationNote { font-size: 13px; }
     #message { margin-top: 18px; padding: 12px; border-radius: 9px; background: #101a26; white-space: pre-wrap; }
     .note { font-size: 13px; }
   </style>
@@ -56,6 +61,12 @@
       <input id="preferences" maxlength="700" placeholder="Нет">
       <button id="submit" type="submit">Перейти к тестовой оплате</button>
     </form>
+    <section id="testActions" hidden>
+      <p><strong>Тестовый заказ создан.</strong> Выберите, что проверить дальше:</p>
+      <button id="simulate" type="button">Проверить выдачу доступа без карты</button>
+      <button id="openRobokassa" type="button">Открыть страницу Robokassa</button>
+      <p id="simulationNote">Проверка без карты имитирует подписанное тестовое уведомление на стороне Fital Pro. Она проверяет webhook, D1, подписку и личный кабинет, но не является оплатой или подтверждением от Robokassa. Списание денег не производится.</p>
+    </section>
     <div id="message" role="status" aria-live="polite">Тестовая страница не отображается в основном меню сайта.</div>
     <p class="note">Не вводите здесь рабочие пароли Robokassa. Ключ тестирования не сохраняется в браузере и не передаётся в адресной строке.</p>
   </main>
@@ -63,6 +74,11 @@
     const form = document.getElementById('testForm');
     const button = document.getElementById('submit');
     const message = document.getElementById('message');
+    const testActions = document.getElementById('testActions');
+    const simulateButton = document.getElementById('simulate');
+    const openRobokassaButton = document.getElementById('openRobokassa');
+    let activeClientRef = '';
+    let confirmationUrl = '';
     const params = new URLSearchParams(location.search);
     const say = value => { message.textContent = value; };
     const value = id => document.getElementById(id).value;
@@ -70,16 +86,17 @@
 
     async function checkPayment(ref) {
       form.hidden = true;
-      say('Возврат из Robokassa получен. Проверяю серверное подтверждение и создание доступа…');
+      testActions.hidden = true;
+      say('Проверяю статус тестового заказа и создание доступа…');
       for (let i = 0; i < 24; i++) {
         try {
           const response = await fetch('/api/payment-status?ref=' + encodeURIComponent(ref), { credentials: 'same-origin', cache: 'no-store' });
           const data = await response.json();
           if (data.status === 'active' && data.access_token) {
-            say('УСПЕШНО: тестовая оплата подтверждена сервером. Подписка и доступ созданы, профиль и персональный план сохранены в D1. Токен не выводится на эту страницу.');
+            say('УСПЕШНО: внутреннее тестовое уведомление прошло через /webhooks/robokassa. Подписка, профиль и персональный план сохранены в D1; доступ активирован. Это не подтверждение оплаты со стороны Robokassa. Токен не выводится на страницу.');
             return;
           }
-          if (data.status === 'processing') say('Платёж подтверждён. Завершается сохранение профиля и плана…');
+          if (data.status === 'processing') say('Уведомление принято. Завершается сохранение профиля и плана…');
         } catch {}
         await wait(2500);
       }
@@ -91,6 +108,37 @@
     } else if (params.get('payment') === 'fail') {
       say('Robokassa вернула неуспешную тестовую оплату. Рабочий режим не затронут. Можно вернуться к форме и повторить тест.');
     }
+
+    openRobokassaButton.addEventListener('click', () => {
+      if (confirmationUrl) location.assign(confirmationUrl);
+    });
+
+    simulateButton.addEventListener('click', async () => {
+      if (!activeClientRef) return;
+      simulateButton.disabled = true;
+      openRobokassaButton.disabled = true;
+      say('Отправляю подписанное тестовое уведомление и проверяю сохранение данных в D1…');
+      try {
+        const response = await fetch('/api/checkout-test/complete', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'content-type': 'application/json',
+            'X-Fital-Test-Key': value('testKey')
+          },
+          body: JSON.stringify({ client_ref: activeClientRef })
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok || data.simulated !== true) {
+          throw new Error(data.error || 'Не удалось завершить внутреннюю проверку.');
+        }
+        await checkPayment(activeClientRef);
+      } catch (error) {
+        say(error.message || 'Ошибка внутренней проверки тестового заказа.');
+        simulateButton.disabled = false;
+        openRobokassaButton.disabled = false;
+      }
+    });
 
     form.addEventListener('submit', async event => {
       event.preventDefault();
@@ -117,8 +165,12 @@
         });
         const data = await response.json();
         if (!response.ok || !data.confirmation_url) throw new Error(data.error || 'Не удалось создать тестовый заказ.');
-        say('Заказ готов. Перенаправляю в Robokassa…');
-        location.assign(data.confirmation_url);
+        if (!data.client_ref || !data.confirmation_url) throw new Error('Сервер не вернул данные тестового заказа.');
+        activeClientRef = data.client_ref;
+        confirmationUrl = data.confirmation_url;
+        form.hidden = true;
+        testActions.hidden = false;
+        say('Тестовый заказ создан и сохранён. Теперь можно проверить выдачу доступа без карты или отдельно открыть тестовую страницу Robokassa.');
       } catch (error) {
         say(error.message || 'Ошибка тестирования. Проверьте тестовые настройки.');
         button.disabled = false;
