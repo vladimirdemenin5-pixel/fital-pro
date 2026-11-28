@@ -59,6 +59,24 @@ function buildRobokassaPaymentSignature({ merchant, outSum, invId, receipt = '',
   return md5(base);
 }
 
+function setRobokassaRedirectParameters(params, { forceTestMode, requestUrl, clientRef }) {
+  // The isolated test checkout omits secondary redirects; Production keeps them.
+  if (forceTestMode) return { successUrl2: undefined, failUrl2: undefined };
+  const returnBase = new URL('/', requestUrl);
+  const successUrl = new URL(returnBase);
+  successUrl.searchParams.set('payment', 'success');
+  successUrl.searchParams.set('ref', clientRef);
+  const failUrl = new URL(returnBase);
+  failUrl.searchParams.set('payment', 'fail');
+  const successUrl2 = encodeURIComponent(successUrl.toString());
+  const failUrl2 = encodeURIComponent(failUrl.toString());
+  params.set('SuccessUrl2', successUrl.toString());
+  params.set('SuccessUrl2Method', 'GET');
+  params.set('FailUrl2', failUrl.toString());
+  params.set('FailUrl2Method', 'GET');
+  return { successUrl2, failUrl2 };
+}
+
 function robokassaResultSignature(outSum, invId, password2, values) {
   const shpKeys = Object.keys(values).filter(key => /^Shp_/i.test(key)).sort((a, b) => a.localeCompare(b));
   const shpPart = shpKeys.map(key => key + '=' + String(values[key])).join(':');
@@ -1418,24 +1436,12 @@ async function checkout(request, env, forceTestMode = false) {
   const receiptForSignature = setRobokassaReceiptParameter(params, receiptJson);
   params.set('Culture', 'ru');
   params.set('Encoding', 'utf-8');
-  // Keep the test request minimal while preserving Receipt for fiscal-data inspection.
-  // Production continues using the configured secondary success/fail redirects.
-  let successUrl2;
-  let failUrl2;
-  if (!forceTestMode) {
-    const returnBase = new URL('/', request.url);
-    const successUrl = new URL(returnBase);
-    successUrl.searchParams.set('payment', 'success');
-    successUrl.searchParams.set('ref', clientRef);
-    const failUrl = new URL(returnBase);
-    failUrl.searchParams.set('payment', 'fail');
-    successUrl2 = encodeURIComponent(successUrl.toString());
-    failUrl2 = encodeURIComponent(failUrl.toString());
-    params.set('SuccessUrl2', successUrl.toString());
-    params.set('SuccessUrl2Method', 'GET');
-    params.set('FailUrl2', failUrl.toString());
-    params.set('FailUrl2Method', 'GET');
-  }
+  // Test checkout omits secondary redirects; Production keeps the existing redirect parameters.
+  const { successUrl2, failUrl2 } = setRobokassaRedirectParameters(params, {
+    forceTestMode,
+    requestUrl: request.url,
+    clientRef
+  });
   const signature = buildRobokassaPaymentSignature({
     merchant,
     outSum: product.amount,
@@ -2416,4 +2422,4 @@ export default {
   }
 };
 
-export { setRobokassaReceiptParameter, buildRobokassaPaymentSignature, robokassaResultSignature, verifyRobokassaResultSignature, robokassaWebhook, paymentStatus, testCheckout, aiPlanDiagnostic, aiDataFlowDiagnostic, generateAiPlan, generateCatalogFallbackPlan, buildLocalPlanChatReply, buildLocalPremiumDiaryReview, runAiTextWithFallback, runAiInferenceWithTimeout, runGroqInferenceWithTimeout, FOOD_CATALOG, buildPlanResponseSchema, diagnosePlanWeekFailure, rebalanceDayNutrition, foodAllowedByPreferences, foodRole, foodCanReplaceFood, foodFitsMeal };
+export { setRobokassaReceiptParameter, buildRobokassaPaymentSignature, setRobokassaRedirectParameters, robokassaResultSignature, verifyRobokassaResultSignature, robokassaWebhook, paymentStatus, testCheckout, aiPlanDiagnostic, aiDataFlowDiagnostic, generateAiPlan, generateCatalogFallbackPlan, buildLocalPlanChatReply, buildLocalPremiumDiaryReview, runAiTextWithFallback, runAiInferenceWithTimeout, runGroqInferenceWithTimeout, FOOD_CATALOG, buildPlanResponseSchema, diagnosePlanWeekFailure, rebalanceDayNutrition, foodAllowedByPreferences, foodRole, foodCanReplaceFood, foodFitsMeal };
