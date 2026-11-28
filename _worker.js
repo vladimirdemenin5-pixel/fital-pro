@@ -1577,6 +1577,86 @@ async function testCheckout(request, env) {
   return checkout(request, env, true);
 }
 
+async function simulateTestSuccess(request, env) {
+  const expectedKey = clean(env.ROBOKASSA_TEST_ACCESS_KEY, 256);
+  const suppliedKey = clean(request.headers.get('X-Fital-Test-Key'), 256);
+  if (!expectedKey || !suppliedKey || !sameHash(md5(expectedKey), md5(suppliedKey))) {
+    return json({ error: 'Тестовый доступ не настроен или ключ неверен.' }, 404);
+  }
+  if (!env.DB) return json({ error: 'База данных не подключена.' }, 503);
+  const password2 = robokassaPassword(env, 2, true);
+  if (!password2) return json({ error: 'Тестовый Пароль №2 Robokassa не настроен.' }, 503);
+  if (!(await rateLimit(request, env, 'checkout-test-simulate', 5, 3600000))) {
+    return json({ error: 'Слишком много попыток тестирования. Попробуйте позже.' }, 429);
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: 'Некорректный запрос тестирования.' }, 400);
+  }
+  const clientRef = clean(body?.client_ref, 80);
+  if (!/^[a-f0-9]{32}$/i.test(clientRef)) return json({ error: 'Некорректный номер тестового заказа.' }, 400);
+
+  await ensurePendingOrdersSchema(env);
+  const order = await env.DB.prepare(
+    'SELECT * FROM pending_orders WHERE client_ref=?'
+  ).bind(clientRef).first();
+  if (!order || Number(order.is_test) !== 1) {
+    return json({ error: 'Тестовый заказ не найден.' }, 404);
+  }
+
+  const cookieName = 'fitalpro_checkout_' + order.client_ref;
+  const cookieHeader = request.headers.get('Cookie') || '';
+  const checkoutCookie = cookieHeader.split(';').map(item => item.trim())
+    .find(item => item.startsWith(cookieName + '='))?.slice(cookieName.length + 1) || '';
+  if (checkoutCookie !== order.client_ref) {
+    return json({ error: 'Нет подтверждения этого тестового заказа в текущем браузере.' }, 404);
+  }
+
+  const alreadyConfirmed = order.status === 'paid';
+  if (!alreadyConfirmed) {
+    if (order.status !== 'pending') {
+      return json({ error: 'Тестовый заказ уже не ожидает подтверждения.' }, 409);
+    }
+    const fields = {
+      OutSum: String(order.amount),
+      InvId: String(order.inv_id),
+      Shp_ref: order.client_ref
+    };
+    fields.SignatureValue = robokassaResultSignature(
+      fields.OutSum, fields.InvId, password2, fields
+    );
+    const simulatedNotification = new Request(new URL('/webhooks/robokassa', request.url), {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(fields)
+    });
+    const webhookResponse = await robokassaWebhook(simulatedNotification, env);
+    if (webhookResponse.status !== 200 || (await webhookResponse.text()) !== 'OK' + order.inv_id) {
+      return json({ error: 'Worker не смог обработать тестовое уведомление ResultURL.' }, 502);
+    }
+  }
+
+  const activation = await env.DB.prepare(
+    "SELECT s.plan,s.status,s.access_token,s.expires_at FROM subscriptions s INNER JOIN profiles p ON p.access_token=s.access_token INNER JOIN weekly_plans w ON w.access_token=s.access_token WHERE s.client_ref=? AND s.status='active' AND (s.expires_at IS NULL OR s.expires_at>?)"
+  ).bind(clientRef, new Date().toISOString()).first();
+  if (!activation?.access_token) {
+    return json({ error: 'Уведомление обработано, но полный доступ, профиль и план ещё не подтверждены.' }, 502);
+  }
+
+  return json({
+    ok: true,
+    status: 'active',
+    plan: activation.plan,
+    verification: alreadyConfirmed ? 'existing-robokassa-resulturl' : 'synthetic-test-resulturl',
+    message: alreadyConfirmed
+      ? 'Тестовый заказ уже был активирован уведомлением Robokassa.'
+      : 'Worker обработал синтетическое тестовое уведомление ResultURL с тестовым Паролем №2. Robokassa не проводила платёж.'
+  });
+}
+
 async function robokassaWebhook(request, env) {
   if (!env.DB) return plain('Service unavailable', 503);
   await ensurePendingOrdersSchema(env);
@@ -2401,6 +2481,7 @@ export default {
       if (url.pathname === '/api/ai-diagnostic' && request.method === 'POST') return await aiPlanDiagnostic(request, env);
       if (url.pathname === '/api/ai-data-flow-diagnostic' && request.method === 'POST') return await aiDataFlowDiagnostic(request, env);
       if (url.pathname === '/api/checkout-test' && request.method === 'POST') return await testCheckout(request, env);
+      if (url.pathname === '/api/checkout-test/simulate-success' && request.method === 'POST') return await simulateTestSuccess(request, env);
       if (url.pathname === '/api/checkout' && request.method === 'POST') return await checkout(request, env);
       if (url.pathname === '/webhooks/robokassa' && (request.method === 'POST' || request.method === 'GET')) {
         return await robokassaWebhook(request, env);
