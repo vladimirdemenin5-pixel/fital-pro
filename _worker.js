@@ -67,9 +67,6 @@ function setRobokassaRedirectParameters(params, { forceTestMode, requestUrl, cli
   successUrl.searchParams.set('ref', clientRef);
   const failUrl = new URL(returnBase);
   failUrl.searchParams.set('payment', 'fail');
-  if (!forceTestMode) {
-    // Preserve the existing public Production return URL.
-  }
   const successUrl2 = encodeURIComponent(successUrl.toString());
   const failUrl2 = encodeURIComponent(failUrl.toString());
   params.set('SuccessUrl2', successUrl.toString());
