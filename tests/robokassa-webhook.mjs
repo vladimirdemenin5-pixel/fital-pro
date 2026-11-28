@@ -336,6 +336,7 @@ const deniedTestCompletion = await testCompletePayment(new Request('https://fita
 }), { ROBOKASSA_TEST_ACCESS_KEY: 'expected-key' });
 assert.equal(deniedTestCompletion.status, 404, 'test callback simulation must require the private access key');
 
+const testClientRefForGuards = 'a'.repeat(32);
 const missingSessionCompletion = await testCompletePayment(new Request('https://fitalpro.test/api/checkout-test/complete', {
   method: 'POST',
   headers: {
@@ -343,7 +344,7 @@ const missingSessionCompletion = await testCompletePayment(new Request('https://
     Origin: 'https://fitalpro.test',
     'content-type': 'application/json'
   },
-  body: JSON.stringify({ client_ref: order.client_ref })
+  body: JSON.stringify({ client_ref: testClientRefForGuards })
 }), { DB: env.DB, ROBOKASSA_TEST_ACCESS_KEY: 'expected-key', ROBOKASSA_TEST_PASSWORD2: password2 });
 assert.equal(missingSessionCompletion.status, 403, 'test callback simulation must require the order-specific session cookie');
 
@@ -352,7 +353,7 @@ const foreignOriginCompletion = await testCompletePayment(new Request('https://f
   headers: {
     'X-Fital-Test-Key': 'expected-key',
     Origin: 'https://attacker.example',
-    Cookie: 'fitalpro_checkout_' + order.client_ref + '=' + order.client_ref,
+    Cookie: 'fitalpro_checkout_' + liveOrderClientRef + '=' + liveOrderClientRef,
     'content-type': 'application/json'
   },
   body: JSON.stringify({ client_ref: order.client_ref })
@@ -361,7 +362,8 @@ assert.equal(foreignOriginCompletion.status, 403, 'test callback simulation must
 
 // The test-only simulator must never complete a real Production order.
 const liveOrderDb = new MockD1();
-liveOrderDb.orders.set(42, { ...order, is_test: 0 });
+const liveOrderClientRef = 'b'.repeat(32);
+liveOrderDb.orders.set(42, { ...order, client_ref: liveOrderClientRef, is_test: 0 });
 const liveOrderCompletion = await testCompletePayment(new Request('https://fitalpro.test/api/checkout-test/complete', {
   method: 'POST',
   headers: {
@@ -370,7 +372,7 @@ const liveOrderCompletion = await testCompletePayment(new Request('https://fital
     Cookie: 'fitalpro_checkout_' + order.client_ref + '=' + order.client_ref,
     'content-type': 'application/json'
   },
-  body: JSON.stringify({ client_ref: order.client_ref })
+  body: JSON.stringify({ client_ref: liveOrderClientRef })
 }), { DB: liveOrderDb, ROBOKASSA_TEST_ACCESS_KEY: 'expected-key', ROBOKASSA_TEST_PASSWORD2: password2 });
 assert.equal(liveOrderCompletion.status, 404);
 assert.equal(liveOrderDb.payments.size, 0);
