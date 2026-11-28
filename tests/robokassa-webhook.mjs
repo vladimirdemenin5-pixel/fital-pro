@@ -533,5 +533,27 @@ assert.equal(liveCompletion.status, 404, 'test completion must reject a producti
 assert.equal(liveCompletionDb.orders.get(88).status, 'pending');
 assert.equal(liveCompletionDb.payments.size, 0, 'test route must not create a payment for production orders');
 
+// The shop's currently configured ResultURL is the Worker root. Verify that
+// a real-form callback posted there reaches the same signature/access handler.
+const rootCallbackFields = {
+  OutSum: String(flowDb.orders.get(Number(invId)).amount),
+  InvId: String(invId),
+  Shp_ref: clientRef
+};
+rootCallbackFields.SignatureValue = robokassaResultSignature(
+  rootCallbackFields.OutSum,
+  rootCallbackFields.InvId,
+  flowEnv.ROBOKASSA_TEST_PASSWORD2,
+  rootCallbackFields
+);
+const rootCallbackResponse = await worker.fetch(new Request('https://fitalpro.test/', {
+  method: 'POST',
+  headers: { 'content-type': 'application/x-www-form-urlencoded' },
+  body: new URLSearchParams(rootCallbackFields)
+}), flowEnv);
+assert.equal(rootCallbackResponse.status, 200);
+assert.equal(await rootCallbackResponse.text(), 'OK' + invId,
+  'configured root ResultURL must return Robokassa acknowledgement');
+
 console.log('PASS: full test checkout -> signed test notification -> active access -> personal cabinet flow');
 
