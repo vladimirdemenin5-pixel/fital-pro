@@ -462,21 +462,53 @@ assert.ok(invId && clientRef, 'checkout must retain the order ID and private cli
 const lockedPlanResponse = await worker.fetch(new Request('https://fitalpro.test/api/plan'), flowEnv);
 assert.equal(lockedPlanResponse.status, 403, 'full plan must remain locked before the payment notification');
 
-const flowFields = {
-  OutSum: checkoutPayload.amount,
-  InvId: invId,
-  Shp_ref: clientRef
-};
-flowFields.SignatureValue = robokassaResultSignature(
-  flowFields.OutSum, flowFields.InvId, flowEnv.ROBOKASSA_TEST_PASSWORD2, flowFields
-);
-const flowWebhook = await worker.fetch(new Request('https://fitalpro.test/webhooks/robokassa', {
+assert.equal(paymentUrl.searchParams.get('IsTest'), '1',
+  'test checkout must never create a live payment URL');
+
+const deniedSimulation = await worker.fetch(new Request('https://fital-pro.test/api/checkout-test/simulate-success', {
   method: 'POST',
-  headers: { 'content-type': 'application/x-www-form-urlencoded' },
-  body: new URLSearchParams(flowFields)
+  headers: {
+    'content-type': 'application/json',
+    'X-Fital-Test-Key': 'wrong-key',
+    Cookie: checkoutCookie
+  },
+  body: JSON.stringify({ client_ref: clientRef })
 }), flowEnv);
-assert.equal(flowWebhook.status, 200, 'a valid signed payment notification must activate the order');
-assert.equal(await flowWebhook.text(), 'OK' + invId);
+assert.equal(deniedSimulation.status, 404, 'the simulation must require the private test access key');
+assert.equal(flowDb.orders.get(Number(invId)).status, 'pending',
+  'an unauthorized simulation must not mark the test order as paid');
+
+const unboundSimulation = await worker.fetch(new Request('https://fital-pro.test/api/checkout-test/simulate-success', {
+  method: 'POST',
+  headers: {
+    'content-type': 'application/json',
+    'X-Fital-Test-Key': flowEnv.ROBOKASSA_TEST_ACCESS_KEY
+  },
+  body: JSON.stringify({ client_ref: clientRef })
+}), flowEnv);
+assert.equal(unboundSimulation.status, 404,
+  'the simulation must require the order-specific checkout cookie');
+assert.equal(flowDb.orders.get(Number(invId)).status, 'pending');
+
+const simulationResponse = await worker.fetch(new Request('https://fital-pro.test/api/checkout-test/simulate-success', {
+  method: 'POST',
+  headers: {
+    'content-type': 'application/json',
+    'X-Fital-Test-Key': flowEnv.ROBOKASSA_TEST_ACCESS_KEY,
+    Cookie: checkoutCookie
+  },
+  body: JSON.stringify({ client_ref: clientRef })
+}), flowEnv);
+assert.equal(simulationResponse.status, 200, 'the test-only ResultURL simulation must activate the test order');
+const simulationPayload = await simulationResponse.json();
+assert.equal(simulationPayload.ok, true);
+assert.equal(simulationPayload.status, 'active');
+assert.equal(simulationPayload.verification, 'synthetic-test-resulturl');
+assert.equal(flowDb.orders.get(Number(invId)).status, 'paid');
+assert.ok(flowDb.payments.has('robokassa-test-' + invId));
+assert.equal(flowDb.subscriptions.size, 1);
+assert.equal(flowDb.profiles.size, 1);
+assert.equal(flowDb.plans.size, 1);
 
 const flowStatusResponse = await worker.fetch(new Request(
   'https://fitalpro.test/api/payment-status?ref=' + encodeURIComponent(clientRef),
