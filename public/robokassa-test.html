@@ -87,7 +87,7 @@
     async function checkPayment(ref) {
       form.hidden = true;
       testActions.hidden = true;
-      say('Возврат из Robokassa получен. Проверяю серверное подтверждение и создание доступа…');
+      say('Проверяю статус тестового заказа и создание доступа…');
       for (let i = 0; i < 24; i++) {
         try {
           const response = await fetch('/api/payment-status?ref=' + encodeURIComponent(ref), { credentials: 'same-origin', cache: 'no-store' });
@@ -96,7 +96,7 @@
             say('УСПЕШНО: внутреннее тестовое уведомление прошло через /webhooks/robokassa. Подписка, профиль и персональный план сохранены в D1; доступ активирован. Это не подтверждение оплаты со стороны Robokassa. Токен не выводится на страницу.');
             return;
           }
-          if (data.status === 'processing') say('Платёж подтверждён. Завершается сохранение профиля и плана…');
+          if (data.status === 'processing') say('Уведомление принято. Завершается сохранение профиля и плана…');
         } catch {}
         await wait(2500);
       }
